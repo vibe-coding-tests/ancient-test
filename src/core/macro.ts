@@ -123,6 +123,7 @@ export function setupRaidSim(setup: RaidSetup): Sim {
     seed: setup.seed,
     bounds: { w: TUNING.arenaWidth, h: TUNING.arenaHeight }
   });
+  const aiDepth = setup.boss.aiDepth ?? TUNING.ai.bossAiDepth;
 
   const spacing = Math.min(360, TUNING.arenaHeight / (setup.party.length + 1));
   const centerY = TUNING.arenaHeight / 2;
@@ -136,7 +137,8 @@ export function setupRaidSim(setup: RaidSetup): Sim {
     const u = spawnConfiguredHero(sim, h, 0, homePos, {
       kind: 'gambit',
       rules: h.gambits ?? buildDefaultGambit(build.def.roles),
-      homePos
+      homePos,
+      aiDepth
     }, level, build);
     u.facing = 0;
   });
@@ -150,7 +152,7 @@ export function setupRaidSim(setup: RaidSetup): Sim {
     kind: 'boss',
     threat: {},
     homePos: { x: TUNING.arenaWidth - TUNING.macroTeamXInset, y: centerY },
-    boss: { depth: setup.boss.aiDepth ?? TUNING.ai.bossAiDepth, enrageSec: setup.boss.enrageSec }
+    boss: { depth: aiDepth, enrageSec: setup.boss.enrageSec }
   }, bossLevel, bossBuild);
   const hpScale = setup.boss.hpScale ?? TUNING.raidBossHpScale;
   const damageScale = setup.boss.damageScale ?? TUNING.raidBossDamageScale;

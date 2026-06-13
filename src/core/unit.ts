@@ -100,6 +100,8 @@ export interface ControllerRef {
   leashed?: boolean;
   /** Optional tether for gambit units (overworld echoes); macro/raid units leave it unset. */
   leashRadius?: number;
+  /** Raid-party reactivity depth; higher tiers react earlier and coordinate tighter. */
+  aiDepth?: number;
   /** Boss phase-FSM state (AI_OVERHAUL §5); set on raid bosses. */
   boss?: BossState;
 }

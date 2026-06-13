@@ -805,7 +805,7 @@ export class Hud {
         const [idxRaw, preset] = (el as HTMLElement).dataset.gambit!.split(':');
         const recIdx = Number(idxRaw);
         const def = REG.hero(g.party[recIdx].heroId);
-        const rules = preset === 'default' ? buildDefaultGambit(def.roles) : this.gambitPreset(preset as 'aggro' | 'safe');
+        const rules = preset === 'default' ? buildDefaultGambit(def.roles) : this.gambitPreset(preset as 'aggro' | 'safe', def.roles);
         g.setGambits(recIdx, rules);
         this.renderPartyModal();
       });
@@ -815,20 +815,19 @@ export class Hud {
     });
   }
 
-  private gambitPreset(preset: 'aggro' | 'safe'): GambitRule[] {
+  private gambitPreset(preset: 'aggro' | 'safe', roles: string[]): GambitRule[] {
+    const base = buildDefaultGambit(roles);
     if (preset === 'aggro') {
       return [
-        { if: [{ k: 'ability-ready', slot: 3 }, { k: 'fight-time-gt', sec: 5 }], then: { k: 'cast', slot: 3, targetMode: 'most-clustered' } },
-        { if: [{ k: 'ability-ready', slot: 0 }], then: { k: 'cast', slot: 0, targetMode: 'focus' } },
-        { if: [{ k: 'ability-ready', slot: 1 }], then: { k: 'cast', slot: 1, targetMode: 'lowest-hp-enemy' } },
-        { if: [{ k: 'always' }], then: { k: 'attack-focus' } }
+        ...base,
+        { if: [{ k: 'enemy-hp-below', pct: 45 }], then: { k: 'focus-fire', targetMode: 'lowest-hp-in-range' } },
+        { if: [{ k: 'fight-time-gt', sec: 6 }], then: { k: 'focus-fire', targetMode: 'most-dangerous' } }
       ];
     }
     return [
-      { if: [{ k: 'self-hp-below', pct: 35 }], then: { k: 'retreat' } },
-      { if: [{ k: 'ally-hp-below', pct: 45 }, { k: 'ability-ready', slot: 1 }], then: { k: 'cast', slot: 1, targetMode: 'lowest-hp-ally' } },
-      { if: [{ k: 'ability-ready', slot: 0 }, { k: 'distance-to-focus-lt', dist: 700 }], then: { k: 'cast', slot: 0, targetMode: 'focus' } },
-      { if: [{ k: 'always' }], then: { k: 'attack-focus' } }
+      ...base,
+      { if: [{ k: 'self-hp-below', pct: 42 }], then: { k: 'retreat' } },
+      { if: [{ k: 'incoming-disable' }], then: { k: 'hold' } }
     ];
   }
 
@@ -1100,7 +1099,7 @@ export class Hud {
       el.addEventListener('click', () => {
         const preset = el.dataset.preset!;
         const def = REG.hero(this.game.party[this.gambitEditRec].heroId);
-        this.gambitDraft = preset === 'default' ? buildDefaultGambit(def.roles) : this.gambitPreset(preset as 'aggro' | 'safe');
+        this.gambitDraft = preset === 'default' ? buildDefaultGambit(def.roles) : this.gambitPreset(preset as 'aggro' | 'safe', def.roles);
         this.renderGambitModal();
       });
     });

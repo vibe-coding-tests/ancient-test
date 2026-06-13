@@ -343,17 +343,20 @@ function bossPresent(sim: Sim, u: Unit): boolean {
  */
 export function raidPeelTarget(sim: Sim, u: Unit, profile: CombatProfile): Unit | null {
   if (profile.posture !== 'frontline' || !bossPresent(sim, u)) return null;
+  const depthBonus = Math.max(0, (u.ctrl.aiDepth ?? TUNING.ai.bossAiDepth) - TUNING.bossTierAiDepth.normal);
+  const searchRadius = 800 + depthBonus * 260;
+  const menaceRadius = 450 + depthBonus * 160;
   let best: Unit | null = null;
   let bestD = Infinity;
-  sim.forEachNearbyUnit(u.pos, 820, (e) => {
+  sim.forEachNearbyUnit(u.pos, searchRadius + 20, (e) => {
     if (!enemyCandidate(sim, u, e)) return;
     if (e.kind !== 'summon' && e.kind !== 'creep') return;
-    if (dist2(e.pos, u.pos) > 800 * 800) return;
+    if (dist2(e.pos, u.pos) > searchRadius * searchRadius) return;
     let menacing = false;
-    sim.forEachNearbyUnit(e.pos, 470, (a) => {
+    sim.forEachNearbyUnit(e.pos, menaceRadius + 20, (a) => {
       if (menacing || !a.alive || a.team !== u.team || a === u) return;
       if (combatProfile(a).posture !== 'backline') return;
-      if (dist2(a.pos, e.pos) <= 450 * 450) menacing = true;
+      if (dist2(a.pos, e.pos) <= menaceRadius * menaceRadius) menacing = true;
     });
     if (!menacing) return;
     const d = dist2(e.pos, u.pos);
@@ -364,16 +367,18 @@ export function raidPeelTarget(sim: Sim, u: Unit, profile: CombatProfile): Unit 
 
 function raidSignatureScatterOrder(sim: Sim, u: Unit): Order | null {
   if (!bossPresent(sim, u)) return null;
+  const depthBonus = Math.max(0, (u.ctrl.aiDepth ?? TUNING.ai.bossAiDepth) - TUNING.bossTierAiDepth.normal);
+  const earlyMargin = 260 + depthBonus * 160;
   for (const z of sim.zones) {
     if (z.team === u.team || !z.tickEffects || z.shape !== 'circle' || !z.pos) continue;
     const radius = z.radius ?? 0;
     if (radius < 420) continue;
     const harms = z.tickEffects.some((e) => e.kind === 'damage') && z.tickAffects !== 'allies';
     if (!harms) continue;
-    if (dist2(u.pos, z.pos) > (radius + 260) * (radius + 260)) continue;
+    if (dist2(u.pos, z.pos) > (radius + earlyMargin) * (radius + earlyMargin)) continue;
     const away = norm(sub(u.pos, z.pos));
     const dir = away.x === 0 && away.y === 0 ? v2((u.uid % 2 === 0 ? 1 : -1), 0) : away;
-    return { kind: 'move', point: add(z.pos, scale(dir, radius + u.radius + 260)) };
+    return { kind: 'move', point: add(z.pos, scale(dir, radius + u.radius + earlyMargin)) };
   }
   return null;
 }
@@ -406,16 +411,36 @@ function woundedRaidAlliesNear(sim: Sim, team: Team, center: Vec2, radius: numbe
 
 function raidStackForHealOrder(sim: Sim, u: Unit): Order | null {
   if (!bossPresent(sim, u)) return null;
-  if (u.hp / Math.max(1, u.stats.maxHp) >= 0.72) return null;
+  const depthBonus = Math.max(0, (u.ctrl.aiDepth ?? TUNING.ai.bossAiDepth) - TUNING.bossTierAiDepth.normal);
+  const stackHpPct = 0.72 + depthBonus * 0.08;
+  if (u.hp / Math.max(1, u.stats.maxHp) >= stackHpPct) return null;
   const carrier = readyMekCarrier(sim, u);
   if (!carrier || carrier.uid === u.uid) return null;
-  if (woundedRaidAlliesNear(sim, u.team, carrier.pos, 1700) < 2) return null;
+  const stackRange = 1700 + depthBonus * 360;
+  if (woundedRaidAlliesNear(sim, u.team, carrier.pos, stackRange) < 2) return null;
   const d = dist(u.pos, carrier.pos);
-  if (d <= 650 || d > 1700) return null;
+  if (d <= 650 || d > stackRange) return null;
   return { kind: 'move', point: { ...carrier.pos } };
 }
 
 interface Scored { score: number; order: Order; slot: number }
+
+function finalAbilityScore(u: Unit, score: number, intent: AbilityIntent, order: Order, focus: Unit | null): number {
+  let out = score;
+  if (focus && ((order.kind === 'cast' && order.uid === focus.uid) || (order.kind === 'attack-unit' && order.uid === focus.uid))) {
+    out *= 0.75 + combatProfile(u).weights.focusFollow * 0.25;
+  }
+
+  const boss = u.ctrl.kind === 'boss' ? u.ctrl.boss : undefined;
+  if (!boss) return out;
+
+  if (boss.pref === 'cluster' && intent.aoe) out *= 1.28;
+  if (boss.pref === 'kill' && intent.offensive && !intent.aoe) out *= 1.22;
+  if (boss.pref === 'healer' && (intent.hardControl || intent.softControl)) out *= 1.18;
+  if (boss.phase === 'enrage' && intent.offensive) out *= 1.12;
+  if (boss.phase === 'desperation' && (intent.hardControl || intent.escape || intent.buff)) out *= 1.12;
+  return out;
+}
 
 function scoreAbility(sim: Sim, u: Unit, slot: number, focus: Unit | null, profile: CombatProfile): Scored | null {
   const a = u.abilities[slot];
@@ -428,7 +453,8 @@ function scoreAbility(sim: Sim, u: Unit, slot: number, focus: Unit | null, profi
   if (t === 'toggle') {
     if (a.toggled) return null;
     if (enemiesNear(sim, u, u.stats.attackRange + 320) === 0) return null;
-    return { score: 0.7 * profile.weights.aggression, order: { kind: 'cast', slot }, slot };
+    const order: Order = { kind: 'cast', slot };
+    return { score: finalAbilityScore(u, 0.7 * profile.weights.aggression, intentOf(a.def, a.level), order, focus), order, slot };
   }
 
   const intent = intentOf(a.def, a.level);
@@ -442,14 +468,15 @@ function scoreAbility(sim: Sim, u: Unit, slot: number, focus: Unit | null, profi
     const need = 1 - ally.hp / Math.max(1, ally.stats.maxHp);
     let s = w.saveAllies * (0.5 + need);
     if (sim.time - ally.lastEnemyDamageAt < 1.5) s += 0.4; // actively under fire
-    if (t === 'no-target') return { score: s, order: { kind: 'cast', slot }, slot };
-    return { score: s, order: { kind: 'cast', slot, uid: ally.uid }, slot };
+    const order: Order = t === 'no-target' ? { kind: 'cast', slot } : { kind: 'cast', slot, uid: ally.uid };
+    return { score: finalAbilityScore(u, s, intent, order, focus), order, slot };
   }
 
   // self / no-target steroid (BKB-style, Warcry): cast when a fight is on
   if (t === 'no-target' && intent.buff && !intent.offensive) {
     if (enemiesNear(sim, u, u.stats.attackRange + 320) === 0) return null;
-    return { score: 0.75 * w.aggression, order: { kind: 'cast', slot }, slot };
+    const order: Order = { kind: 'cast', slot };
+    return { score: finalAbilityScore(u, 0.75 * w.aggression, intent, order, focus), order, slot };
   }
 
   if (!intent.offensive && !intent.hardControl && !intent.softControl) return null;
@@ -462,7 +489,8 @@ function scoreAbility(sim: Sim, u: Unit, slot: number, focus: Unit | null, profi
       const count = enemiesNear(sim, u, intent.radius || 300);
       if (count === 0) return null;
       const s = (w.aoe * (0.4 + count)) + controlW * 0.4 * count;
-      return { score: s, order: { kind: 'cast', slot }, slot };
+      const order: Order = { kind: 'cast', slot };
+      return { score: finalAbilityScore(u, s, intent, order, focus), order, slot };
     }
     const cluster = bestCluster(sim, u, range, intent.radius || 300);
     if (!cluster || cluster.count === 0) return null;
@@ -470,9 +498,11 @@ function scoreAbility(sim: Sim, u: Unit, slot: number, focus: Unit | null, profi
     if (t === 'unit-target') {
       const tgt = bestOffensiveTarget(sim, u, focus, range);
       if (!tgt) return null;
-      return { score: s, order: { kind: 'cast', slot, uid: tgt.uid }, slot };
+      const order: Order = { kind: 'cast', slot, uid: tgt.uid };
+      return { score: finalAbilityScore(u, s, intent, order, focus), order, slot };
     }
-    return { score: s, order: { kind: 'cast', slot, point: cluster.point }, slot };
+    const order: Order = { kind: 'cast', slot, point: cluster.point };
+    return { score: finalAbilityScore(u, s, intent, order, focus), order, slot };
   }
 
   // single-target nuke / disable
@@ -483,8 +513,12 @@ function scoreAbility(sim: Sim, u: Unit, slot: number, focus: Unit | null, profi
   // interrupting a channel or mid-cast is high value
   const interrupting = (intent.hardControl || a.def.piercesImmunity) && (target.castingUntil > sim.time || (target.channel && target.channel.until > sim.time));
   if (interrupting) s += 0.8;
-  if (t === 'unit-target') return { score: s, order: { kind: 'cast', slot, uid: target.uid }, slot };
-  return { score: s, order: { kind: 'cast', slot, point: { ...target.pos } }, slot };
+  if (t === 'unit-target') {
+    const order: Order = { kind: 'cast', slot, uid: target.uid };
+    return { score: finalAbilityScore(u, s, intent, order, focus), order, slot };
+  }
+  const order: Order = { kind: 'cast', slot, point: { ...target.pos } };
+  return { score: finalAbilityScore(u, s, intent, order, focus), order, slot };
 }
 
 // ---------- item actives (AI_OVERHAUL §2) ----------

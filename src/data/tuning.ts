@@ -200,8 +200,8 @@ export const TUNING = {
     nightmare: { hp: 1.65, damage: 1.28, armor: 1.18 },
     hell: { hp: 2.45, damage: 1.65, armor: 1.35 }
   },
-  // AI-depth difficulty lever (AI_OVERHAUL §6): higher tiers dial the boss brain's
-  // opportunism (off-threat plays), not just stats. Beside bossTierScale, not instead.
+  // AI-depth difficulty lever (AI_OVERHAUL §6): higher tiers dial boss opportunism
+  // and raid-party reaction timing, beside bossTierScale rather than instead of it.
   bossTierAiDepth: { normal: 0.45, nightmare: 0.7, hell: 1.0 },
   bossAssembledDropPct: { normal: 0.08, nightmare: 0.16, hell: 0.30 },
 

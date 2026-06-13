@@ -2403,7 +2403,8 @@ export class Game {
 
   private issueOrder(order: Order, queued = false): void {
     const sim = this.inputSim();
-    const u = this.controlledUnit();
+    let u = this.controlledUnit();
+    if (this.liveRaid) u = this.liveRaid.claimDriver();
     if (!u || !u.alive) return;
     if (queued) {
       this.queuedOrders.push(order);
@@ -2436,7 +2437,7 @@ export class Game {
 
   orderStop(): void {
     const sim = this.inputSim();
-    const u = this.controlledUnit();
+    const u = this.liveRaid ? this.liveRaid.claimDriver() : this.controlledUnit();
     if (!u) return;
     this.queuedOrders = [];
     sim.order(u.uid, { kind: 'stop' });

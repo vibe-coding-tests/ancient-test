@@ -12,9 +12,11 @@ export class LiveRaid {
   readonly partyUids: number[];
   readonly maxTicks: number;
   private readonly mechanics;
+  private readonly gambitControllers = new Map<number, Unit['ctrl']>();
   private readonly handledFallen = new Set<number>();
   private aegisAvailable: boolean;
   private aegisConsumed = false;
+  private claimedUid: number | null = null;
 
   driverIdx = 0;
   done = false;
@@ -28,6 +30,10 @@ export class LiveRaid {
     this.sim = setupRaidSim({ seed: rs.seed, party: rs.party, boss: rs.boss, maxSec: limit });
     this.boss = this.sim.unitsArr.find((u) => u.team === 1 && u.ctrl.kind === 'boss')!;
     this.partyUids = this.sim.unitsArr.filter((u) => u.team === 0 && u.kind === 'hero').map((u) => u.uid);
+    for (const uid of this.partyUids) {
+      const u = this.sim.unit(uid);
+      if (u?.ctrl.kind === 'gambit') this.gambitControllers.set(uid, cloneGambitController(u.ctrl));
+    }
     this.maxTicks = Math.round(limit / this.sim.dt);
     this.mechanics = createRaidMechanicRunner(def, this.sim, this.boss);
     this.aegisAvailable = !!opts?.aegis;
@@ -40,10 +46,25 @@ export class LiveRaid {
     return heroesAlive(this.sim, 0)[0] ?? null;
   }
 
+  claimDriver(): Unit | null {
+    const u = this.drivenUnit();
+    if (!u) return null;
+    if (this.claimedUid !== null && this.claimedUid !== u.uid) this.restoreGambit(this.claimedUid);
+    this.claimedUid = u.uid;
+    u.ctrl = { kind: 'player' };
+    this.sim.playerActiveUid = u.uid;
+    return u;
+  }
+
   selectDriver(idx: number): boolean {
     const uid = this.partyUids[idx];
     const u = uid !== undefined ? this.sim.unit(uid) : undefined;
     if (!u || !u.alive) return false;
+    if (this.claimedUid !== null && this.claimedUid !== uid) {
+      this.restoreGambit(this.claimedUid);
+      u.ctrl = { kind: 'player' };
+      this.claimedUid = uid;
+    }
     this.driverIdx = idx;
     this.sim.playerActiveUid = u.uid;
     return true;
@@ -89,6 +110,7 @@ export class LiveRaid {
     for (const uid of this.partyUids) {
       const u = this.sim.unit(uid);
       if (!u || u.alive || this.handledFallen.has(uid)) continue;
+      if (this.claimedUid === uid) this.claimedUid = null;
       if (this.aegisAvailable) {
         if (this.sim.reviveUnit(u, 1, 1)) {
           this.aegisAvailable = false;
@@ -99,4 +121,19 @@ export class LiveRaid {
       this.handledFallen.add(uid);
     }
   }
+
+  private restoreGambit(uid: number): void {
+    const u = this.sim.unit(uid);
+    const ctrl = this.gambitControllers.get(uid);
+    if (!u || !ctrl) return;
+    u.ctrl = cloneGambitController(ctrl);
+  }
+}
+
+function cloneGambitController(ctrl: Unit['ctrl']): Unit['ctrl'] {
+  return {
+    ...ctrl,
+    homePos: ctrl.homePos ? { ...ctrl.homePos } : undefined,
+    rules: ctrl.rules ? structuredClone(ctrl.rules) : undefined
+  };
 }

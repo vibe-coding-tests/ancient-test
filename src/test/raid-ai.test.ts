@@ -198,6 +198,8 @@ describe('AI-depth difficulty lever', () => {
     const sim = setupRaidSim({ seed: 1, party: PARTY, boss: hell, maxSec: 30 });
     const boss = sim.unitsArr.find((u) => u.team === 1 && u.ctrl.kind === 'boss')!;
     expect(boss.ctrl.boss?.depth).toBe(TUNING.bossTierAiDepth.hell);
+    const ally = sim.unitsArr.find((u) => u.team === 0 && u.kind === 'hero')!;
+    expect(ally.ctrl.aiDepth).toBe(TUNING.bossTierAiDepth.hell);
   });
 });
 
@@ -215,5 +217,19 @@ describe('live raid == headless encounter', () => {
     expect(live.result!.winner).toBe(headless.winner);
     expect(live.result!.ticks).toBe(headless.ticks);
     expect(live.result!.hash).toBe(headless.hash);
+  });
+
+  it('claims manual control only after player input, then restores swapped heroes to AI', () => {
+    const live = new LiveRaid(ALL_RAIDS[0], PARTY, 'normal', 13579);
+    const first = live.drivenUnit()!;
+    expect(first.ctrl.kind).toBe('gambit');
+
+    expect(live.claimDriver()?.uid).toBe(first.uid);
+    expect(first.ctrl.kind).toBe('player');
+
+    expect(live.selectDriver(1)).toBe(true);
+    const second = live.drivenUnit()!;
+    expect(first.ctrl.kind).toBe('gambit');
+    expect(second.ctrl.kind).toBe('player');
   });
 });
