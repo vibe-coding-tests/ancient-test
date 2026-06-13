@@ -26,6 +26,18 @@ export interface MacroSetup {
   maxSec?: number;
 }
 
+export interface RaidBossSetup extends MacroHeroSetup {
+  hpScale?: number;
+  damageScale?: number;
+}
+
+export interface RaidSetup {
+  seed: number;
+  party: MacroHeroSetup[];
+  boss: RaidBossSetup;
+  maxSec?: number;
+}
+
 export interface MacroResult {
   winner: 0 | 1 | -1;
   timeSec: number;
@@ -41,37 +53,109 @@ export function setupMacroSim(setup: MacroSetup): Sim {
     bounds: { w: TUNING.arenaWidth, h: TUNING.arenaHeight }
   });
   const placeTeam = (team: 0 | 1, list: MacroHeroSetup[]) => {
-    const x = team === 0 ? 500 : TUNING.arenaWidth - 500;
-    const spacing = TUNING.arenaHeight / (list.length + 1);
+    const dir = team === 0 ? 1 : -1;
+    const baseX = team === 0 ? TUNING.macroTeamXInset : TUNING.arenaWidth - TUNING.macroTeamXInset;
+    const spacing = Math.min(420, TUNING.arenaHeight / (list.length + 1));
+    const centerY = TUNING.arenaHeight / 2;
     list.forEach((h, i) => {
       const level = h.level ?? 10;
       const build = buildHero(REG.hero(h.heroId), autoPicksForLevel(level), 0);
-      const u = sim.spawnHero(build.def, {
-        team,
-        pos: { x, y: spacing * (i + 1) },
-        level,
-        ctrl: {
-          kind: 'gambit',
-          rules: h.gambits ?? buildDefaultGambit(build.def.roles),
-          homePos: { x, y: spacing * (i + 1) }
-        }
-      });
-      for (const k in build.externalMods) {
-        u.externalMods[k] = (u.externalMods[k] ?? 0) + build.externalMods[k];
-      }
+      const homePos = {
+        x: baseX + dir * formationDepth(build.def.roles, build.def.baseStats.attackRange),
+        y: centerY + (i - (list.length - 1) / 2) * spacing
+      };
+      const u = spawnConfiguredHero(sim, h, team, homePos, {
+        kind: 'gambit',
+        rules: h.gambits ?? buildDefaultGambit(build.def.roles),
+        homePos
+      }, level, build);
       u.facing = team === 0 ? 0 : Math.PI;
-      for (const itemId of h.items ?? []) {
-        const slot = u.items.findIndex((s) => s === null);
-        if (slot >= 0) u.items[slot] = makeItemState(REG.item(itemId));
-      }
-      u.refresh(0);
-      u.hp = u.stats.maxHp;
-      u.mana = u.stats.maxMana;
     });
   };
   placeTeam(0, setup.teamA);
   placeTeam(1, setup.teamB);
   return sim;
+}
+
+export function setupRaidSim(setup: RaidSetup): Sim {
+  const sim = new Sim({
+    seed: setup.seed,
+    bounds: { w: TUNING.arenaWidth, h: TUNING.arenaHeight }
+  });
+
+  const spacing = Math.min(360, TUNING.arenaHeight / (setup.party.length + 1));
+  const centerY = TUNING.arenaHeight / 2;
+  setup.party.forEach((h, i) => {
+    const level = h.level ?? 14;
+    const build = buildHero(REG.hero(h.heroId), autoPicksForLevel(level), 0);
+    const homePos = {
+      x: TUNING.macroTeamXInset + formationDepth(build.def.roles, build.def.baseStats.attackRange),
+      y: centerY + (i - (setup.party.length - 1) / 2) * spacing
+    };
+    const u = spawnConfiguredHero(sim, h, 0, homePos, {
+      kind: 'gambit',
+      rules: h.gambits ?? buildDefaultGambit(build.def.roles),
+      homePos
+    }, level, build);
+    u.facing = 0;
+  });
+
+  const bossLevel = setup.boss.level ?? 18;
+  const bossBuild = buildHero(REG.hero(setup.boss.heroId), autoPicksForLevel(bossLevel), 0);
+  const boss = spawnConfiguredHero(sim, setup.boss, 1, {
+    x: TUNING.arenaWidth - TUNING.macroTeamXInset,
+    y: centerY
+  }, {
+    kind: 'boss',
+    threat: {},
+    homePos: { x: TUNING.arenaWidth - TUNING.macroTeamXInset, y: centerY }
+  }, bossLevel, bossBuild);
+  const hpScale = setup.boss.hpScale ?? TUNING.raidBossHpScale;
+  const damageScale = setup.boss.damageScale ?? TUNING.raidBossDamageScale;
+  boss.externalMods.maxHp = (boss.externalMods.maxHp ?? 0) + boss.stats.maxHp * (hpScale - 1);
+  boss.externalMods.damagePct = (boss.externalMods.damagePct ?? 0) + (damageScale - 1) * 100;
+  boss.radius = TUNING.unitRadiusHero * TUNING.raidBossRadiusScale;
+  boss.refresh(0);
+  boss.hp = boss.stats.maxHp;
+  boss.mana = boss.stats.maxMana;
+  boss.facing = Math.PI;
+
+  return sim;
+}
+
+function spawnConfiguredHero(
+  sim: Sim,
+  h: MacroHeroSetup,
+  team: 0 | 1,
+  pos: { x: number; y: number },
+  ctrl: Unit['ctrl'],
+  level: number,
+  build = buildHero(REG.hero(h.heroId), autoPicksForLevel(level), 0)
+): Unit {
+  const u = sim.spawnHero(build.def, {
+    team,
+    pos,
+    level,
+    ctrl
+  });
+  for (const k in build.externalMods) {
+    u.externalMods[k] = (u.externalMods[k] ?? 0) + build.externalMods[k];
+  }
+  for (const itemId of h.items ?? []) {
+    const slot = u.items.findIndex((s) => s === null);
+    if (slot >= 0) u.items[slot] = makeItemState(REG.item(itemId));
+  }
+  u.refresh(0);
+  u.hp = u.stats.maxHp;
+  u.mana = u.stats.maxMana;
+  return u;
+}
+
+function formationDepth(roles: string[], attackRange: number): number {
+  const depth = TUNING.macroFormationDepth;
+  if (roles.includes('initiator') || roles.includes('durable')) return depth;
+  if (roles.includes('support') || attackRange >= 550) return -depth;
+  return 0;
 }
 
 export function heroesAlive(sim: Sim, team: number): Unit[] {
@@ -80,7 +164,15 @@ export function heroesAlive(sim: Sim, team: number): Unit[] {
 
 export function runMacroBattle(setup: MacroSetup): MacroResult {
   const sim = setupMacroSim(setup);
-  const maxSec = setup.maxSec ?? TUNING.macroMaxSec;
+  return runBattleToResult(sim, setup.maxSec ?? TUNING.macroMaxSec);
+}
+
+export function runRaidBattle(setup: RaidSetup): MacroResult {
+  const sim = setupRaidSim(setup);
+  return runBattleToResult(sim, setup.maxSec ?? TUNING.macroMaxSec);
+}
+
+function runBattleToResult(sim: Sim, maxSec: number): MacroResult {
   const maxTicks = Math.round(maxSec / sim.dt);
 
   let winner: 0 | 1 | -1 = -1;

@@ -34,8 +34,14 @@ export const TUNING = {
   meleeRangeBuffer: 32,
   projectileHitRadius: 48,
   attackDamageVariance: 0.08, // +-8%
+  attackMoveAcquireRadius: 850,
+  aiAutoAcquireRadius: 650,
+  creepThinkTicks: 5,
+  gambitThinkTicks: 5,
+  bossThinkTicks: 4,
 
   // --- xp / gold (trainer-level wallet) ---
+  startingGold: 2600,
   xpCurve: [0, 0, 230, 600, 1080, 1660, 2260, 2980, 3730, 4620, 5550, 6520, 7530, 8580, 9805, 11055, 12330, 13630, 14955, 16455, 18045, 19645, 21495, 23595, 25945, 28545, 31395, 34495, 37845, 41445, 45295],
   levelCap: 30,
   postCapXpToGold: 0.25,      // gold per excess xp
@@ -66,16 +72,25 @@ export const TUNING = {
   entourageAncientMax: 1,
   entourageFaintSec: 90,
   creepAggroRadius: 650,
+  entourageGuardRadius: 900,
+  entourageChaseRadius: 650,
+  entourageFollowStart: 280,
+  entourageFollowStop: 135,
   creepLeashRadius: 1800,
   creepWanderRadius: 220,
 
   // --- raids/bosses (schema-level now, used from Phase 3) ---
   raidAssembledDropPct: { normal: 0.10, nightmare: 0.20, hell: 0.35 },
   raidBadLuckPity: 8,
+  raidBossHpScale: 5,
+  raidBossDamageScale: 1.25,
+  raidBossRadiusScale: 1.7,
 
   // --- macro arena ---
   arenaWidth: 4200,
   arenaHeight: 3000,
+  macroTeamXInset: 950,
+  macroFormationDepth: 240,
   macroMaxSec: 300,
   captainCallsPerFight: 3,
   captainCallSec: 5,

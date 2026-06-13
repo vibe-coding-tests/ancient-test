@@ -29,6 +29,9 @@ export function applyDamage(
   }
 
   let amount = rawAmount;
+  if (source && !opts.fromAttack && dtype !== 'physical') {
+    amount *= 1 + source.stats.spellAmpPct / 100;
+  }
   if (dtype === 'physical' && !opts.ignoreArmor) amount *= armorMultiplier(victim.stats.armor);
   if (dtype === 'magical') amount *= 1 - victim.stats.magicResistPct / 100;
   amount *= 1 - victim.stats.damageTakenReductionPct / 100;
@@ -40,6 +43,10 @@ export function applyDamage(
   if (isEnemy && source) {
     victim.lastEnemyDamageAt = sim.time;
     source.lastDealtDamageAt = sim.time;
+    if (victim.ctrl.kind === 'boss') {
+      const threat = victim.ctrl.threat ?? (victim.ctrl.threat = {});
+      threat[source.uid] = (threat[source.uid] ?? 0) + amount;
+    }
     victim.recentDamagers = victim.recentDamagers.filter((r) => sim.time - r.at < TUNING.participantWindowSec);
     const existing = victim.recentDamagers.find((r) => r.uid === source.uid);
     if (existing) existing.at = sim.time;

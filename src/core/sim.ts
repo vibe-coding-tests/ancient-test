@@ -231,6 +231,8 @@ export class Sim {
 
   interruptCapture(u: Unit, _reason: string): void {
     if (!u.captureCh) return;
+    const target = this.byUid.get(u.captureCh.targetUid);
+    if (target) target.removeStatusWhere((s) => s.tag === 'binding-totem');
     this.events.emit({ t: 'capture-interrupt', target: u.captureCh.targetUid });
     u.captureCh = null;
   }

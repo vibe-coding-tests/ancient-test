@@ -12,6 +12,8 @@ export interface DerivedStats {
   damage: number;            // average attack damage before variance
   armor: number;
   magicResistPct: number;
+  spellAmpPct: number;
+  statusResistPct: number;
   attackInterval: number;    // seconds between attacks
   attackPoint: number;
   attackRange: number;
@@ -80,6 +82,8 @@ export function deriveStats(inp: StatInputs): DerivedStats {
     damage,
     armor: base.baseArmor + agi * TUNING.armorPerAgi + M(mods, 'armor'),
     magicResistPct: clamp(TUNING.baseMagicResist + M(mods, 'magicResistPct'), 0, 85),
+    spellAmpPct: M(mods, 'spellAmpPct'),
+    statusResistPct: clamp(M(mods, 'statusResistPct'), 0, 80),
     attackInterval,
     attackPoint: base.attackPoint,
     attackRange: (base.attackRange + M(mods, 'attackRange')) * TUNING.rangeScale,

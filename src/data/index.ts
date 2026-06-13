@@ -5,12 +5,15 @@ import { PUDGE } from './heroes/pudge';
 import { EARTHSHAKER } from './heroes/earthshaker';
 import { SNIPER } from './heroes/sniper';
 import { LICH } from './heroes/lich';
+import { LUNA } from './heroes/luna';
+import { SVEN } from './heroes/sven';
+import { AXE } from './heroes/axe';
 import { ALL_ITEMS } from './items/index';
 import { ALL_CREEPS } from './creeps/index';
 import { TRANQUIL_VALE } from './regions/tranquil-vale';
 import type { HeroDef } from '../core/types';
 
-export const ALL_HEROES: HeroDef[] = [JUGGERNAUT, CRYSTAL_MAIDEN, PUDGE, EARTHSHAKER, SNIPER, LICH];
+export const ALL_HEROES: HeroDef[] = [JUGGERNAUT, CRYSTAL_MAIDEN, PUDGE, EARTHSHAKER, SNIPER, LICH, LUNA, SVEN, AXE];
 export const ALL_REGIONS = [TRANQUIL_VALE];
 
 let registered = false;

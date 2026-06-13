@@ -3,6 +3,7 @@ import { registerAllContent } from '../data/index';
 import { REG } from '../core/registry';
 import { Sim } from '../core/sim';
 import { applyStatus } from '../core/effects';
+import { applyDamage } from '../core/combat';
 import { dist } from '../core/math2d';
 
 // ============================================================
@@ -235,6 +236,60 @@ describe('Sniper', () => {
     expect(mark.hp).toBe(hpBefore);
     sim.run(2.5);
     expect(mark.hp).toBeLessThan(hpBefore - 200); // bolt landed
+  });
+});
+
+describe('Luna', () => {
+  it('Lunar Blessing buffs allied damage and Eclipse fires repeated Lucent beams', () => {
+    const sim = arena();
+    const luna = sim.spawnHero(REG.hero('luna'), { team: 0, pos: { x: 1000, y: 1000 }, level: 12, ctrl: { kind: 'player' } });
+    const ally = sim.spawnHero(REG.hero('sniper'), { team: 0, pos: { x: 1200, y: 1000 }, level: 10, ctrl: { kind: 'none' } });
+    const targets = [0, 1, 2].map((i) =>
+      sim.spawnCreep(REG.creep('hellbear'), { team: 1, pos: { x: 1400 + i * 150, y: 950 + i * 80 }, wild: true })
+    );
+    for (const t of targets) t.ctrl = { kind: 'none' };
+    sim.run(1.2);
+    expect(ally.summary.mods.damage).toBeGreaterThan(0);
+    luna.mana = 999;
+    const before = targets.reduce((sum, t) => sum + t.hp, 0);
+    sim.order(luna.uid, { kind: 'cast', slot: 3 });
+    sim.run(4);
+    const after = targets.reduce((sum, t) => sum + t.hp, 0);
+    expect(after).toBeLessThan(before - 300);
+    expect(sim.events.history.filter((e) => e.t === 'status-apply' && (e as { status: string }).status === 'stun').length).toBeGreaterThan(0);
+  });
+});
+
+describe('Sven', () => {
+  it('Storm Hammer stuns clustered enemies and Gods Strength massively boosts attacks', () => {
+    const sim = arena();
+    const sven = sim.spawnHero(REG.hero('sven'), { team: 0, pos: { x: 1000, y: 1000 }, level: 12, ctrl: { kind: 'player' } });
+    const a = sim.spawnHero(REG.hero('axe'), { team: 1, pos: { x: 1450, y: 1000 }, level: 10, ctrl: { kind: 'none' } });
+    const b = sim.spawnHero(REG.hero('pudge'), { team: 1, pos: { x: 1570, y: 1030 }, level: 10, ctrl: { kind: 'none' } });
+    sven.mana = 999;
+    sim.order(sven.uid, { kind: 'cast', slot: 0, uid: a.uid });
+    sim.run(1.8);
+    expect(a.summary.stunned).toBe(true);
+    expect(b.summary.stunned).toBe(true);
+    const damageBefore = sven.stats.damage;
+    sim.order(sven.uid, { kind: 'cast', slot: 3 });
+    sim.run(0.8);
+    expect(sven.stats.damage).toBeGreaterThan(damageBefore * 2);
+  });
+});
+
+describe('Axe', () => {
+  it("Berserker's Call taunts and Counter Helix punishes attackers", () => {
+    const sim = arena();
+    const axe = sim.spawnHero(REG.hero('axe'), { team: 0, pos: { x: 1000, y: 1000 }, level: 10, ctrl: { kind: 'player' } });
+    const attacker = sim.spawnHero(REG.hero('juggernaut'), { team: 1, pos: { x: 1130, y: 1000 }, level: 10, ctrl: { kind: 'none' } });
+    axe.mana = 999;
+    sim.order(axe.uid, { kind: 'cast', slot: 0 });
+    sim.run(0.8);
+    expect(attacker.summary.taunted).toBe(axe.uid);
+    const hpBefore = attacker.hp;
+    applyDamage(sim, attacker, axe, 50, 'physical');
+    expect(attacker.hp).toBeLessThan(hpBefore); // helix fired around Axe
   });
 });
 

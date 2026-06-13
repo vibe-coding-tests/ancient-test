@@ -18,6 +18,7 @@ import type {
   HeroBaseStats,
   HeroDef,
   Order,
+  SilhouetteSpec,
   StatusId,
   SummonSpec,
   Team,
@@ -77,7 +78,7 @@ export interface ForcedMove {
 }
 
 export interface ControllerRef {
-  kind: 'player' | 'creep' | 'gambit' | 'ward' | 'none';
+  kind: 'player' | 'creep' | 'gambit' | 'boss' | 'ward' | 'none';
   /** creep AI home */
   homePos?: Vec2;
   /** follow owner (entourage / summons) */
@@ -85,6 +86,8 @@ export interface ControllerRef {
   /** gambit rules */
   rules?: GambitRule[];
   focusUid?: number;
+  /** boss threat table: unit uid -> threat score */
+  threat?: Record<number, number>;
   wanderTarget?: Vec2 | null;
   nextThinkAt?: number;
   leashed?: boolean;
@@ -123,6 +126,8 @@ export class Unit {
   capturable = false;
   tier?: CreepTier;
   aggroRadius?: number;
+  /** renderer hint for summons/wards (heroes and creeps resolve via REG) */
+  visual?: { silhouette: SilhouetteSpec; palette: [string, string, string] };
 
   attribute: Attribute;
   base: HeroBaseStats;
@@ -513,6 +518,7 @@ export function makeSummonUnit(spec: SummonSpec, opts: { owner: Unit; pos: Vec2;
   });
   u.creepId = spec.id;
   u.ownerUid = opts.owner.uid;
+  u.visual = { silhouette: spec.silhouette, palette: spec.palette };
   u.externalMods = {
     maxHp: spec.stats.maxHp - TUNING.baseHp,
     magicResistPct: (spec.stats.magicResistPct ?? 0) - TUNING.baseMagicResist

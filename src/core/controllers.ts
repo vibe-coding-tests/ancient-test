@@ -10,15 +10,20 @@ import type { Sim } from './sim';
 //   player — orders come from outside (input / Captain Call)
 //   creep  — wild camps, summons, entourage
 //   gambit — macro battles + AI party members in raids
+//   boss   — raid boss threat-table controller
 // -----------------------------------------------------------------
 
 export function thinkUnit(sim: Sim, u: Unit): void {
   if (!u.alive) return;
   const c = u.ctrl;
   if (c.kind === 'player' || c.kind === 'ward' || c.kind === 'none') return;
-  const cadence = c.kind === 'creep' ? 8 : 9; // ticks between thinks
+  const cadence =
+    c.kind === 'creep' ? TUNING.creepThinkTicks :
+    c.kind === 'boss' ? TUNING.bossThinkTicks :
+    TUNING.gambitThinkTicks;
   if ((sim.tickCount + u.uid) % cadence !== 0) return;
   if (c.kind === 'creep') thinkCreep(sim, u);
+  else if (c.kind === 'boss') thinkBoss(sim, u);
   else if (c.kind === 'gambit') thinkGambit(sim, u);
 }
 
@@ -34,13 +39,13 @@ function thinkCreep(sim: Sim, u: Unit): void {
       u.order = { kind: 'stop' };
       return;
     }
-    const enemy = nearestEnemyOf(sim, u, owner.pos, 800) ?? nearestEnemyOf(sim, u, u.pos, 500);
+    const enemy = nearestEnemyOf(sim, u, owner.pos, TUNING.entourageGuardRadius) ?? nearestEnemyOf(sim, u, u.pos, TUNING.entourageChaseRadius);
     if (enemy) {
-      maybeCastCreepAbility(sim, u, enemy);
+      maybeCastBasicAbility(sim, u, enemy);
       if (u.order.kind !== 'cast') u.order = { kind: 'attack-unit', uid: enemy.uid };
-    } else if (dist(u.pos, owner.pos) > 320) {
+    } else if (dist(u.pos, owner.pos) > TUNING.entourageFollowStart) {
       u.order = { kind: 'follow', uid: owner.uid };
-    } else if (u.order.kind === 'follow') {
+    } else if (u.order.kind === 'follow' && dist(u.pos, owner.pos) <= TUNING.entourageFollowStop) {
       u.order = { kind: 'stop' };
     }
     return;
@@ -69,7 +74,7 @@ function thinkCreep(sim: Sim, u: Unit): void {
   const aggroR = u.aggroRadius ?? TUNING.creepAggroRadius;
   const enemy = nearestEnemy(sim, u, aggroR);
   if (enemy) {
-    maybeCastCreepAbility(sim, u, enemy);
+    maybeCastBasicAbility(sim, u, enemy);
     if (u.order.kind !== 'cast') u.order = { kind: 'attack-unit', uid: enemy.uid };
     return;
   }
@@ -101,7 +106,7 @@ function nearestEnemyOf(sim: Sim, u: Unit, around: Vec2, radius: number): Unit |
   return best;
 }
 
-function maybeCastCreepAbility(sim: Sim, u: Unit, enemy: Unit): void {
+function maybeCastBasicAbility(sim: Sim, u: Unit, enemy: Unit): void {
   for (let slot = 0; slot < u.abilities.length; slot++) {
     const a = u.abilities[slot];
     if (a.level <= 0) continue;
@@ -143,6 +148,44 @@ function maybeCastCreepAbility(sim: Sim, u: Unit, enemy: Unit): void {
       return;
     }
   }
+}
+
+function thinkBoss(sim: Sim, u: Unit): void {
+  const taunter = u.summary.taunted !== null ? sim.unit(u.summary.taunted) : undefined;
+  let focus = taunter && taunter.alive && taunter.team !== u.team && !taunter.summary.untargetable
+    ? taunter
+    : pickThreatTarget(sim, u) ?? pickFocus(sim, u) ?? undefined;
+  if (focus && !focus.isVisibleTo(u.team, sim.time)) focus = undefined;
+  u.ctrl.focusUid = focus?.uid;
+
+  if (focus) {
+    maybeCastBasicAbility(sim, u, focus);
+    if (u.order.kind !== 'cast') u.order = { kind: 'attack-unit', uid: focus.uid };
+  } else {
+    u.order = { kind: 'stop' };
+  }
+}
+
+function pickThreatTarget(sim: Sim, u: Unit): Unit | null {
+  const table = u.ctrl.threat;
+  if (!table) return null;
+
+  let best: Unit | null = null;
+  let bestThreat = 0;
+  for (const key of Object.keys(table)) {
+    const uid = Number(key);
+    const target = sim.unit(uid);
+    if (!target || !target.alive || target.team === u.team || target.summary.untargetable || !target.isVisibleTo(u.team, sim.time)) {
+      delete table[uid];
+      continue;
+    }
+    const threat = table[uid];
+    if (threat > bestThreat || (threat === bestThreat && best && dist(target.pos, u.pos) < dist(best.pos, u.pos))) {
+      bestThreat = threat;
+      best = target;
+    }
+  }
+  return best;
 }
 
 // ---------- gambit controller (SPEC §7) ----------

@@ -3,6 +3,7 @@ import { registerAllContent } from '../data/index';
 import { REG } from '../core/registry';
 import { Sim } from '../core/sim';
 import { applyDamage } from '../core/combat';
+import { applyStatus } from '../core/effects';
 import { makeItemState, itemReady, sortInventory, computeBuyPlan, executeBuy } from '../core/items';
 import type { Unit } from '../core/unit';
 
@@ -191,6 +192,41 @@ describe('Magic Wand', () => {
     expect(me.hp).toBeGreaterThan(hpBefore + 40);
     expect(me.mana).toBeGreaterThan(manaBefore);
     expect(me.items[slot]!.charges).toBe(0);
+  });
+});
+
+describe('new carry/caster items', () => {
+  it('Kaya amplifies spell damage', () => {
+    const { sim, me, foe } = lab();
+    applyDamage(sim, me, foe, 100, 'magical');
+    const without = foe.stats.maxHp - foe.hp;
+    foe.hp = foe.stats.maxHp;
+    give(sim, me, 'kaya');
+    sim.run(0.2);
+    applyDamage(sim, me, foe, 100, 'magical');
+    const withKaya = foe.stats.maxHp - foe.hp;
+    expect(withKaya).toBeGreaterThan(without * 1.1);
+  });
+
+  it('Sange reduces incoming debuff durations through status resistance', () => {
+    const { sim, me, foe } = lab();
+    give(sim, me, 'sange');
+    sim.run(0.2);
+    applyStatus(sim, foe, me, 'stun', 10, undefined, { defId: 'test-stun', level: 1, vfx: { archetype: 'stun-stars', color: '#ffffff' } });
+    const stun = me.statuses.find((s) => s.status === 'stun');
+    expect(stun).toBeDefined();
+    expect(stun!.until - sim.time).toBeLessThan(9);
+  });
+
+  it('Mask of Madness trades silence and armor for a burst of speed', () => {
+    const { sim, me } = lab();
+    const slot = give(sim, me, 'mask-of-madness');
+    const attackBefore = me.stats.attackInterval;
+    sim.order(me.uid, { kind: 'item', invSlot: slot });
+    sim.run(0.3);
+    expect(me.summary.silenced).toBe(true);
+    expect(me.stats.attackInterval).toBeLessThan(attackBefore * 0.7);
+    expect(me.summary.mods.armor).toBeLessThan(0);
   });
 });
 

@@ -320,13 +320,16 @@ export function applyStatus(
   const meta = STATUS_META[status];
   const casterTeam = caster?.team ?? -1;
   const isDebuff = status === 'buff' ? casterTeam !== target.team : meta.debuff;
+  const effectiveDuration = isDebuff
+    ? duration * (1 - clamp(target.stats.statusResistPct, 0, 80) / 100)
+    : duration;
 
   const inst: StatusInstance = {
     status,
     tag: params?.tag ?? `${ctx.defId}:${status}`,
     sourceUid: caster?.uid ?? -1,
     sourceTeam: casterTeam,
-    until: sim.time + duration,
+    until: sim.time + effectiveDuration,
     isDebuff
   };
   if (params) {

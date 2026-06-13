@@ -62,6 +62,8 @@ export interface StatMods {
   maxHp: number;
   maxMana: number;
   magicResistPct: number;
+  spellAmpPct: number;
+  statusResistPct: number;
   evasionPct: number;
   lifestealPct: number;
   attackRange: number;

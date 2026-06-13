@@ -51,6 +51,16 @@ export function updateUnitActions(sim: Sim, u: Unit, dt: number): void {
     return;
   }
 
+  // taunt: forced basic attacks against the taunter. This matters in raids
+  // where Axe-style control should move boss threat, not just block spells.
+  if (u.summary.taunted !== null) {
+    const src = sim.unit(u.summary.taunted);
+    if (src && src.alive && src.team !== u.team && !src.summary.untargetable && src.isVisibleTo(u.team, now)) {
+      pursueAndAttack(sim, u, src, dt);
+      return;
+    }
+  }
+
   // capture channel: stand still, progress
   if (u.captureCh) {
     const target = sim.unit(u.captureCh.targetUid);
@@ -121,7 +131,7 @@ export function updateUnitActions(sim: Sim, u: Unit, dt: number): void {
       break;
     }
     case 'attack-move': {
-      const enemy = nearestEnemy(sim, u, 700);
+      const enemy = nearestEnemy(sim, u, TUNING.attackMoveAcquireRadius);
       if (enemy) {
         pursueAndAttack(sim, u, enemy, dt);
       } else {
@@ -166,11 +176,12 @@ export function updateUnitActions(sim: Sim, u: Unit, dt: number): void {
 function autoAcquire(sim: Sim, u: Unit, dt: number, holdPosition: boolean): void {
   if (u.kind === 'ward' || u.kind === 'npc') return;
   if (u.ctrl.kind === 'none' || u.ctrl.kind === 'ward') return; // inert units (test dummies, scripted NPCs)
-  if (u.ctrl.kind === 'player' && u.order.kind === 'stop') return; // player units don't chase on their own
-  const range = holdPosition ? u.stats.attackRange + 60 : 500;
+  // Idle player heroes retaliate in place (Dota idle aggro) but never chase.
+  const playerIdle = u.ctrl.kind === 'player' && u.order.kind === 'stop';
+  const range = holdPosition || playerIdle ? u.stats.attackRange + 60 : TUNING.aiAutoAcquireRadius;
   const enemy = nearestEnemy(sim, u, range);
   if (enemy) {
-    if (holdPosition) attackIfInRange(sim, u, enemy, dt);
+    if (holdPosition || playerIdle) attackIfInRange(sim, u, enemy, dt);
     else pursueAndAttack(sim, u, enemy, dt);
   }
 }
@@ -471,6 +482,17 @@ function handleCaptureOrder(sim: Sim, u: Unit, dt: number): void {
   }
   faceToward(u, target.pos, dt);
   u.captureCh = { targetUid: target.uid, startedAt: sim.time, until: sim.time + cfg.channelSec };
+  // The totem binds its target for the channel: the creep cannot fight back,
+  // but anything ELSE hitting the channeler still interrupts (DECISIONS).
+  target.addStatus({
+    status: 'stun',
+    tag: 'binding-totem',
+    sourceUid: u.uid,
+    sourceTeam: u.team,
+    until: sim.time + cfg.channelSec,
+    isDebuff: true
+  });
+  sim.interruptActions(target);
   sim.events.emit({ t: 'capture-start', uid: u.uid, target: target.uid, duration: cfg.channelSec });
   u.order = { kind: 'stop' };
 }

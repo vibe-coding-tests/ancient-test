@@ -121,6 +121,10 @@ export const COMPONENTS: ItemDef[] = [
   { id: 'chainmail', name: 'Chainmail', tier: 'component', cost: 550, passiveMods: { armor: 5 }, lore: 'A thousand small refusals.', glyph: 'armor' },
   { id: 'cloak', name: 'Cloak', tier: 'component', cost: 550, passiveMods: { magicResistPct: 20 }, lore: 'Woven against weather and worse.', glyph: 'cloak' },
   { id: 'shadow-amulet', name: 'Shadow Amulet', tier: 'component', cost: 1000, passiveMods: {}, lore: 'It dims the light\u2019s opinion of you.', glyph: 'gem' },
+  { id: 'morbid-mask', name: 'Morbid Mask', tier: 'component', cost: 900, passiveMods: { lifestealPct: 18 }, lore: 'A hungry little face, worn in the hand.', glyph: 'mask' },
+  { id: 'hyperstone', name: 'Hyperstone', tier: 'component', cost: 2000, passiveMods: { attackSpeed: 60 }, lore: 'It vibrates faster than fear.', glyph: 'gem' },
+  { id: 'platemail', name: 'Platemail', tier: 'component', cost: 1400, passiveMods: { armor: 10 }, lore: 'A fortress hammered thin enough to wear.', glyph: 'armor' },
+  { id: 'ultimate-orb', name: 'Ultimate Orb', tier: 'component', cost: 2800, passiveMods: { str: 15, agi: 15, int: 15 }, lore: 'A perfect sphere of indecision: every virtue at once.', glyph: 'orb' },
   { id: 'magic-stick', name: 'Magic Stick', tier: 'basic', cost: 200, charges: 0, maxCharges: 10,
     triggers: [{ on: 'on-nearby-enemy-cast', radius: 1200, chargeGain: 1 }],
     consumesAllCharges: true,
@@ -195,6 +199,59 @@ export const ASSEMBLED: ItemDef[] = [
       cooldown: [55],
       effects: [{ kind: 'mana', op: 'restore', amount: 175, target: 'allies-in-radius', radius: 1200 }],
       vfx: { archetype: 'ground-aoe', color: '#86c8ff', scale: 0.8 }
+    }
+  },
+  {
+    id: 'yasha', name: 'Yasha', tier: 'basic', cost: 2100,
+    components: ['blade-of-alacrity', 'band-of-elvenskin'], recipeCost: 650,
+    passiveMods: { agi: 16, attackSpeed: 12, moveSpeedPct: 8 },
+    lore: 'A blade that thinks feet should be quicker than thoughts.',
+    glyph: 'blade'
+  },
+  {
+    id: 'sange', name: 'Sange', tier: 'basic', cost: 2100,
+    components: ['ogre-axe', 'belt-of-strength'], recipeCost: 650,
+    passiveMods: { str: 16, statusResistPct: 12, lifestealPct: 12 },
+    lore: 'A red edge for people who plan to stay in the fight.',
+    glyph: 'blade'
+  },
+  {
+    id: 'kaya', name: 'Kaya', tier: 'basic', cost: 2100,
+    components: ['staff-of-wizardry', 'robe-of-the-magi'], recipeCost: 650,
+    passiveMods: { int: 16, spellAmpPct: 12, manaRegen: 1.5 },
+    lore: "A scholar's blade: sharpest where the hand is not.",
+    glyph: 'blade'
+  },
+  {
+    id: 'dragon-lance', name: 'Dragon Lance', tier: 'core', cost: 1900,
+    components: ['blade-of-alacrity', 'belt-of-strength'], recipeCost: 450,
+    passiveMods: { agi: 10, str: 6, attackRange: 140 },
+    lore: 'A long answer to a short-ranged problem.',
+    glyph: 'spear'
+  },
+  {
+    id: 'mask-of-madness', name: 'Mask of Madness', tier: 'core', cost: 1900,
+    components: ['morbid-mask', 'quarterstaff'], recipeCost: 125,
+    passiveMods: { damage: 10, lifestealPct: 20 },
+    lore: 'It screams advice. The advice is always attack.',
+    glyph: 'mask',
+    active: {
+      id: 'mask-of-madness-active',
+      name: 'Berserk',
+      targeting: 'no-target',
+      castPoint: 0,
+      cooldown: [16],
+      values: {
+        duration: [6],
+        attackSpeed: [110],
+        move: [30],
+        armorLoss: [-8]
+      },
+      effects: [
+        { kind: 'status', status: 'silence', duration: 'duration', target: 'self' },
+        { kind: 'statmod', mods: { attackSpeed: 'attackSpeed', moveSpeedPct: 'move', armor: 'armorLoss' }, duration: 'duration', target: 'self' }
+      ],
+      vfx: { archetype: 'shield', color: '#ff3c38', color2: '#ffd27f', scale: 0.8 }
     }
   },
   {

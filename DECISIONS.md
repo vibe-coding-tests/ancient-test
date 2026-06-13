@@ -14,3 +14,11 @@ Dated one-liners for every nontrivial call, per SPEC §0.
 - 2026-06-12: Attack projectiles always land on arrival (not disjointable) in P1; spell projectiles disjoint on blink/invis/cyclone per canon.
 - 2026-06-12: Capture thresholds by tier: small 30%/2.5s, medium 25%/3.0s, large 20%/3.5s, ancient 15%/4.5s — all in tuning.ts.
 - 2026-06-12: Entourage creep death: creep returns to storage "fainted" for 90s (tuning), then fieldable again. Keeps death meaningful without dead content.
+- 2026-06-12: Phase 1 starts with a 2600g Dawnshade stipend (`TUNING.startingGold`) so the acceptance demo can buy Blink immediately; long-term economy balance is Phase 2+.
+- 2026-06-12: Added a tutorial kobold camp and moved Pudge near Dawnshade so capture, companion fielding, recruitment, and 1-5 swap are reachable in the first minute.
+- 2026-06-12: Save imports and slot loads now validate version, region/hero/creep references, party bounds, and core shape before starting a game.
+- 2026-06-12: Map mode uses procedural in-world markers for town, shrine, camps, and recruitable heroes as the Phase 1 far-readability layer instead of a separate minimap UI.
+- 2026-06-12: Added Luna, Sven, and Axe as data-only heroes with no exotic slots; placed them in Tranquil Vale temporarily so the one-region build can recruit/test them before their lore regions exist.
+- 2026-06-12: Added spell amplification and status resistance to the stat vocabulary for Kaya/Sange identity instead of treating those items as cosmetic stat sticks.
+- 2026-06-12: Increased procedural model tessellation and switched unit materials to smooth Lambert shading; preserves asset-free stylization while reducing placeholder-low-poly jaggedness.
+- 2026-06-12: Combat feel pass keeps one shared core: faster AI cadence, role-based macro formations, taunt as forced attacks, and a damage-threat boss controller for 5v1 raids.
