@@ -3,7 +3,7 @@ import { registerAllContent } from '../data/index';
 import { ALL_GYMS } from '../data/gyms/index';
 import { ALL_RAIDS } from '../data/raids';
 import { ELITE_DRAFT } from '../data/drafts';
-import { Game, newGameSave } from '../systems/game';
+import { Game, newGameSave, SAVE_VERSION } from '../systems/game';
 import type { GambitRule, GameSave, ItemSave, MacroHeroSetup } from '../core/types';
 
 beforeAll(() => registerAllContent());
@@ -13,7 +13,7 @@ beforeAll(() => registerAllContent());
 // strong, fully-recruited squad runs the connected critical path —
 // new game → all 8 badges → all four raids → Elite Five → Champion —
 // proving every stage is reachable and resolvable with no structural
-// blocker, then proving the whole run survives a v5 save round-trip.
+// blocker, then proving the whole run survives a v6 save round-trip.
 //
 // Per-stage *winnability* and mechanics are proven elsewhere (tests 6,
 // 13–18); this asserts the path threads end to end.
@@ -73,7 +73,7 @@ function clearWithin(label: string, tries: number, attempt: () => boolean): void
 }
 
 describe('ship gate: full playthrough (G3)', () => {
-  it('new game → 8 badges → 4 raids → Elite Five → Champion, then survives a v5 round-trip', () => {
+  it('new game → 8 badges → 4 raids → Elite Five → Champion, then survives a v6 round-trip', () => {
     const game = Game.headless(shipGateSave());
 
     // --- all 8 gym badges (real headless best-of-3 auto-resolve) ---
@@ -121,9 +121,9 @@ describe('ship gate: full playthrough (G3)', () => {
     expect(codex.raids.length, 'raids appear in the codex after clearing').toBeGreaterThanOrEqual(ALL_RAIDS.length);
     expect(game.journalSections().raids.length).toBeGreaterThanOrEqual(ALL_RAIDS.length);
 
-    // --- the whole completed run survives a v5 save round-trip ---
+    // --- the whole completed run survives a current save round-trip ---
     const save = game.buildSave();
-    expect(save.version).toBe(5);
+    expect(save.version).toBe(SAVE_VERSION);
     const reloaded = Game.headless(save);
     expect(reloaded.badges.size).toBe(8);
     expect(reloaded.eliteFive.defeated).toBe(ELITE_DRAFT.members.length);

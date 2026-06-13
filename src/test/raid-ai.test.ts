@@ -123,6 +123,59 @@ describe('raid-aware considerations', () => {
     expect(order?.kind).toBe('item');
     if (order?.kind === 'item') expect(lich.items[order.invSlot]?.defId).toBe('mekansm');
   });
+
+  it('wounded allies stack toward a ready Mek carrier', () => {
+    const sim = setupRaidSim({
+      seed: 62,
+      party: [
+        { heroId: 'lich', level: 22, items: ['mekansm'] },
+        { heroId: 'sven', level: 22 },
+        { heroId: 'juggernaut', level: 22 }
+      ],
+      boss: { heroId: 'sven', level: 26, hpScale: 4, damageScale: 1 },
+      maxSec: 60
+    });
+    const boss = sim.unitsArr.find((u) => u.team === 1 && u.ctrl.kind === 'boss')!;
+    const lich = sim.unitsArr.find((u) => u.team === 0 && u.heroId === 'lich')!;
+    const sven = sim.unitsArr.find((u) => u.team === 0 && u.heroId === 'sven')!;
+    const jugg = sim.unitsArr.find((u) => u.team === 0 && u.heroId === 'juggernaut')!;
+    lich.pos = { x: 2000, y: 2000 };
+    sven.pos = { x: 900, y: 2000 };
+    jugg.pos = { x: 2100, y: 2080 };
+    boss.pos = { x: 3600, y: 2000 };
+    sven.hp = sven.stats.maxHp * 0.55;
+    jugg.hp = jugg.stats.maxHp * 0.55;
+    sim.rebuildSpatial();
+
+    const order = chooseUtilityOrder(sim, sven, boss);
+    expect(order?.kind).toBe('move');
+    if (order?.kind === 'move') expect(order.point).toEqual(lich.pos);
+  });
+
+  it('scatters from a raid signature-sized zone before tunneling the boss', () => {
+    const { sim, boss, get } = raid(['sniper', 'crystal-maiden']);
+    const sniper = get('sniper');
+    const center = { x: 2000, y: 2000 };
+    sniper.pos = { x: center.x + 120, y: center.y };
+    boss.pos = { x: 3600, y: 2000 };
+    sim.addZone({
+      caster: boss,
+      ctx: CTX,
+      spec: { shape: 'circle', duration: 6, radius: 460, tick: { interval: 0.5, affects: 'enemies', effects: [{ kind: 'damage', dtype: 'magical', amount: 80, target: 'target' }] } },
+      duration: 6,
+      pos: center,
+      radius: 460
+    });
+    sim.rebuildSpatial();
+
+    const before = Math.hypot(sniper.pos.x - center.x, sniper.pos.y - center.y);
+    const order = chooseUtilityOrder(sim, sniper, boss);
+    expect(order?.kind).toBe('move');
+    if (order?.kind === 'move') {
+      const after = Math.hypot(order.point.x - center.x, order.point.y - center.y);
+      expect(after).toBeGreaterThan(before);
+    }
+  });
 });
 
 describe('AI-depth difficulty lever', () => {

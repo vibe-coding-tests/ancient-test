@@ -362,6 +362,59 @@ export function raidPeelTarget(sim: Sim, u: Unit, profile: CombatProfile): Unit 
   return best;
 }
 
+function raidSignatureScatterOrder(sim: Sim, u: Unit): Order | null {
+  if (!bossPresent(sim, u)) return null;
+  for (const z of sim.zones) {
+    if (z.team === u.team || !z.tickEffects || z.shape !== 'circle' || !z.pos) continue;
+    const radius = z.radius ?? 0;
+    if (radius < 420) continue;
+    const harms = z.tickEffects.some((e) => e.kind === 'damage') && z.tickAffects !== 'allies';
+    if (!harms) continue;
+    if (dist2(u.pos, z.pos) > (radius + 260) * (radius + 260)) continue;
+    const away = norm(sub(u.pos, z.pos));
+    const dir = away.x === 0 && away.y === 0 ? v2((u.uid % 2 === 0 ? 1 : -1), 0) : away;
+    return { kind: 'move', point: add(z.pos, scale(dir, radius + u.radius + 260)) };
+  }
+  return null;
+}
+
+function readyMekCarrier(sim: Sim, u: Unit): Unit | null {
+  let best: Unit | null = null;
+  let bestD = Infinity;
+  for (const ally of sim.unitsArr) {
+    if (!ally.alive || ally.team !== u.team || ally.kind !== 'hero') continue;
+    const slot = ally.items.findIndex((it) => it?.defId === 'mekansm');
+    if (slot < 0) continue;
+    const it = ally.items[slot]!;
+    const def = REG.items.get(it.defId);
+    if (!def || !itemReady(it, def, ally, sim.time).ok) continue;
+    const d = dist2(u.pos, ally.pos);
+    if (d < bestD || (d === bestD && (best === null || ally.uid < best.uid))) { bestD = d; best = ally; }
+  }
+  return best;
+}
+
+function woundedRaidAlliesNear(sim: Sim, team: Team, center: Vec2, radius: number): number {
+  let n = 0;
+  sim.forEachNearbyUnit(center, radius + 80, (ally) => {
+    if (!ally.alive || ally.team !== team || ally.kind !== 'hero') return;
+    if (dist2(ally.pos, center) > radius * radius) return;
+    if (ally.hp / Math.max(1, ally.stats.maxHp) < 0.72) n++;
+  });
+  return n;
+}
+
+function raidStackForHealOrder(sim: Sim, u: Unit): Order | null {
+  if (!bossPresent(sim, u)) return null;
+  if (u.hp / Math.max(1, u.stats.maxHp) >= 0.72) return null;
+  const carrier = readyMekCarrier(sim, u);
+  if (!carrier || carrier.uid === u.uid) return null;
+  if (woundedRaidAlliesNear(sim, u.team, carrier.pos, 1700) < 2) return null;
+  const d = dist(u.pos, carrier.pos);
+  if (d <= 650 || d > 1700) return null;
+  return { kind: 'move', point: { ...carrier.pos } };
+}
+
 interface Scored { score: number; order: Order; slot: number }
 
 function scoreAbility(sim: Sim, u: Unit, slot: number, focus: Unit | null, profile: CombatProfile): Scored | null {
@@ -488,6 +541,43 @@ function scoreItemActive(sim: Sim, u: Unit, slot: number, focus: Unit | null, pr
   return null;
 }
 
+function scoreBossItemActive(sim: Sim, u: Unit, slot: number, focus: Unit | null, profile: CombatProfile): Scored | null {
+  if (isDisabled(u.summary)) return null;
+  const it = u.items[slot];
+  if (!it) return null;
+  const def = REG.items.get(it.defId);
+  if (!def?.active) return null;
+  if (!itemReady(it, def, u, sim.time).ok) return null;
+  const ITEM = 1000 + slot;
+
+  switch (it.defId) {
+    case 'black-king-bar': {
+      if (u.summary.magicImmune) return null;
+      const threatened = incomingDisable(sim, u, 1200) || enemyCastSeen(sim, u, 'ult', 1300) || enemyCastSeen(sim, u, 'channel', 1300);
+      if (!threatened) return null;
+      return { score: 3.2 * Math.max(0.9, profile.weights.survival), order: { kind: 'item', invSlot: slot }, slot: ITEM };
+    }
+    case 'glimmer-cape': {
+      if (u.summary.invisible || u.summary.fading) return null;
+      const hpPct = u.hp / Math.max(1, u.stats.maxHp);
+      if (hpPct > 0.45 && sim.time - u.lastEnemyDamageAt > 1.5) return null;
+      return { score: 2.3 * Math.max(0.8, profile.weights.survival), order: { kind: 'item', invSlot: slot, uid: u.uid }, slot: ITEM };
+    }
+    case 'euls-scepter': {
+      const range = 575 + u.stats.castRangeBonus;
+      const target = enemyChannelingInRange(sim, u, range) ?? bestOffensiveTarget(sim, u, focus, range);
+      if (!target) return null;
+      return { score: 1.8 * Math.max(0.8, profile.weights.control), order: { kind: 'item', invSlot: slot, uid: target.uid }, slot: ITEM };
+    }
+    case 'force-staff': {
+      const hpPct = u.hp / Math.max(1, u.stats.maxHp);
+      if (hpPct > 0.35 || enemiesNear(sim, u, 420) === 0) return null;
+      return { score: 1.7 * Math.max(0.8, profile.weights.survival), order: { kind: 'item', invSlot: slot, uid: u.uid }, slot: ITEM };
+    }
+  }
+  return null;
+}
+
 /**
  * Choose the best combat order for a unit that has acquired `focus`.
  * Returns the order, or null to let the caller fall back (e.g. attack-focus).
@@ -497,8 +587,14 @@ export function chooseUtilityOrder(sim: Sim, u: Unit, focus: Unit | null): Order
 
   if (u.ctrl.kind === 'gambit') {
     const tm = sim.teamMind(u.team);
+    const scatter = raidSignatureScatterOrder(sim, u);
+    if (scatter) return scatter;
+
     const spread = tm.spread ? spreadSpacingOrder(sim, u) : null;
     if (spread) return spread;
+
+    const stack = raidStackForHealOrder(sim, u);
+    if (stack) return stack;
 
     if (focus && !tm.engaged && shouldHoldBackForEngage(sim, u, focus, profile) && !urgentSupportAvailable(sim, u, profile)) {
       return { kind: 'hold' };
@@ -515,11 +611,13 @@ export function chooseUtilityOrder(sim: Sim, u: Unit, focus: Unit | null): Order
     if (!cand) continue;
     if (!best || cand.score > best.score) best = cand; // lower slot wins ties (scanned first)
   }
-  // item actives: only gambit-driven heroes (party / autobattler); bosses get
-  // deliberate item use from the boss brain (A5), creeps carry none.
-  if (u.ctrl.kind === 'gambit') {
+  // item actives: gambit heroes use party/autobattler considers; raid bosses use
+  // a narrower boss-brain subset for survivals and interrupts. Creeps carry none.
+  if (u.ctrl.kind === 'gambit' || u.ctrl.kind === 'boss') {
     for (let slot = 0; slot < u.items.length; slot++) {
-      const cand = scoreItemActive(sim, u, slot, focus, profile);
+      const cand = u.ctrl.kind === 'boss'
+        ? scoreBossItemActive(sim, u, slot, focus, profile)
+        : scoreItemActive(sim, u, slot, focus, profile);
       if (!cand) continue;
       if (!best || cand.score > best.score) best = cand;
     }

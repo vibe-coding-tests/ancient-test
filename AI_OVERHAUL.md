@@ -2,53 +2,19 @@
 
 How the combat AI stops being a blob that walks forward and trades, and starts playing like a team that knows what it is. Companion to `SPEC.md` (§1.1 controllers, §4 raids, §7 macro), `COMBAT_OVERHAUL.md` (which connected the player's hands to the sims), and `PROGRESS.md`.
 
-Same footing as the rest of the project. The headless deterministic core (`src/core/`) stays the system of record. It never imports `three`, never touches the DOM, and stays deterministic for a seed. `COMBAT_OVERHAUL.md` did the control work: the combat context, the real Captain's Call, and the live raid session all landed. This document is about the brain underneath all of it. Every change here is additive, data-driven, and reversible. The boundary test (`src/test/boundary.test.ts`) stays green and the headless auto-resolve paths stay the tested reference.
+Same footing as the rest of the project. The headless deterministic core (`src/core/`) stays the system of record. It never imports `three`, never touches the DOM, and stays deterministic for a seed. `COMBAT_OVERHAUL.md` did the control work: the combat context, the real Captain's Call, and the live raid session all landed. This document records the brain underneath all of it. The implementation is additive, data-driven, and reversible. The boundary test (`src/test/boundary.test.ts`) stays green and the headless auto-resolve paths stay the tested reference.
 
 ---
 
-## 0. WHERE WE ARE — measured honestly
+## 0. SHIPPED STATE
 
-The gambit grammar already grew past what `COMBAT_OVERHAUL.md` §3.2 called missing. `kite`, `dodge-zones`, `focus-fire`, `most-dangerous`, and `enemy-casting` all ship, the editor exposes them, and `src/test/gambit-ai.test.ts` covers three of them. The control plumbing is done. What stayed shallow is the decision-making.
+The control plumbing from `COMBAT_OVERHAUL.md` is in place, and the brain work in this file has landed. The old slot-order ability routine and private low-HP target picker have been replaced by a shared utility scorer, combat profiles, and team-mind targeting. Creeps, gambit heroes, and bosses all route through the same scorer where authored orders leave the move open.
 
-Four findings.
+The gambit grammar now includes the missing positioning and reactive pieces: `kite`, `dodge-zones`, `focus-fire`, `most-dangerous`, `enemy-casting`, `enemy-cast-seen`, `self-disabled`, and `incoming-disable`. The editor exposes them by category. Default gambits are role-shaped guardrails, and the scorer handles kit-aware offense, saves, item use, kiting, and focus.
 
-**Finding 1 — units fire abilities in slot order.** Creeps and the raid boss share one routine that casts the first ready ability whose target is in range:
+Threat has been rebuilt around the raid contract in `SPEC.md` §4. Damage and effective healing generate threat, role multipliers let tanks hold aggro, melee and ranged pull thresholds stop target jitter, taunt raises the tank to the top of the table, and threat drops are attached to save tools such as Smoke and Glimmer Cape.
 
-```104:117:src/core/controllers.ts
-function maybeCastBasicAbility(sim: Sim, u: Unit, enemy: Unit): void {
-  for (let slot = 0; slot < u.abilities.length; slot++) {
-    const a = u.abilities[slot];
-    if (a.level <= 0) continue;
-    ...
-    if (!u.abilityReady(slot, sim.time).ok) continue;
-```
-
-There is no sense of value. A nuke and a steroid fire in whatever order the kit lists them, on whatever target is nearest, with no idea whether the cast is worth it.
-
-**Finding 2 — every hero targets alone.** Each unit picks its own focus through a private low-HP-and-near heuristic:
-
-```241:251:src/core/controllers.ts
-function pickFocus(sim: Sim, u: Unit): Unit | null {
-  ...
-  const hpScore = o.hp / o.stats.maxHp;
-  const distScore = dist(o.pos, u.pos) / 4000;
-  const heroBias = o.kind === 'hero' ? 0 : 0.5;
-```
-
-Five heroes spread across five targets. `focus-fire` sets only the caster's own focus, so a team never converges. Teamfights read as two blobs colliding until one dissolves.
-
-**Finding 3 — the boss is a creep with a big health bar.** `thinkBoss` resolves a threat or taunt target, then calls the same slot-order ability routine. Its mechanics (add waves, zones, the signature beat, enrage) live in `createRaidMechanicRunner` in `src/core/macro.ts` and fire on boss health thresholds. They are a side channel, not decisions the boss makes. The same boss does the same thing at the same health every attempt.
-
-**Finding 4 — threat is raw damage, and only the boss has it.** Threat is one number per attacker, accumulated as damage dealt:
-
-```67:70:src/core/combat.ts
-    if (victim.ctrl.kind === 'boss') {
-      const threat = victim.ctrl.threat ?? (victim.ctrl.threat = {});
-      threat[source.uid] = (threat[source.uid] ?? 0) + amount;
-    }
-```
-
-`SPEC.md` §4 promises that "damage and healing generate threat" and "the carry rides the threat ceiling." Healing generates nothing today. There is no tank multiplier, no aggro threshold to stop the boss flipping targets every tick, and a taunt only overrides for its duration instead of buying the tank a real lead.
+Raid bosses have a phase brain. The boss chooses a posture by phase, uses threat or opportunity to pick targets, can fire survival and interrupt items, and arms scripted mechanics through the same raid mechanic runner used by headless and live raids. Raid allies now dodge, scatter, stack for a ready heal, peel adds off the backline, and burn during enrage.
 
 ---
 
@@ -103,40 +69,40 @@ A unit should fight like itself. Its character comes from four things it already
 
 ## 5. ARCHITECTURE — what touches what
 
-New core modules, all headless and deterministic:
+Core modules, all headless and deterministic:
 
-- `src/core/combat-profile.ts` — derives and caches a `CombatProfile` (role, posture, range, weights) from existing hero data.
-- `src/core/utility.ts` — the action scorer and its considerations; produces an `Order` or yields to the caller.
-- `src/core/team-mind.ts` — the per-team shared state, computed once per decision tick on `Sim`.
-- `src/core/threat.ts` — the threat table, generation rules, thresholds, taunt-to-top, and decay.
-- `src/core/boss-ai.ts` — the boss phase machine and posture selection.
+- `src/core/combat-profile.ts` derives and caches a `CombatProfile` from role tags, attribute, attack range, and kit shape.
+- `src/core/utility.ts` owns the action scorer, reactive reads, item considers, raid ally considerations, and `computeTeamMind`.
+- `src/core/sim.ts` stores `TeamMind` and recomputes it through `Sim.teamMind()` on a fixed cadence.
+- `src/core/threat.ts` owns threat generation, pull thresholds, taunt-to-top, drops, and opt-in decay.
+- `src/core/boss-brain.ts` owns the boss phase machine, posture targeting, seeded variety, and mechanic selection.
 
-`src/core/controllers.ts` becomes the orchestrator. `thinkGambit`, `thinkCreep`, and `thinkBoss` read the team-mind, then call the scorer where they used to fall back to slot-order firing. `src/core/types.ts` grows the gambit grammar with the new reactive conditions. `src/core/combat.ts` and the heal path call into `src/core/threat.ts`. No ability, item, status, or damage resolution changes. The macro and raid setup in `src/core/macro.ts` gains the difficulty-depth knob.
+`src/core/controllers.ts` is now the orchestrator. `thinkGambit`, `thinkCreep`, and `thinkBoss` acquire focus, honor authored actions, then call the scorer where the old code used to fall through to slot-order ability use or a plain attack. `src/core/types.ts` carries the expanded gambit grammar. `src/core/combat.ts` credits damage and healing threat through `src/core/threat.ts`. `src/core/macro.ts` wires the boss AI-depth knob and lets the boss brain choose armed raid mechanics.
 
-Systems, engine, and UI are nearly untouched. The gym and raid sessions already share their headless engines, so they inherit the brain for free. The gambit editor in `src/ui/hud.ts` lists the new conditions, grouped by category so the rule list stays readable. No `GameSave` change: the grammar additions are new union variants, so saved gambits keep loading.
-
----
-
-## 6. PHASING — shippable slices, each green
-
-- **A0 — the scorer.** Add `combat-profile.ts` and `utility.ts`. Route creep, boss, and gambit fallbacks through the scorer, retiring `maybeCastBasicAbility` and the `pickFocus` heuristic. Headless tests per consideration.
-- **A1 — the team-mind.** Shared focus, engage state, spread and peel flags on `Sim`, computed once per tick and read by targeting. Test that a team converges on one focus.
-- **A2 — reactivity.** `enemy-cast-seen`, `self-disabled`, `incoming-disable`, and item-active consider functions. Expose the new conditions in the editor, grouped by category.
-- **A3 — characteristics.** Role-by-attribute-by-range profiles and a role-true `buildDefaultGambit`. Verify a default five beats the old defaults on a seed sweep.
-- **A4 — threat.** The rebuilt threat model: healing threat, multipliers, thresholds, taunt-to-top, opt-in decay, generalized past the boss.
-- **A5 — boss brain.** The phase machine, posture selection, the shared scorer for targeting, and seeded variety, with `runRaidEncounter` still authoritative.
-- **A6 — raid party and difficulty.** Raid-aware ally considerations, the depth-as-difficulty lever for raids and overworld elites, and the live-versus-headless agreement test.
-
-Cross-cutting gate on every slice: `npm test` and `npm run build` green, `boundary.test.ts` green, determinism preserved, the headless paths still the reference.
+Systems, engine, and UI stayed small. The gym and raid sessions share their headless engines, so they inherit the brain through the core. The gambit editor in `src/ui/hud.ts` lists the new conditions and actions by category. No `GameSave` change was needed: the grammar additions are new union variants, so saved gambits keep loading.
 
 ---
 
-## 7. OPEN DECISIONS — settle these while building
+## 6. PHASING — shipped slices
 
-1. **Suppression boundary.** Does a fired gambit rule fully suppress the scorer, or may the scorer still resolve the target a rule left as a mode? Default: a fired rule decides the action; the scorer fills only the open move.
-2. **Boss variety versus determinism.** Seeded weighted choice keeps a replay identical. Confirm during A5 how much variety reads well without feeling random.
-3. **Threat decay.** Off globally, opt-in per encounter. Confirm in A4.
-4. **Editor load.** Keep the rule list short and the presets as the on-ramp. Group the new reactive conditions by category so the grammar growth does not overwhelm the screen.
+- **A0 — the scorer.** Done. `combat-profile.ts` and `utility.ts` route creep, boss, and gambit fallbacks through value-scored actions. `src/test/utility-ai.test.ts` covers profiles, cast value, target choice, team focus, spread, hold, and determinism.
+- **A1 — the team-mind.** Done. `TeamMind` lives on `Sim`, carries shared focus, engage state, and spread, and is tested through team convergence and flag-driven decisions.
+- **A2 — reactivity.** Done. `enemy-cast-seen`, `self-disabled`, `incoming-disable`, and item-active consider functions ship, with editor exposure and `src/test/reactive-ai.test.ts`.
+- **A3 — characteristics.** Done. Combat profiles and role-true `buildDefaultGambit` drive defaults, with `src/test/default-gambit-sweep.test.ts` guarding the seed sweep against the old defaults.
+- **A4 — threat.** Done. Healing threat, role multipliers, aggro thresholds, taunt-to-top, threat drops, and opt-in decay are in `src/core/threat.ts`, covered by `src/test/threat.test.ts`.
+- **A5 — boss brain.** Done. `src/core/boss-brain.ts` handles phase, posture, seeded variety, and mechanic choice. Boss-controlled item actives now cover survival and interrupts.
+- **A6 — raid party and difficulty.** Done. Raid allies dodge, scatter, stack for Mekansm, peel adds, and burn enrage. Raid tier dials boss `aiDepth`, and `src/test/raid-ai.test.ts` checks live versus headless agreement.
+
+Cross-cutting gate for future AI edits: keep `npm test` and `npm run build` green, keep `boundary.test.ts` green, preserve determinism, and keep the headless paths as the balance reference.
+
+---
+
+## 7. SETTLED DECISIONS
+
+1. **Suppression boundary.** A fired gambit rule decides the action. The scorer fills the open move only when no authored rule fires.
+2. **Boss variety versus determinism.** Boss posture variety uses seeded choices forked from `sim.rng`, so identical seed and state replay identically.
+3. **Threat decay.** Decay is off globally and available as an opt-in helper for encounters that want it.
+4. **Editor load.** The rule list stays grouped by category, and default presets remain the on-ramp.
 
 ---
 

@@ -135,18 +135,18 @@ describe('item-active considers', () => {
     if (order?.kind === 'item') expect(hero.items[order.invSlot]?.defId).toBe('mekansm');
   });
 
-  it('does not consider item actives for boss-controlled units', () => {
-    // BKB on a boss is reserved for the boss brain (A5); the scorer must skip it here.
+  it('boss-controlled units use survival item actives deliberately', () => {
     const sim = macro([{ heroId: 'sniper', level: 18, items: ['black-king-bar'] }], [{ heroId: 'lich', level: 18 }]);
     const hero = sim.unitsArr.find((u) => u.team === 0)!;
     hero.ctrl = { kind: 'boss', threat: {} };
+    hero.abilities.forEach((a) => (a.level = 0)); // isolate item desire from ability scoring
     const enemy = sim.unitsArr.find((u) => u.team === 1)!;
     enemy.pos = { x: hero.pos.x + 200, y: hero.pos.y };
     enemy.cast = { source: 'ability', slot: ultSlot(enemy), fireAt: sim.time + 0.5 };
     sim.rebuildSpatial();
 
     const order = chooseUtilityOrder(sim, hero, enemy);
-    // it may attack or cast an ability, but never reach for the item
-    expect(order?.kind).not.toBe('item');
+    expect(order?.kind).toBe('item');
+    if (order?.kind === 'item') expect(hero.items[order.invSlot]?.defId).toBe('black-king-bar');
   });
 });
