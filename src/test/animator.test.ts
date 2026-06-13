@@ -16,7 +16,7 @@ function attackingUnit(attackRange: number): Unit {
     castGesture: null,
     channel: null,
     captureCh: null
-  } as Unit;
+  } as unknown as Unit;
 }
 
 describe('procedural animator attack styles', () => {

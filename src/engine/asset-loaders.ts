@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
+import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { clone as cloneSkeleton } from 'three/examples/jsm/utils/SkeletonUtils.js';
 
@@ -225,7 +225,7 @@ export function loadHdr(url: string): Promise<THREE.DataTexture | null> {
   let p = hdrCache.get(url);
   if (!p) {
     kindStats.hdr.misses++;
-    p = new RGBELoader()
+    p = new HDRLoader()
       .loadAsync(url)
       .then((tex) => {
         tex.mapping = THREE.EquirectangularReflectionMapping;

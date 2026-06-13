@@ -124,24 +124,22 @@ export const DUNGEON_AFFIXES: AffixDef[] = [
     ]
   },
   {
-    id: 'thunderstorm',
-    name: 'Thunderstorm',
+    id: 'health-link',
+    name: 'Health Link',
     minTier: 'nightmare',
-    excludes: ['molten'],
-    // Periodic lightning around each carrier, composed from a buff carrier with
-    // a periodic damage pulse — it stops the instant the creep dies.
+    // True shared-damage is not a current primitive, so this composes the
+    // existing follow-zone aura into the same readable pack fantasy: members
+    // standing together reinforce each other's health and armor.
     apply: [
       {
-        kind: 'status',
-        status: 'buff',
-        duration: 9999,
-        target: 'self',
-        params: {
-          tag: 'affix-thunderstorm',
-          periodic: {
-            interval: 2.2,
-            effects: [{ kind: 'damage', dtype: 'magical', amount: 24, target: 'enemies-in-radius', radius: 620 }]
-          }
+        kind: 'zone',
+        at: 'self',
+        follow: true,
+        zone: {
+          shape: 'circle',
+          radius: 420,
+          duration: 9999,
+          auraMods: { affects: 'allies', mods: { maxHp: 160, armor: 4 } }
         }
       }
     ]

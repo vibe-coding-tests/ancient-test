@@ -362,7 +362,7 @@ describe('dungeon session D1/D2', () => {
   });
 
   it('ships the full affix library, each composed from existing primitives', () => {
-    const ids = ['jailer', 'frozen', 'vortex', 'fast', 'molten', 'waller', 'shielding', 'thunderstorm'];
+    const ids = ['jailer', 'frozen', 'vortex', 'fast', 'molten', 'waller', 'shielding', 'health-link'];
     const defs = dungeonAffixes(ids);
     expect(defs).toHaveLength(ids.length);
     for (const def of defs) expect(def.apply.length).toBeGreaterThan(0);
