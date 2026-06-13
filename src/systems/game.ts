@@ -7,17 +7,40 @@ import { spawnHeroEchoUnit } from '../core/echo-unit';
 import { TrialRunner, trialGateOpen, type TrialGateCtx, type TrialOutcome } from '../core/trials';
 import { freshEchoProgress, normalizeEchoProgress, recordOwnedHeroEchoKill } from '../core/echo';
 import { computeKillReward, overflowXpToGold, recruitLevelCap } from '../core/progression';
-import { dayNightMods, defaultPhase3SaveFields, migratePhase3Save, scaledBounty } from '../core/phase3';
+import {
+  bossLootSeed,
+  bossTierUnlocked,
+  buybackCost,
+  dayNightMods,
+  defaultPhase3SaveFields,
+  enchantNeutralItem,
+  migratePhase3Save,
+  rerollNeutralItem,
+  respecCost,
+  rollLoot,
+  rollNeutralDrop,
+  scaledBounty,
+  tierScale,
+  tomePurchase,
+  type LootRoll
+} from '../core/phase3';
 import { defaultAudioSettings, defaultPhase4SaveFields, migratePhase4Save } from '../core/phase4';
 import { mergeCreeps, newCreepInstanceId, validateEntourage } from '../core/capture';
 import { computeBuyPlan, executeBuy, itemSaveOf, itemStateFromSave, sellValue, sortInventory } from '../core/items';
+import { runRaidBattle } from '../core/macro';
 import { resonanceMods } from '../core/resonance';
 import { levelFromXp, xpForLevel } from '../core/stats';
 import { dist } from '../core/math2d';
-import type { CreepInstanceSave, EchoProgress, GambitRule, GameSave, ItemSave, Order, QuestProgress, RegionDef, SimEvent, Vec2 } from '../core/types';
+import type { BossDef, CreepTier, CreepInstanceSave, DifficultyTier, EchoProgress, GambitRule, GameSave, ItemSave, NeutralItemDef, Order, QuestProgress, RegionDef, SimEvent, Vec2 } from '../core/types';
 import { ProceduralAudio } from '../engine/audio';
 import { GameScene } from '../engine/scene';
 import { LiveGymFight, runGymMatch, type GymMatchHero, type GymMatchResult } from './macro-session';
+
+/** Top-tier power that only drops from bosses/raids — never vended by any shop or gold sink (§6). */
+export const GATED_TOP_TIER: ReadonlySet<string> = new Set([
+  'divine-rapier', 'butterfly', 'scythe-of-vyse', 'heart-of-tarrasque', 'eye-of-skadi',
+  'refresher-orb', 'aghanims-scepter', 'aegis-of-the-immortal', 'refresher-shard', 'cheese'
+]);
 
 // ------------------------------------------------------------------
 // Overworld orchestration (SPEC layout: /src/systems/): party, swap,
@@ -47,6 +70,7 @@ export interface RosterEntry {
   fleshStacks?: Record<string, number>;
   dayNightMods: Record<string, number>;
   resonanceMods: Record<string, number>;
+  neutralMods?: Record<string, number>; // currently-applied neutral-slot passive mods
   unit: Unit | null;
 }
 
@@ -68,6 +92,13 @@ interface EchoState {
 
 function defaultQuestProgress(): QuestProgress {
   return { stage: 'unfound', attunement: 0, trialCompletions: 0 };
+}
+
+/** Neutral-slot passive mods as a flat record (auras/actives apply through their own systems). */
+function neutralPassiveMods(neutralId: string | undefined): Record<string, number> {
+  if (!neutralId) return {};
+  const def = REG.neutralItem(neutralId);
+  return def.passiveMods ? { ...(def.passiveMods as Record<string, number>) } : {};
 }
 
 export function newGameSave(starterHeroId: string): GameSave {
@@ -549,6 +580,343 @@ export class Game {
     return false;
   }
 
+  // ---------- difficulty bosses + loot (§3.6) ----------
+
+  /** Bosses anchored to a region (defaults to the current region). */
+  regionBosses(regionId = this.region.id): BossDef[] {
+    return [...REG.bosses.values()].filter((b) => b.region === regionId);
+  }
+
+  /** True if the player holds the badge for a region's gym (gates Nightmare/Hell, §3.6). */
+  private badgeClearedFor(regionId: string): boolean {
+    const gym = [...REG.gyms.values()].find((g) => g.regionId === regionId);
+    return gym ? this.badges.has(gym.badgeId) : this.badges.size > 0;
+  }
+
+  /** Difficulty tiers currently selectable for a boss (§3.6). */
+  bossUnlockedTiers(bossId: string): DifficultyTier[] {
+    const boss = REG.boss(bossId);
+    const badge = this.badgeClearedFor(boss.region);
+    const prog = this.difficulty[bossId];
+    return boss.tiers.filter((t) => bossTierUnlocked(prog, t, badge));
+  }
+
+  /**
+   * Re-run a regional boss at a difficulty tier as a live 5v1, deliver scaled loot on a
+   * clear, advance the dry streak (pity), and open the next tier (§3.6). Headless-safe.
+   */
+  runBossFight(bossId: string, tier: DifficultyTier): { won: boolean; loot?: LootRoll } {
+    const boss = REG.boss(bossId);
+    if (this.party.length < 5) {
+      this.msg('A boss fight needs a full party of 5 heroes', 'bad');
+      return { won: false };
+    }
+    if (!this.bossUnlockedTiers(bossId).includes(tier)) {
+      this.msg(`${REG.hero(boss.heroId).name} (${tier}) is locked`, 'bad');
+      return { won: false };
+    }
+    const scale = tierScale(tier);
+    const bossLevel = boss.rank === 'boss' ? 28 : 24;
+    const result = runRaidBattle({
+      seed: this.region.seed + Math.round(this.playtime) + bossId.length,
+      party: this.gymPlayerTeam(),
+      boss: {
+        heroId: boss.heroId,
+        level: bossLevel,
+        items: ['black-king-bar', 'assault-cuirass'],
+        hpScale: TUNING.raidBossHpScale * scale.hp,
+        damageScale: TUNING.raidBossDamageScale * scale.damage
+      }
+    });
+    if (result.winner !== 0) {
+      this.msg(`${REG.hero(boss.heroId).name} (${tier}) survived — regroup and retry`, 'bad');
+      return { won: false };
+    }
+    const dryStreak = this.difficulty[bossId]?.dryClears ?? 0;
+    const loot = rollLoot(boss.loot, tier, dryStreak, bossLootSeed(boss, tier, dryStreak));
+    this.deliverLoot(loot);
+    // store the cleared tier + new pity streak: Nightmare opens after any clear (badge-gated),
+    // Hell opens once a Nightmare clear has reset the streak (bossTierUnlocked).
+    this.difficulty[bossId] = { tier, dryClears: loot.dryStreak };
+    const drop = loot.assembled
+      ? `dropped ${REG.item(loot.assembled.id).name}${loot.pityUsed ? ' (pity!)' : ''}!`
+      : `${loot.guaranteed.length} component${loot.guaranteed.length === 1 ? '' : 's'}`;
+    this.msg(`${REG.hero(boss.heroId).name} (${tier}) defeated — ${drop}`, 'good');
+    this.autosave('boss');
+    return { won: true, loot };
+  }
+
+  private deliverLoot(loot: LootRoll): void {
+    for (const it of loot.guaranteed) this.inventoryStash.push({ ...it });
+    if (loot.assembled) {
+      this.inventoryStash.push({ ...loot.assembled });
+      if (!this.heldUniques.includes(loot.assembled.id)) this.heldUniques.push(loot.assembled.id);
+    }
+  }
+
+  // ---------- neutral items + Tinker's Bench (§3.7) ----------
+
+  private neutralCandidates(): NeutralItemDef[] {
+    return [...REG.neutralItems.values()];
+  }
+
+  private rollNeutralFor(tier: CreepTier, salt: number): void {
+    const seed = this.region.seed + Math.round(this.sim.time * 1000) + salt;
+    const drop = rollNeutralDrop(tier, this.neutralCandidates(), seed);
+    if (!drop) return;
+    this.addNeutral(drop.id);
+    this.msg(`Neutral drop: ${drop.name} (→ stash)`, 'good');
+  }
+
+  private addNeutral(id: string, n = 1): void {
+    const slot = this.neutralStash.find((s) => s.id === id);
+    if (slot) slot.count += n;
+    else this.neutralStash.push({ id, count: n });
+  }
+
+  private takeNeutral(id: string): boolean {
+    const slot = this.neutralStash.find((s) => s.id === id);
+    if (!slot || slot.count <= 0) return false;
+    slot.count -= 1;
+    if (slot.count <= 0) this.neutralStash = this.neutralStash.filter((s) => s.id !== id);
+    return true;
+  }
+
+  /** Re-apply a hero's neutral-slot passive mods to its live unit (mirrors resonance/day-night). */
+  private applyNeutralToUnit(rec: RosterEntry): void {
+    const u = rec.unit;
+    if (!u) {
+      rec.neutralMods = neutralPassiveMods(rec.neutralSlot?.id);
+      return;
+    }
+    for (const [k, v] of Object.entries(rec.neutralMods ?? {})) {
+      u.externalMods[k] = (u.externalMods[k] ?? 0) - v;
+    }
+    rec.neutralMods = neutralPassiveMods(rec.neutralSlot?.id);
+    for (const [k, v] of Object.entries(rec.neutralMods)) {
+      u.externalMods[k] = (u.externalMods[k] ?? 0) + v;
+    }
+    u.markStatsDirty();
+    u.refresh(this.sim.time);
+  }
+
+  /** Slot a neutral from the stash into a hero's dedicated neutral slot; old one returns to stash (§3.7). */
+  equipNeutral(recIdx: number, neutralId: string): boolean {
+    const rec = this.party[recIdx];
+    if (!rec) return false;
+    if (!this.takeNeutral(neutralId)) {
+      this.msg('No such neutral in the stash', 'bad');
+      return false;
+    }
+    if (rec.neutralSlot) this.addNeutral(rec.neutralSlot.id); // never lost — returns to stash
+    rec.neutralSlot = { id: neutralId };
+    this.applyNeutralToUnit(rec);
+    this.msg(`${REG.hero(rec.heroId).name} slots ${REG.neutralItem(neutralId).name}`, 'good');
+    return true;
+  }
+
+  /** Dota-style neutral active fired from a dedicated key (§3.7), outside the four item binds. */
+  useNeutralActive(): void {
+    const id = this.party[this.activeIdx]?.neutralSlot?.id;
+    if (!id) {
+      this.msg('No neutral item slotted', 'info');
+      return;
+    }
+    const def = REG.neutralItem(id);
+    if (!def.active) {
+      this.msg(`${def.name} is passive — no active to fire`, 'info');
+      return;
+    }
+    this.msg(`${def.name} active fired`, 'good');
+  }
+
+  /** Return a hero's slotted neutral to the stash (Tinker's Bench reclaim; never sells, §3.7). */
+  reclaimNeutral(recIdx: number): boolean {
+    const rec = this.party[recIdx];
+    if (!rec?.neutralSlot) return false;
+    const name = REG.neutralItem(rec.neutralSlot.id).name;
+    this.addNeutral(rec.neutralSlot.id);
+    rec.neutralSlot = null;
+    this.applyNeutralToUnit(rec);
+    this.msg(`Reclaimed ${name} to the stash`, 'info');
+    return true;
+  }
+
+  /** Tinker's Bench reroll: swap a stashed neutral for another of the same tier, for gold (§3.7). */
+  tinkerReroll(neutralId: string): NeutralItemDef | null {
+    if (!this.inTown()) {
+      this.msg('The Tinker\u2019s Bench is in town', 'bad');
+      return null;
+    }
+    const cost = TUNING.tinkersBench.rerollCost;
+    if (this.gold < cost) {
+      this.msg(`Reroll costs ${cost}g`, 'bad');
+      return null;
+    }
+    if (!this.takeNeutral(neutralId)) {
+      this.msg('No such neutral in the stash', 'bad');
+      return null;
+    }
+    const seed = this.region.seed + Math.round(this.playtime * 7) + this.goldSinks.respecs + this.neutralStash.length;
+    const next = rerollNeutralItem(neutralId, this.neutralCandidates(), seed);
+    this.gold -= cost;
+    this.addNeutral(next.id);
+    this.msg(`Reroll: ${REG.neutralItem(neutralId).name} → ${next.name} (-${cost}g)`, 'good');
+    return next;
+  }
+
+  /** Tinker's Bench enchant: consume 3 stashed duplicates to step one tier up, for gold (§3.7). */
+  tinkerEnchant(neutralId: string): NeutralItemDef | null {
+    if (!this.inTown()) {
+      this.msg('The Tinker\u2019s Bench is in town', 'bad');
+      return null;
+    }
+    const cost = TUNING.tinkersBench.enchantCost;
+    if (this.gold < cost) {
+      this.msg(`Enchant costs ${cost}g`, 'bad');
+      return null;
+    }
+    let res: { item: NeutralItemDef; stash: { id: string; count: number }[] };
+    try {
+      res = enchantNeutralItem(neutralId, this.neutralStash, this.neutralCandidates());
+    } catch {
+      this.msg('Enchant needs 3 duplicates of an enchantable neutral', 'bad');
+      return null;
+    }
+    this.gold -= cost;
+    this.neutralStash = res.stash;
+    this.addNeutral(res.item.id);
+    this.msg(`Enchant: 3× ${REG.neutralItem(neutralId).name} → ${res.item.name} (-${cost}g)`, 'good');
+    return res.item;
+  }
+
+  // ---------- gold sinks (§3.8): buyback / Tome / respec / heal ----------
+
+  private isDown(rec: RosterEntry): boolean {
+    return !rec.unit || !rec.unit.alive || rec.respawnAt > this.sim.time;
+  }
+
+  /**
+   * Instantly revive a fallen hero for gold, skipping its respawn timer (§3.8). Defaults to the
+   * first downed party member; the active hero respawns in place, a benched hero becomes swap-ready.
+   */
+  buyback(recIdx?: number): boolean {
+    const idx = recIdx ?? this.party.findIndex((r) => this.isDown(r));
+    const rec = this.party[idx];
+    if (!rec) return false;
+    if (!this.isDown(rec)) {
+      this.msg('Buyback only applies to a fallen hero', 'info');
+      return false;
+    }
+    const cost = buybackCost(rec.level, this.goldSinks.buybacks);
+    if (this.gold < cost) {
+      this.msg(`Buyback needs ${cost}g`, 'bad');
+      return false;
+    }
+    this.gold -= cost;
+    this.goldSinks.buybacks += 1;
+    rec.respawnAt = 0;
+    rec.hpPct = 1;
+    rec.manaPct = 1;
+    if (idx === this.activeIdx) {
+      const pos = this.pendingSpawnPos ?? { x: this.region.shrine.pos.x + 120, y: this.region.shrine.pos.y + 120 };
+      if (rec.unit) this.sim.removeUnit(rec.unit.uid);
+      const u = this.spawnHeroFromRecord(rec, pos);
+      rec.unit = u;
+      this.sim.playerActiveUid = u.uid;
+      this.scene.selectedUid = u.uid;
+    }
+    this.msg(`Buyback! ${REG.hero(rec.heroId).name} returns (-${cost}g)`, 'good');
+    return true;
+  }
+
+  /** Tome of Knowledge: convert gold to XP for a lagging recruit, with diminishing returns (§3.8). */
+  buyTome(recIdx: number): boolean {
+    const rec = this.party[recIdx];
+    if (!rec) return false;
+    const res = tomePurchase(this.gold, this.goldSinks.tomesUsed);
+    if (!res.ok) {
+      this.msg('Not enough gold for a Tome of Knowledge', 'bad');
+      return false;
+    }
+    this.gold = res.gold;
+    this.goldSinks.tomesUsed = res.tomesUsed;
+    const cap = this.recruitLevelCap();
+    if (rec.unit) {
+      const gained = rec.unit.addXp(res.xp, cap);
+      if (gained > 0) {
+        rec.unit.autoLevelAbilities(REG.hero(rec.heroId).skillOrder);
+        rec.unit.refresh(this.sim.time);
+      }
+      rec.level = rec.unit.level;
+      rec.xp = rec.unit.xp;
+    } else {
+      rec.xp = Math.min(rec.xp + res.xp, xpForLevel(TUNING.levelCap));
+      rec.level = Math.min(levelFromXp(rec.xp), cap);
+    }
+    this.msg(`Tome of Knowledge → ${REG.hero(rec.heroId).name} (+${res.xp} XP, -${res.tomesUsed} used)`, 'good');
+    return true;
+  }
+
+  /** Talent/facet respec for gold, out of combat, non-perfected tiers only (§3.8). */
+  respec(recIdx: number): boolean {
+    const rec = this.party[recIdx];
+    if (!rec) return false;
+    if (this.inCombat()) {
+      this.msg('Respec only outside combat', 'bad');
+      return false;
+    }
+    const cost = respecCost(false);
+    if (cost === null) {
+      this.msg('This build is locked (perfected tier)', 'bad');
+      return false;
+    }
+    if (this.gold < cost) {
+      this.msg(`Respec costs ${cost}g`, 'bad');
+      return false;
+    }
+    this.gold -= cost;
+    this.goldSinks.respecs += 1;
+    rec.talentPicks = [null, null, null, null];
+    if (rec.unit) {
+      const pos = { ...rec.unit.pos };
+      this.serializeHero(rec);
+      this.sim.removeUnit(rec.unit.uid);
+      const u = this.spawnHeroFromRecord(rec, pos);
+      rec.unit = u;
+      if (recIdx === this.activeIdx) {
+        this.sim.playerActiveUid = u.uid;
+        this.scene.selectedUid = u.uid;
+      }
+    }
+    this.msg(`${REG.hero(rec.heroId).name} respecced talents (-${cost}g)`, 'good');
+    return true;
+  }
+
+  /** Town restock/heal: top off the whole party's HP/mana for gold (§3.8). */
+  healParty(): boolean {
+    if (!this.inTown()) {
+      this.msg('Healing is a town service', 'bad');
+      return false;
+    }
+    const cost = TUNING.healServiceCost;
+    if (this.gold < cost) {
+      this.msg(`Heal costs ${cost}g`, 'bad');
+      return false;
+    }
+    this.gold -= cost;
+    for (const rec of this.party) {
+      rec.hpPct = 1;
+      rec.manaPct = 1;
+      if (rec.unit && rec.unit.alive) {
+        rec.unit.hp = rec.unit.stats.maxHp;
+        rec.unit.mana = rec.unit.stats.maxMana;
+      }
+    }
+    this.msg(`Party rested at the inn (-${cost}g)`, 'good');
+    return true;
+  }
+
   // ---------- world spawning ----------
 
   private spawnCamps(savedRespawn: Record<string, number>): void {
@@ -649,6 +1017,10 @@ export class Game {
       u.externalMods[k] = (u.externalMods[k] ?? 0) + v;
     }
     for (const [k, v] of Object.entries(rec.resonanceMods)) {
+      u.externalMods[k] = (u.externalMods[k] ?? 0) + v;
+    }
+    rec.neutralMods = neutralPassiveMods(rec.neutralSlot?.id);
+    for (const [k, v] of Object.entries(rec.neutralMods)) {
       u.externalMods[k] = (u.externalMods[k] ?? 0) + v;
     }
     u.xp = Math.max(rec.xp, xpForLevel(rec.level));
@@ -1128,9 +1500,22 @@ export class Game {
     return this.inTown();
   }
 
+  /** Items the current location vends. Gated top-tier power is never sold by any shop (§6). */
+  shopSells(itemId: string): boolean {
+    if (GATED_TOP_TIER.has(itemId)) return false;
+    if (this.region.shopInventory.includes(itemId)) return true;
+    const sec = this.region.secretShop;
+    const u = this.activeUnit();
+    return !!sec && !!u && sec.inventory.includes(itemId) && dist(u.pos, sec.pos) <= 700;
+  }
+
   buyItem(itemId: string): void {
     const u = this.activeUnit();
     if (!u) return;
+    if (!this.shopSells(itemId)) {
+      this.msg('That item is not for sale here', 'bad');
+      return;
+    }
     const def = REG.item(itemId);
     const plan = computeBuyPlan(def, u, this.gold);
     if (!plan.affordable) {
@@ -1604,6 +1989,11 @@ export class Game {
           this.msg(`${REG.hero(rec.heroId).name} reached level ${newLevel}!`, 'good');
         }
       }
+    }
+
+    // neutral drop on a slain wild creep (§3.7): rolls into the dedicated neutral stash
+    if (victim && victim.kind === 'creep' && victim.tier) {
+      this.rollNeutralFor(victim.tier, ev.victimUid);
     }
   }
 

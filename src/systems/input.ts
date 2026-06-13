@@ -31,6 +31,7 @@ export class InputController {
   onToggleMenu: () => void = () => {};
   onToggleJournal: () => void = () => {};
   onToggleCodex: () => void = () => {};
+  onToggleServices: () => void = () => {};
 
   private rmbHeld = false;
   private lastMoveOrderAt = 0;
@@ -268,6 +269,12 @@ export class InputController {
         return;
       case 'b':
         this.onToggleShop();
+        return;
+      case 'y':
+        this.onToggleServices();
+        return;
+      case 'n':
+        g.useNeutralActive();
         return;
       case 'f5':
         e.preventDefault();

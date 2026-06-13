@@ -2,6 +2,7 @@ import { REG } from '../core/registry';
 import { TUNING } from '../data/tuning';
 import { xpProgress } from '../core/progression';
 import { itemReady, sellValue, computeBuyPlan } from '../core/items';
+import { buybackCost } from '../core/phase3';
 import { levelArr } from '../core/values';
 import { buildDefaultGambit } from '../core/controllers';
 import { abilityIcon, itemIcon, heroPortrait } from '../engine/icons';
@@ -67,7 +68,7 @@ export class Hud {
   private floaters: Floater[] = [];
   private coinFx: CoinFx[] = [];
   private shownToasts = 0;
-  private modalKind: 'none' | 'party' | 'shop' | 'menu' | 'talents' | 'journal' | 'codex' | 'gambit' | 'prefight' = 'none';
+  private modalKind: 'none' | 'party' | 'shop' | 'menu' | 'talents' | 'journal' | 'codex' | 'gambit' | 'prefight' | 'services' = 'none';
   private captureUntil = 0;
   private captureDur = 1;
   private vec = new THREE.Vector3();
@@ -136,6 +137,7 @@ export class Hud {
     input.onToggleMenu = () => this.toggleModal('menu');
     input.onToggleJournal = () => this.toggleModal('journal');
     input.onToggleCodex = () => this.toggleModal('codex');
+    input.onToggleServices = () => this.toggleModal('services');
     this.topBar.addEventListener('click', (e) => {
       const open = (e.target as HTMLElement).closest('[data-open]') as HTMLElement | null;
       const kind = open?.dataset.open as 'journal' | 'codex' | undefined;
@@ -634,7 +636,7 @@ export class Hud {
         ? `${gate.name} — requires ${gate.requiredBadge.replace('-', ' ')}`
         : `${gate.name} — press G to travel`;
     }
-    if (g.canShop() && this.modalKind === 'none' && !hint) hint = `${g.region.town.name} — press B to shop`;
+    if (g.canShop() && this.modalKind === 'none' && !hint) hint = `${g.region.town.name} — B to shop · Y for services`;
     this.hint.textContent = hint;
     this.hint.classList.toggle('hidden', hint === '');
   }
@@ -665,7 +667,7 @@ export class Hud {
 
   // ---------- modals ----------
 
-  toggleModal(kind: 'party' | 'shop' | 'menu' | 'talents' | 'journal' | 'codex'): void {
+  toggleModal(kind: 'party' | 'shop' | 'menu' | 'talents' | 'journal' | 'codex' | 'services'): void {
     if (this.modalKind === kind) {
       this.closeModal();
       return;
@@ -680,6 +682,7 @@ export class Hud {
     if (kind === 'talents') this.renderTalentModal();
     if (kind === 'journal') this.renderJournalModal();
     if (kind === 'codex') this.renderCodexModal();
+    if (kind === 'services') this.renderServicesModal();
   }
 
   closeModal(): void {
@@ -1105,6 +1108,106 @@ export class Hud {
         }
       });
     });
+  }
+
+  // --- town services (§3.6–3.8): boss reruns, Tinker's Bench, gold sinks ---
+
+  private renderServicesModal(): void {
+    const g = this.game;
+    const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
+
+    // Boss reruns (§3.6)
+    const bosses = g.regionBosses();
+    let bossHtml = bosses.length === 0
+      ? `<p class="dim">No boss roams ${g.region.name}. Their lairs wait in deeper regions.</p>`
+      : '';
+    for (const boss of bosses) {
+      const unlocked = g.bossUnlockedTiers(boss.id);
+      const prog = g.difficulty[boss.id];
+      const tiers = (['normal', 'nightmare', 'hell'] as const).map((t) =>
+        `<button class="btn small tier-${t}" data-boss="${boss.id}:${t}" ${unlocked.includes(t) ? '' : 'disabled'}>${cap(t)}</button>`
+      ).join('');
+      const streak = prog ? ` · dry ${prog.dryClears}/${TUNING.raidBadLuckPity}` : '';
+      bossHtml += `<div class="svc-row">
+        <div class="svc-main"><b>${REG.hero(boss.heroId).name}</b> <em>${boss.rank}</em>
+          <div class="rr-sub">farms ${boss.loot.assembledPool.map((id) => REG.item(id).name).join(', ')}${streak}</div>
+        </div>
+        <div class="svc-actions">${tiers}</div>
+      </div>`;
+    }
+
+    // Tinker's Bench (§3.7): the neutral stash + per-hero slots
+    const activeName = REG.hero(g.party[g.activeIdx].heroId).name;
+    let stashHtml = g.neutralStash.length === 0
+      ? `<p class="dim">No neutral items yet. Slay wild creeps to find them.</p>`
+      : '';
+    for (const s of g.neutralStash) {
+      const def = REG.neutralItem(s.id);
+      const canEnchant = !!def.enchantsInto && s.count >= 3;
+      stashHtml += `<div class="svc-row">
+        <div class="svc-main"><b>${def.name}</b> <em>T${def.tier} ·×${s.count}</em><div class="rr-sub">${def.lore}</div></div>
+        <div class="svc-actions">
+          <button class="btn small" data-neq="${s.id}">Equip → ${activeName}</button>
+          <button class="btn small" data-nrr="${s.id}">Reroll ${TUNING.tinkersBench.rerollCost}g</button>
+          <button class="btn small" data-nen="${s.id}" ${canEnchant ? '' : 'disabled'}>Enchant ${TUNING.tinkersBench.enchantCost}g</button>
+        </div>
+      </div>`;
+    }
+    const slotHtml = g.party.map((rec, i) => {
+      const n = rec.neutralSlot ? REG.neutralItem(rec.neutralSlot.id).name : '—';
+      return `<div class="svc-row">
+        <div class="svc-main"><b>${REG.hero(rec.heroId).name}</b> <div class="rr-sub">neutral: ${n}</div></div>
+        <div class="svc-actions">${rec.neutralSlot ? `<button class="btn small" data-nrec="${i}">Reclaim</button>` : ''}</div>
+      </div>`;
+    }).join('');
+
+    // Gold sinks (§3.8)
+    const downIdx = g.party.findIndex((r) => !r.unit || !r.unit.alive || r.respawnAt > g.sim.time);
+    const buyLabel = downIdx >= 0
+      ? `Buyback ${buybackCost(g.party[downIdx].level, g.goldSinks.buybacks)}g`
+      : 'Buyback (no one down)';
+    const sinkHtml = g.party.map((rec, i) =>
+      `<div class="svc-row">
+        <div class="svc-main"><b>${REG.hero(rec.heroId).name}</b> <em>Lv ${rec.unit ? rec.unit.level : rec.level}</em></div>
+        <div class="svc-actions">
+          <button class="btn small" data-tome="${i}">Tome +XP</button>
+          <button class="btn small" data-respec="${i}">Respec ${TUNING.respecCost}g</button>
+        </div>
+      </div>`
+    ).join('');
+
+    this.modalShell('Town Services', `
+      <div class="services">
+        <section><h3>Boss Reruns</h3>${bossHtml}</section>
+        <section><h3>Tinker's Bench <span class="gold">${Math.floor(g.gold)} g</span></h3>
+          ${stashHtml}
+          <div class="svc-sub">Neutral slots</div>${slotHtml}
+        </section>
+        <section><h3>Recovery &amp; Growth</h3>
+          <div class="svc-row"><div class="svc-main">Rest at the inn — full HP/mana</div>
+            <div class="svc-actions">
+              <button class="btn small" data-heal="1">Heal ${TUNING.healServiceCost}g</button>
+              <button class="btn small accent" data-buyback="1" ${downIdx >= 0 ? '' : 'disabled'}>${buyLabel}</button>
+            </div>
+          </div>
+          ${sinkHtml}
+        </section>
+      </div>`);
+
+    const rerender = () => this.renderServicesModal();
+    this.modal.querySelectorAll<HTMLElement>('[data-boss]').forEach((el) => el.addEventListener('click', () => {
+      const [id, tier] = el.dataset.boss!.split(':');
+      g.runBossFight(id, tier as 'normal' | 'nightmare' | 'hell');
+      rerender();
+    }));
+    this.modal.querySelectorAll<HTMLElement>('[data-neq]').forEach((el) => el.addEventListener('click', () => { g.equipNeutral(g.activeIdx, el.dataset.neq!); rerender(); }));
+    this.modal.querySelectorAll<HTMLElement>('[data-nrr]').forEach((el) => el.addEventListener('click', () => { g.tinkerReroll(el.dataset.nrr!); rerender(); }));
+    this.modal.querySelectorAll<HTMLElement>('[data-nen]').forEach((el) => el.addEventListener('click', () => { g.tinkerEnchant(el.dataset.nen!); rerender(); }));
+    this.modal.querySelectorAll<HTMLElement>('[data-nrec]').forEach((el) => el.addEventListener('click', () => { g.reclaimNeutral(Number(el.dataset.nrec)); rerender(); }));
+    this.modal.querySelectorAll<HTMLElement>('[data-tome]').forEach((el) => el.addEventListener('click', () => { g.buyTome(Number(el.dataset.tome)); rerender(); }));
+    this.modal.querySelectorAll<HTMLElement>('[data-respec]').forEach((el) => el.addEventListener('click', () => { g.respec(Number(el.dataset.respec)); rerender(); }));
+    this.modal.querySelector<HTMLElement>('[data-heal]')?.addEventListener('click', () => { g.healParty(); rerender(); });
+    this.modal.querySelector<HTMLElement>('[data-buyback]')?.addEventListener('click', () => { g.buyback(downIdx >= 0 ? downIdx : undefined); rerender(); });
   }
 
   // --- live gym overlay (§3.5): round score + both teams' Captain Call charges ---

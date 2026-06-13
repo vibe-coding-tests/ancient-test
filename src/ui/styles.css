@@ -476,6 +476,23 @@ button:disabled { opacity: 0.45; cursor: default; }
 .prefight .pf-foot { display: flex; gap: 10px; justify-content: center; margin-top: 16px; }
 .btn.big { padding: 8px 22px; font-size: 14px; }
 
+/* ---------- town services (boss reruns, Tinker's Bench, gold sinks) ---------- */
+
+.services { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 22px; }
+.services section:first-child { grid-column: 1 / -1; }
+.services h3 { margin: 0 0 8px; display: flex; justify-content: space-between; align-items: baseline; }
+.services .svc-sub { margin: 10px 0 4px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #8aa0c0; }
+.svc-row {
+  display: flex; gap: 10px; align-items: center; justify-content: space-between;
+  padding: 7px 10px; border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px; background: rgba(255, 255, 255, 0.03); margin-bottom: 6px;
+}
+.svc-row .svc-main { flex: 1; min-width: 0; }
+.svc-row .svc-main .rr-sub { color: #8aa0c0; font-size: 11px; }
+.svc-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.btn.tier-nightmare { border-color: #b06bd6; color: #e3b8ff; }
+.btn.tier-hell { border-color: #d6533f; color: #ff9f86; }
+
 /* ---------- modals ---------- */
 
 #modal-root {
