@@ -1,0 +1,65 @@
+import type { HeroDef, TalentDef } from './types';
+
+// ------------------------------------------------------------------
+// Talents & facets are data (SPEC §5): stat mods merge into the
+// unit's externalMods; ability-field overrides patch a deep-copied
+// hero def before the unit is spawned.
+// ------------------------------------------------------------------
+
+export interface HeroBuild {
+  def: HeroDef;
+  externalMods: Record<string, number>;
+}
+
+function applyOverride(def: HeroDef, ov: { abilityId: string; valueKey: string; mode: 'add' | 'mul' | 'set'; amount: number }): void {
+  const ab = def.abilities.find((a) => a.id === ov.abilityId);
+  if (!ab || !ab.values || !ab.values[ov.valueKey]) return;
+  ab.values[ov.valueKey] = ab.values[ov.valueKey].map((v) => {
+    switch (ov.mode) {
+      case 'add': return v + ov.amount;
+      case 'mul': return v * ov.amount;
+      case 'set': return ov.amount;
+    }
+  });
+}
+
+function applyCooldownAdd(def: HeroDef, ca: { abilityId: string; amount: number }): void {
+  const ab = def.abilities.find((a) => a.id === ca.abilityId);
+  if (!ab || !ab.cooldown) return;
+  ab.cooldown = ab.cooldown.map((c) => Math.max(0.5, c + ca.amount));
+}
+
+/**
+ * Produce a patched hero def + stat mods for a given talent/facet selection.
+ * picks[i] selects option 0/1 of talent tier i (null = unpicked).
+ */
+export function buildHero(base: HeroDef, picks: (0 | 1 | null)[] = [null, null, null, null], facetIdx = 0): HeroBuild {
+  const def: HeroDef = structuredClone(base);
+  const externalMods: Record<string, number> = {};
+  const addMods = (mods?: Record<string, number>) => {
+    if (!mods) return;
+    for (const k in mods) externalMods[k] = (externalMods[k] ?? 0) + mods[k];
+  };
+
+  base.talents.forEach((tier, i) => {
+    const pick = picks[i];
+    if (pick === null || pick === undefined) return;
+    const t: TalentDef = tier.options[pick];
+    addMods(t.mods as Record<string, number> | undefined);
+    if (t.abilityOverride) applyOverride(def, t.abilityOverride);
+    if (t.cooldownAdd) applyCooldownAdd(def, t.cooldownAdd);
+  });
+
+  const facet = base.facets[facetIdx] ?? base.facets[0];
+  if (facet) {
+    addMods(facet.mods as Record<string, number> | undefined);
+    if (facet.abilityValueOverride) applyOverride(def, facet.abilityValueOverride);
+  }
+
+  return { def, externalMods };
+}
+
+/** Default talent auto-pick for AI-controlled heroes: option 0 at every unlocked tier. */
+export function autoPicksForLevel(level: number): (0 | 1 | null)[] {
+  return [level >= 10 ? 0 : null, level >= 15 ? 0 : null, level >= 20 ? 0 : null, level >= 25 ? 0 : null];
+}
