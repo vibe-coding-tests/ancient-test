@@ -1,5 +1,5 @@
 import { TUNING } from '../data/tuning';
-import { dist, v2 } from './math2d';
+import { dist, dist2, v2 } from './math2d';
 import { attackImpact } from './combat';
 import { execEffects, type EffectCtx } from './effects';
 import { REG } from './registry';
@@ -69,7 +69,8 @@ export function updateUnitActions(sim: Sim, u: Unit, dt: number): void {
       sim.interruptCapture(u, 'target-lost');
       return;
     }
-    if (dist(u.pos, target.pos) > TUNING.captureRange + 80) {
+    const captureBreakRange = TUNING.captureRange + 80;
+    if (dist2(u.pos, target.pos) > captureBreakRange * captureBreakRange) {
       sim.interruptCapture(u, 'out-of-range');
       return;
     }
@@ -156,7 +157,7 @@ export function updateUnitActions(sim: Sim, u: Unit, dt: number): void {
         u.order = { kind: 'stop' };
         break;
       }
-      if (dist(u.pos, target.pos) > 180) steerToward(sim, u, target.pos, dt, 150);
+      if (dist2(u.pos, target.pos) > 180 * 180) steerToward(sim, u, target.pos, dt, 150);
       break;
     }
     case 'cast': {
@@ -188,24 +189,17 @@ function autoAcquire(sim: Sim, u: Unit, dt: number, holdPosition: boolean): void
 }
 
 export function nearestEnemy(sim: Sim, u: Unit, radius: number): Unit | null {
-  let best: Unit | null = null;
-  let bestD = radius;
-  for (const o of sim.unitsArr) {
-    if (!o.alive || o.team === u.team || o.kind === 'npc') continue;
-    if (o.summary.untargetable || !o.isVisibleTo(u.team, sim.time)) continue;
-    const d = dist(o.pos, u.pos);
-    if (d < bestD) {
-      bestD = d;
-      best = o;
-    }
-  }
-  return best;
+  return sim.nearestUnit(
+    u.pos,
+    radius,
+    (o) => o.alive && o.team !== u.team && o.kind !== 'npc' && !o.summary.untargetable && o.isVisibleTo(u.team, sim.time)
+  );
 }
 
 function pursueAndAttack(sim: Sim, u: Unit, target: Unit, dt: number): void {
   const range = u.stats.attackRange + u.radius + target.radius;
-  const d = dist(u.pos, target.pos);
-  if (d > range + TUNING.meleeRangeBuffer) {
+  const attackMoveRange = range + TUNING.meleeRangeBuffer;
+  if (dist2(u.pos, target.pos) > attackMoveRange * attackMoveRange) {
     if (u.windupUntil > 0) u.windupUntil = -1;
     if (cannotMove(u.summary)) return;
     steerToward(sim, u, target.pos, dt, range * 0.85);
@@ -224,7 +218,8 @@ function attackIfInRange(sim: Sim, u: Unit, target: Unit, dt: number): void {
     if (now >= u.windupUntil) {
       u.windupUntil = -1;
       const wt = sim.unit(u.windupTargetUid);
-      if (wt && wt.alive && dist(u.pos, wt.pos) <= range + 180) {
+      const windupRange = range + 180;
+      if (wt && wt.alive && dist2(u.pos, wt.pos) <= windupRange * windupRange) {
         launchAttack(sim, u, wt);
         u.nextAttackReadyAt = now + Math.max(0.1, u.stats.attackInterval - u.stats.attackPoint);
       }
@@ -232,7 +227,8 @@ function attackIfInRange(sim: Sim, u: Unit, target: Unit, dt: number): void {
     return;
   }
 
-  if (dist(u.pos, target.pos) > range + TUNING.meleeRangeBuffer) return;
+  const attackMoveRange = range + TUNING.meleeRangeBuffer;
+  if (dist2(u.pos, target.pos) > attackMoveRange * attackMoveRange) return;
   if (!faced || cannotAttack(u.summary) || now < u.nextAttackReadyAt) return;
 
   // begin windup
@@ -477,7 +473,7 @@ function handleCaptureOrder(sim: Sim, u: Unit, dt: number): void {
     u.order = { kind: 'stop' };
     return;
   }
-  if (dist(u.pos, target.pos) > TUNING.captureRange) {
+  if (dist2(u.pos, target.pos) > TUNING.captureRange * TUNING.captureRange) {
     steerToward(sim, u, target.pos, dt, TUNING.captureRange * 0.9);
     return;
   }

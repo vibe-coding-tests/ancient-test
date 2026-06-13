@@ -1409,9 +1409,14 @@ export class Game {
 
     // fixed-step sim
     this.accumulator += dt;
-    while (this.accumulator >= this.sim.dt) {
+    let simTicks = 0;
+    while (this.accumulator >= this.sim.dt && simTicks < TUNING.maxSimTicksPerFrame) {
       this.sim.tick();
       this.accumulator -= this.sim.dt;
+      simTicks++;
+    }
+    if (simTicks >= TUNING.maxSimTicksPerFrame && this.accumulator >= this.sim.dt) {
+      this.accumulator = 0;
     }
 
     // participation tracking for the active hero

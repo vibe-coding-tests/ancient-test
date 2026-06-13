@@ -121,7 +121,7 @@ Raids are **5v1 teamfights against a giant boss** (plus adds). The full party is
   - **The Lord of Terror** (Diablo), in a hell-rift beneath the Vile Reaches: fear status, spreading fire zones, bone-prison walls, Fallen-style add packs. Anchors Heart of Tarrasque.
   - **The Lich King** (Warcraft), on Icewrack's glacier summit: a remorseless-winter aura zone, Defile (a ground AoE that grows if fed), slain adds raised as undead, heavy frost cleaves. Anchors Eye of Skadi. A loving nod — this game's genre was born as a Warcraft 3 mod.
   - **The Queen of Blades** (StarCraft), in a fallen-star crater in the Devarshi Desert: continuous swarm add waves, creeping infestation ground that spreads if left unattended, burrow ambushes, psionic-storm telegraphs. Anchors Refresher Orb.
-  Cameos are mechanical homages with entirely original written content — the same rule as Valve content, extended to Blizzard.
+  Cameos are mechanical homages with original written content — same approach as the Valve material, extended to Blizzard.
 
 ## 5. ROSTER & ITEMS (data authoring)
 

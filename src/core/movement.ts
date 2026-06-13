@@ -1,5 +1,5 @@
 import { TUNING } from '../data/tuning';
-import { angleDelta, clamp, closestOnSeg, dist, fromAngle, norm, pointSegDist, sub, turnToward, v2 } from './math2d';
+import { angleDelta, clamp, closestOnSeg, dist, dist2, fromAngle, norm, pointSegDist, sub, turnToward, v2 } from './math2d';
 import { cannotMove } from './status';
 import type { Unit } from './unit';
 import type { Vec2 } from './types';
@@ -21,16 +21,19 @@ export function steerToward(sim: Sim, u: Unit, point: Vec2, dt: number, arriveRa
   const probe = Math.min(d, u.radius + 90);
   const ahead = v2(u.pos.x + Math.cos(u.facing) * probe, u.pos.y + Math.sin(u.facing) * probe);
   let blocker: { pos: Vec2; radius: number } | null = null;
-  for (const o of sim.unitsArr) {
-    if (o === u || !o.alive || o.summary.cycloned) continue;
-    if (dist(o.pos, ahead) < o.radius + u.radius + 6 && dist(o.pos, u.pos) < probe + o.radius + u.radius) {
+  sim.forEachNearbyUnit(ahead, probe + u.radius + 80, (o) => {
+    if (blocker) return;
+    if (o === u || !o.alive || o.summary.cycloned) return;
+    const aheadR = o.radius + u.radius + 6;
+    const unitR = probe + o.radius + u.radius;
+    if (dist2(o.pos, ahead) < aheadR * aheadR && dist2(o.pos, u.pos) < unitR * unitR) {
       blocker = o;
-      break;
     }
-  }
+  });
   if (!blocker) {
     for (const o of sim.obstacles) {
-      if (dist(o.pos, ahead) < o.radius + u.radius + 6) {
+      const r = o.radius + u.radius + 6;
+      if (dist2(o.pos, ahead) < r * r) {
         blocker = o;
         break;
       }
@@ -66,26 +69,28 @@ export function faceToward(u: Unit, point: Vec2, dt: number): boolean {
 export function resolveCollisions(sim: Sim, u: Unit, ignoreUnits = false): void {
   for (let pass = 0; pass < 2; pass++) {
     if (!ignoreUnits) {
-      for (const o of sim.unitsArr) {
-        if (o === u || !o.alive || o.summary.cycloned) continue;
+      sim.forEachNearbyUnit(u.pos, u.radius + 96, (o) => {
+        if (o === u || !o.alive || o.summary.cycloned) return;
         const minD = o.radius + u.radius;
-        const d = dist(o.pos, u.pos);
-        if (d < minD && d > 1e-4) {
+        const d2 = dist2(o.pos, u.pos);
+        if (d2 < minD * minD && d2 > 1e-8) {
+          const d = Math.sqrt(d2);
           const push = (minD - d) * TUNING.separationStrength * 0.5;
           const n = norm(sub(u.pos, o.pos));
           u.pos.x += n.x * push;
           u.pos.y += n.y * push;
-        } else if (d <= 1e-4) {
+        } else if (d2 <= 1e-8) {
           // perfectly stacked: deterministic nudge by uid
           u.pos.x += (u.uid % 2 === 0 ? 1 : -1) * 2;
           u.pos.y += (u.uid % 3 === 0 ? 1 : -1) * 2;
         }
-      }
+      });
     }
     for (const o of sim.obstacles) {
       const minD = o.radius + u.radius;
-      const d = dist(o.pos, u.pos);
-      if (d < minD && d > 1e-4) {
+      const d2 = dist2(o.pos, u.pos);
+      if (d2 < minD * minD && d2 > 1e-8) {
+        const d = Math.sqrt(d2);
         const n = norm(sub(u.pos, o.pos));
         u.pos.x += n.x * (minD - d);
         u.pos.y += n.y * (minD - d);

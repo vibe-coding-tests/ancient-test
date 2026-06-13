@@ -124,7 +124,7 @@ export class VfxManager {
   }
 
   /** Track in-flight projectile positions from the sim each frame. */
-  syncProjectiles(list: { pid: number; pos: { x: number; y: number } }[]): void {
+  syncProjectiles(list: Iterable<{ pid: number; pos: { x: number; y: number } }>): void {
     const seen = new Set<number>();
     for (const p of list) {
       seen.add(p.pid);

@@ -1,8 +1,9 @@
 import { TUNING } from '../data/tuning';
-import { angleOf, dist, norm, sub, v2 } from './math2d';
+import { angleOf, dist, dist2, norm, sub, v2 } from './math2d';
 import { EventBus } from './events';
 import { Rng } from './rng';
 import { REG } from './registry';
+import { SpatialGrid } from './spatial';
 import { applyDamage, attackImpact } from './combat';
 import { applyStatus, execEffects, type EffectCtx } from './effects';
 import { abilityCtx, breakInvis, fireCast, updateUnitActions } from './actions';
@@ -112,6 +113,8 @@ export class Sim {
   zones: Zone[] = [];
   repeaters: Repeater[] = [];
   resonanceEnabled = false;
+  private spatial = new SpatialGrid(256);
+  private spatialDirty = true;
 
   /** uid of the unit the player is directly controlling (last-hit bonus) */
   playerActiveUid = -1;
@@ -136,6 +139,7 @@ export class Sim {
     u.uid = this.uidSeq++;
     this.unitsArr.push(u);
     this.byUid.set(u.uid, u);
+    this.spatialDirty = true;
     return u;
   }
 
@@ -143,15 +147,37 @@ export class Sim {
     const idx = this.unitsArr.findIndex((u) => u.uid === uid);
     if (idx >= 0) this.unitsArr.splice(idx, 1);
     this.byUid.delete(uid);
+    this.spatialDirty = true;
   }
 
   unitsInRadius(center: Vec2, radius: number, pred: (u: Unit) => boolean): Unit[] {
     const out: Unit[] = [];
-    for (const u of this.unitsArr) {
-      if (!u.alive || u.kind === 'npc') continue;
-      if (dist(u.pos, center) <= radius + u.radius * 0.5 && pred(u)) out.push(u);
-    }
+    this.forEachNearbyUnit(center, radius + 64, (u) => {
+      if (!u.alive || u.kind === 'npc') return;
+      const r = radius + u.radius * 0.5;
+      if (dist2(u.pos, center) <= r * r && pred(u)) out.push(u);
+    });
+    out.sort((a, b) => a.uid - b.uid);
     return out;
+  }
+
+  forEachNearbyUnit(center: Vec2, radius: number, fn: (u: Unit) => void): void {
+    this.ensureSpatial();
+    this.spatial.forEachRadius(center, radius, fn);
+  }
+
+  nearestUnit(center: Vec2, radius: number, pred: (u: Unit) => boolean): Unit | null {
+    this.ensureSpatial();
+    return this.spatial.nearest(center, radius, pred);
+  }
+
+  rebuildSpatial(): void {
+    this.spatial.rebuild(this.unitsArr);
+    this.spatialDirty = false;
+  }
+
+  private ensureSpatial(): void {
+    if (this.spatialDirty) this.rebuildSpatial();
   }
 
   // ---------- spawning ----------
@@ -295,7 +321,7 @@ export class Sim {
         for (const trig of def.triggers) {
           if (trig.on !== 'on-nearby-enemy-cast') continue;
           const radius = typeof trig.radius === 'number' ? trig.radius : 1200;
-          if (dist(u.pos, caster.pos) > radius) continue;
+          if (dist2(u.pos, caster.pos) > radius * radius) continue;
           if (trig.chargeGain && def.maxCharges) {
             it.charges = Math.min(def.maxCharges, Math.max(0, it.charges) + trig.chargeGain);
           }
@@ -454,11 +480,13 @@ export class Sim {
         // first unit hit along the swept segment
         let hit: Unit | null = null;
         let hitD = Infinity;
-        for (const u of this.unitsArr) {
-          if (!u.alive || u.uid === p.casterUid || u.kind === 'npc') continue;
-          if (!p.hitsAllies && u.team === p.team) continue;
-          if (u.summary.untargetable || u.summary.invulnerable) continue;
-          if (p.hitUids.includes(u.uid)) continue;
+        const mid = v2((from.x + p.pos.x) / 2, (from.y + p.pos.y) / 2);
+        const broadRadius = dist(from, p.pos) / 2 + p.width / 2 + 72;
+        this.forEachNearbyUnit(mid, broadRadius, (u) => {
+          if (!u.alive || u.uid === p.casterUid || u.kind === 'npc') return;
+          if (!p.hitsAllies && u.team === p.team) return;
+          if (u.summary.untargetable || u.summary.invulnerable) return;
+          if (p.hitUids.includes(u.uid)) return;
           const segD = segPointDist(from, p.pos, u.pos);
           if (segD <= p.width / 2 + u.radius) {
             const along = dist(from, u.pos);
@@ -467,17 +495,23 @@ export class Sim {
               hit = u;
             }
           }
-        }
+        });
         if (hit) {
-          p.pos = { ...hit.pos };
-          this.projectileImpact(p, hit, caster);
+          const impactTarget = hit as Unit;
+          p.pos = { ...impactTarget.pos };
+          this.projectileImpact(p, impactTarget, caster);
         } else if (p.travelled >= p.range) {
           p.dead = true;
           this.events.emit({ t: 'projectile-expire', pid: p.pid, pos: { ...p.pos } });
         }
       }
     }
-    this.projectiles = this.projectiles.filter((p) => !p.dead);
+    let write = 0;
+    for (let read = 0; read < this.projectiles.length; read++) {
+      const p = this.projectiles[read];
+      if (!p.dead) this.projectiles[write++] = p;
+    }
+    this.projectiles.length = write;
   }
 
   private projectileImpact(p: Projectile, target: Unit, caster: Unit | undefined): void {
@@ -502,13 +536,13 @@ export class Sim {
     // bounces (Chain Frost)
     if (p.bouncesLeft > 0) {
       let next: Unit | null = null;
-      let bestD = p.bounceRadius;
+      let bestD2 = p.bounceRadius * p.bounceRadius;
       for (const u of this.unitsArr) {
         if (!u.alive || u.team === p.team || u.kind === 'npc') continue;
         if (u.uid === target.uid || u.summary.untargetable) continue;
-        const d = dist(u.pos, target.pos);
-        if (d < bestD) {
-          bestD = d;
+        const d2 = dist2(u.pos, target.pos);
+        if (d2 < bestD2) {
+          bestD2 = d2;
           next = u;
         }
       }
@@ -590,9 +624,22 @@ export class Sim {
 
   private zoneContains(z: Zone, u: Unit): boolean {
     if (z.shape === 'circle') {
-      return z.pos !== undefined && dist(u.pos, z.pos) <= (z.radius ?? 0) + u.radius * 0.5;
+      if (!z.pos) return false;
+      const r = (z.radius ?? 0) + u.radius * 0.5;
+      return dist2(u.pos, z.pos) <= r * r;
     }
     return z.a !== undefined && z.b !== undefined && segPointDist(z.a, z.b, u.pos) <= z.width / 2 + u.radius * 0.5;
+  }
+
+  private forEachZoneCandidate(z: Zone, fn: (u: Unit) => void): void {
+    if (z.shape === 'circle' && z.pos) {
+      this.forEachNearbyUnit(z.pos, (z.radius ?? 0) + 72, fn);
+      return;
+    }
+    if (z.shape === 'line' && z.a && z.b) {
+      const mid = v2((z.a.x + z.b.x) / 2, (z.a.y + z.b.y) / 2);
+      this.forEachNearbyUnit(mid, dist(z.a, z.b) / 2 + z.width / 2 + 72, fn);
+    }
   }
 
   private updateZones(): void {
@@ -617,52 +664,60 @@ export class Sim {
         const window = z.onEnter.windowSec;
         const inWindow = window === undefined || this.time <= z.createdAt + window;
         if (inWindow) {
-          for (const u of this.unitsArr) {
-            if (!u.alive || u.kind === 'npc') continue;
-            if (!affectsMatch(u, z.onEnter.affects)) continue;
-            if (!this.zoneContains(z, u)) continue;
-            if (z.entered.includes(u.uid)) continue;
+          this.forEachZoneCandidate(z, (u) => {
+            if (!u.alive || u.kind === 'npc') return;
+            if (!affectsMatch(u, z.onEnter!.affects)) return;
+            if (!this.zoneContains(z, u)) return;
+            if (z.entered.includes(u.uid)) return;
             z.entered.push(u.uid);
-            execEffects(this, caster, z.ctx, z.onEnter.effects, { target: u, point: { ...u.pos } });
-          }
+            execEffects(this, caster, z.ctx, z.onEnter!.effects, { target: u, point: { ...u.pos } });
+          });
         }
       }
 
       // periodic tick
       if (z.tickEffects && z.tickInterval && caster) {
         while (z.nextTickAt <= this.time && this.time < z.until + 1e-9) {
-          for (const u of this.unitsArr) {
-            if (!u.alive || u.kind === 'npc') continue;
-            if (!affectsMatch(u, z.tickAffects ?? 'enemies')) continue;
-            if (!this.zoneContains(z, u)) continue;
-            execEffects(this, caster, z.ctx, z.tickEffects, { target: u, point: { ...u.pos } });
-          }
+          this.forEachZoneCandidate(z, (u) => {
+            if (!u.alive || u.kind === 'npc') return;
+            if (!affectsMatch(u, z.tickAffects ?? 'enemies')) return;
+            if (!this.zoneContains(z, u)) return;
+            execEffects(this, caster, z.ctx, z.tickEffects!, { target: u, point: { ...u.pos } });
+          });
           z.nextTickAt += z.tickInterval;
         }
       }
 
       // aura mods (applied as short statuses, refreshed below in aura pass)
       if (z.auraMods) {
-        for (const u of this.unitsArr) {
-          if (!u.alive || u.kind === 'npc') continue;
-          if (!affectsMatch(u, z.auraMods.affects)) continue;
-          if (!this.zoneContains(z, u)) continue;
+        const auraMods = z.auraMods;
+        this.forEachZoneCandidate(z, (u) => {
+          if (!u.alive || u.kind === 'npc') return;
+          if (!affectsMatch(u, auraMods.affects)) return;
+          if (!this.zoneContains(z, u)) return;
           const inst = {
             status: 'buff' as StatusId,
             tag: `zone:${z.zid}`,
             sourceUid: z.casterUid,
             sourceTeam: z.team,
             until: this.time + 0.6,
-            isDebuff: z.auraMods.affects === 'enemies',
-            mods: z.auraMods.mods
+            isDebuff: auraMods.affects === 'enemies',
+            mods: auraMods.mods
           };
           u.addStatus(inst, true);
-        }
+        });
       }
     }
-    const expired = this.zones.filter((z) => this.time >= z.until);
-    for (const z of expired) this.events.emit({ t: 'zone-expire', zid: z.zid });
-    this.zones = this.zones.filter((z) => this.time < z.until);
+    let write = 0;
+    for (let read = 0; read < this.zones.length; read++) {
+      const z = this.zones[read];
+      if (this.time >= z.until) {
+        this.events.emit({ t: 'zone-expire', zid: z.zid });
+      } else {
+        this.zones[write++] = z;
+      }
+    }
+    this.zones.length = write;
   }
 
   // ---------- repeaters (Omnislash / Chain Frost-style sequences) ----------
@@ -694,7 +749,12 @@ export class Sim {
         r.nextAt += r.interval;
       }
     }
-    this.repeaters = this.repeaters.filter((r) => r.remaining > 0);
+    let write = 0;
+    for (let read = 0; read < this.repeaters.length; read++) {
+      const r = this.repeaters[read];
+      if (r.remaining > 0) this.repeaters[write++] = r;
+    }
+    this.repeaters.length = write;
   }
 
   // ---------- statuses / auras / regen ----------
@@ -776,13 +836,13 @@ export class Sim {
     excludeSelf?: boolean
   ): void {
     const r = radius === 'global' ? Number.MAX_SAFE_INTEGER / 2 : radius;
-    for (const u of this.unitsArr) {
-      if (!u.alive || u.kind === 'npc') continue;
-      if (excludeSelf && u === source) continue;
+    const applyTo = (u: Unit): void => {
+      if (!u.alive || u.kind === 'npc') return;
+      if (excludeSelf && u === source) return;
       const isAlly = u.team === source.team;
-      if (affects === 'allies' && !isAlly) continue;
-      if (affects === 'enemies' && isAlly) continue;
-      if (radius !== 'global' && dist(u.pos, source.pos) > r) continue;
+      if (affects === 'allies' && !isAlly) return;
+      if (affects === 'enemies' && isAlly) return;
+      if (radius !== 'global' && dist2(u.pos, source.pos) > r * r) return;
       u.addStatus(
         {
           status: 'buff',
@@ -795,6 +855,11 @@ export class Sim {
         },
         true
       );
+    };
+    if (radius === 'global') {
+      for (const u of this.unitsArr) applyTo(u);
+    } else {
+      this.forEachNearbyUnit(source.pos, r + 64, applyTo);
     }
   }
 
@@ -809,8 +874,10 @@ export class Sim {
       }
     }
     // sweep corpses
-    const toRemove = this.unitsArr.filter((u) => !u.alive && u.removeAt > 0 && this.time >= u.removeAt);
-    for (const u of toRemove) this.removeUnit(u.uid);
+    for (let i = this.unitsArr.length - 1; i >= 0; i--) {
+      const u = this.unitsArr[i];
+      if (!u.alive && u.removeAt > 0 && this.time >= u.removeAt) this.removeUnit(u.uid);
+    }
   }
 
   // ---------- death ----------
@@ -852,7 +919,7 @@ export class Sim {
         for (const trig of a.def.triggers) {
           if (trig.on !== 'on-nearby-death') continue;
           const radius = typeof trig.radius === 'number' ? trig.radius : 450;
-          if (dist(u.pos, victim.pos) <= radius) {
+          if (dist2(u.pos, victim.pos) <= radius * radius) {
             this.runTriggers(u, 'on-nearby-death', { other: victim });
           }
         }
@@ -870,6 +937,7 @@ export class Sim {
       u.prevPos.x = u.pos.x;
       u.prevPos.y = u.pos.y;
     }
+    this.rebuildSpatial();
 
     this.updateStatuses();
     for (const u of this.unitsArr) {
@@ -889,6 +957,7 @@ export class Sim {
 
     for (const u of this.unitsArr) thinkUnit(this, u);
     for (const u of this.unitsArr) updateUnitActions(this, u, this.dt);
+    this.rebuildSpatial();
 
     this.updateProjectiles();
     this.updateZones();

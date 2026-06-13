@@ -9,6 +9,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:perf": "vitest run src/test/perf-budget.test.ts",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
   },

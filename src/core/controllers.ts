@@ -1,5 +1,5 @@
 import { TUNING } from '../data/tuning';
-import { dist, v2 } from './math2d';
+import { dist, dist2, v2 } from './math2d';
 import { nearestEnemy } from './actions';
 import { REG } from './registry';
 import type { Unit } from './unit';
@@ -44,9 +44,9 @@ function thinkCreep(sim: Sim, u: Unit): void {
     if (enemy) {
       maybeCastBasicAbility(sim, u, enemy);
       if (u.order.kind !== 'cast') u.order = { kind: 'attack-unit', uid: enemy.uid };
-    } else if (dist(u.pos, owner.pos) > TUNING.entourageFollowStart) {
+    } else if (dist2(u.pos, owner.pos) > TUNING.entourageFollowStart * TUNING.entourageFollowStart) {
       u.order = { kind: 'follow', uid: owner.uid };
-    } else if (u.order.kind === 'follow' && dist(u.pos, owner.pos) <= TUNING.entourageFollowStop) {
+    } else if (u.order.kind === 'follow' && dist2(u.pos, owner.pos) <= TUNING.entourageFollowStop * TUNING.entourageFollowStop) {
       u.order = { kind: 'stop' };
     }
     return;
@@ -93,18 +93,11 @@ function thinkCreep(sim: Sim, u: Unit): void {
 }
 
 function nearestEnemyOf(sim: Sim, u: Unit, around: Vec2, radius: number): Unit | null {
-  let best: Unit | null = null;
-  let bestD = radius;
-  for (const o of sim.unitsArr) {
-    if (!o.alive || o.team === u.team || o.kind === 'npc') continue;
-    if (o.summary.untargetable || !o.isVisibleTo(u.team, sim.time)) continue;
-    const d = dist(o.pos, around);
-    if (d < bestD) {
-      bestD = d;
-      best = o;
-    }
-  }
-  return best;
+  return sim.nearestUnit(
+    around,
+    radius,
+    (o) => o.alive && o.team !== u.team && o.kind !== 'npc' && !o.summary.untargetable && o.isVisibleTo(u.team, sim.time)
+  );
 }
 
 function maybeCastBasicAbility(sim: Sim, u: Unit, enemy: Unit): void {
@@ -119,20 +112,26 @@ function maybeCastBasicAbility(sim: Sim, u: Unit, enemy: Unit): void {
       return;
     }
     const range = typeof a.def.castRange === 'number' ? a.def.castRange : 500;
-    if (dist(u.pos, enemy.pos) > range * 1.1) continue;
+    const castRange = range * 1.1;
+    if (dist2(u.pos, enemy.pos) > castRange * castRange) continue;
     if (t === 'unit-target') {
       const affects = a.def.affects ?? 'enemy';
       if (affects === 'ally') {
         // heal-type: lowest hp ally nearby
-        let best: Unit | null = null;
-        for (const o of sim.unitsArr) {
-          if (!o.alive || o.team !== u.team) continue;
-          if (dist(o.pos, u.pos) > range) continue;
-          if (o.hp / o.stats.maxHp >= 0.8) continue;
-          if (!best || o.hp / o.stats.maxHp < best.hp / best.stats.maxHp) best = o;
-        }
-        if (best) {
-          u.order = { kind: 'cast', slot, uid: best.uid };
+        let bestUid = -1;
+        let bestHpPct = Infinity;
+        sim.forEachNearbyUnit(u.pos, range + 64, (o) => {
+          if (!o.alive || o.team !== u.team) return;
+          if (dist2(o.pos, u.pos) > range * range) return;
+          const hpPct = o.hp / o.stats.maxHp;
+          if (hpPct >= 0.8) return;
+          if (hpPct < bestHpPct) {
+            bestHpPct = hpPct;
+            bestUid = o.uid;
+          }
+        });
+        if (bestUid >= 0) {
+          u.order = { kind: 'cast', slot, uid: bestUid };
           return;
         }
         continue;
@@ -181,7 +180,7 @@ function pickThreatTarget(sim: Sim, u: Unit): Unit | null {
       continue;
     }
     const threat = table[uid];
-    if (threat > bestThreat || (threat === bestThreat && best && dist(target.pos, u.pos) < dist(best.pos, u.pos))) {
+    if (threat > bestThreat || (threat === bestThreat && best && dist2(target.pos, u.pos) < dist2(best.pos, u.pos))) {
       bestThreat = threat;
       best = target;
     }
@@ -262,9 +261,9 @@ function evalCondition(sim: Sim, u: Unit, cond: GambitCondition, focus: Unit | u
     case 'fight-time-gt':
       return sim.time > cond.sec;
     case 'distance-to-focus-gt':
-      return focus ? dist(u.pos, focus.pos) > cond.dist : false;
+      return focus ? dist2(u.pos, focus.pos) > cond.dist * cond.dist : false;
     case 'distance-to-focus-lt':
-      return focus ? dist(u.pos, focus.pos) < cond.dist : false;
+      return focus ? dist2(u.pos, focus.pos) < cond.dist * cond.dist : false;
   }
 }
 
@@ -350,7 +349,7 @@ function applyAction(sim: Sim, u: Unit, action: GambitAction, focus: Unit | unde
     }
     case 'retreat': {
       const home = u.ctrl.homePos ?? u.pos;
-      if (dist(u.pos, home) < 100) return false;
+      if (dist2(u.pos, home) < 100 * 100) return false;
       u.order = { kind: 'move', point: { ...home } };
       return true;
     }

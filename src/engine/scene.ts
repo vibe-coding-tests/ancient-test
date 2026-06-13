@@ -139,7 +139,7 @@ export class GameScene {
   update(sim: Sim, followUnit: Unit | null, renderDt: number, timeOfDay01: number): void {
     this.time += renderDt;
     this.syncUnits(sim, renderDt);
-    this.vfx.syncProjectiles(sim.projectiles.map((p) => ({ pid: p.pid, pos: p.pos })));
+    this.vfx.syncProjectiles(sim.projectiles);
     this.vfx.syncZoneFollow((uid) => {
       const u = sim.unit(uid);
       return u ? { x: u.pos.x, y: u.pos.y, h: 0 } : null;

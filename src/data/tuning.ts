@@ -6,6 +6,7 @@ export const TUNING = {
   // --- simulation ---
   tickRate: 30,
   dt: 1 / 30,
+  maxSimTicksPerFrame: 5,
 
   // --- global scales (Dota numbers are the baseline) ---
   rangeScale: 1.0,

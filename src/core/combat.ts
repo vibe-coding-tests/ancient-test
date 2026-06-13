@@ -1,5 +1,5 @@
 import { TUNING } from '../data/tuning';
-import { dist } from './math2d';
+import { dist2 } from './math2d';
 import { REG } from './registry';
 import { elementForItemHit, isActiveElement, reactionFor, type ActiveElement } from './resonance';
 import { armorMultiplier } from './stats';
@@ -242,13 +242,13 @@ export function attackImpact(sim: Sim, attacker: Unit, victim: Unit): void {
   // cleave rewards stacking enemies (Battlefury / Sven identity, SPEC §5/§6)
   if (cleavePct > 0 && cleaveRadius > 0) {
     const cleaveDmg = baseDamage * (cleavePct / 100);
-    for (const o of sim.unitsArr) {
-      if (!o.alive || o === victim || o.team === attacker.team) continue;
-      if (o.summary.untargetable) continue;
-      if (dist(o.pos, victim.pos) <= cleaveRadius) {
+    sim.forEachNearbyUnit(victim.pos, cleaveRadius + 64, (o) => {
+      if (!o.alive || o === victim || o.team === attacker.team) return;
+      if (o.summary.untargetable) return;
+      if (dist2(o.pos, victim.pos) <= cleaveRadius * cleaveRadius) {
         applyDamage(sim, attacker, o, cleaveDmg, 'physical', { fromAttack: false, ignoreArmor: true });
       }
-    }
+    });
   }
 
   // consume one-shot attack buffs (Enchant Totem)
