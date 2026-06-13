@@ -289,6 +289,17 @@ export interface AnimProfile {
   voiceTimbre: string;
 }
 
+// ---------- Audio channels (Phase 4 §3.7, save v4) ----------
+export interface AudioSettings {
+  master: number;
+  sfx: number;
+  voice: number;
+  stinger: number;
+  muted: boolean;
+}
+
+export type StingerId = 'capture' | 'merge' | 'levelup' | 'badge' | 'raid-clear';
+
 // ---------- Abilities ----------
 export interface AbilityDef {
   id: string;
@@ -616,6 +627,15 @@ export interface TrialDef {
   regionId: string;
   pos: Vec2;
   requiredHeroIds?: string[];
+  /** Per-kind tunables consumed by the TrialRunner (radius, count, time, target). */
+  params?: Record<string, number | string>;
+  /** Trial opens only when reputation is at or above this threshold. */
+  reputationGate?: number;
+  /** Shard floor after a failed trial (relocation), instead of zero-and-lock. */
+  relocationFloor?: number;
+  /** Alternate in-region spots the marker relocates to on failure. */
+  relocateSpots?: Vec2[];
+  dialogue?: string[];
 }
 
 export interface RecruitmentQuestDef {
@@ -625,6 +645,8 @@ export interface RecruitmentQuestDef {
   findText: string;
   trialText: string;
   bindText: string;
+  /** Echo kills required before the trial marker reveals (Find gating, §3.1). */
+  findShardsNeeded?: number;
 }
 
 export type QuestStage = 'unfound' | 'found' | 'trial-complete' | 'bound';
@@ -789,7 +811,10 @@ export interface GameSave {
   heldUniques: string[];
   neutralStash: { id: string; count: number }[];
   goldSinks: { buybacks: number; tomesUsed: number; respecs: number };
-  settings: { quickcast: boolean; resonance?: boolean; masterVolume?: number; sfxVolume?: number; musicVolume?: number };
+  reputation: number;                     // karma (Phase 6 §3.2), default 0
+  codexUnlocks: string[];                 // entry ids revealed on encounter (§3.14)
+  journalSeen: string[];                  // acknowledged journal entries (§3.14)
+  settings: { quickcast: boolean; resonance?: boolean; minimap?: boolean; audio: AudioSettings };
 }
 
 // ---------- Sim interface available to effect interpreters ----------

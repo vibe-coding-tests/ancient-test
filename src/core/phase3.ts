@@ -105,6 +105,26 @@ export function respecCost(perfectedTier: boolean): number | null {
   return perfectedTier ? null : TUNING.respecCost;
 }
 
+/** Legacy v2/v3 settings shape (pre save-v4 audio channels). v4 saves carry `audio`. */
+export interface LegacySettings {
+  quickcast: boolean;
+  resonance?: boolean;
+  minimap?: boolean;
+  masterVolume?: number;
+  sfxVolume?: number;
+  musicVolume?: number;
+  audio?: { master: number; sfx: number; voice: number; stinger: number; muted: boolean };
+}
+
+/** A v3-shaped save: Phase 3 fields present, but pre-v4 settings and no karma/codex/journal. */
+export type GameSaveV3 = Omit<GameSave, 'version' | 'settings' | 'reputation' | 'codexUnlocks' | 'journalSeen'> & {
+  version: number;
+  settings: LegacySettings;
+  reputation?: number;
+  codexUnlocks?: string[];
+  journalSeen?: string[];
+};
+
 export function defaultPhase3SaveFields(): Pick<GameSave, 'difficulty' | 'inventoryStash' | 'raidProgress' | 'eliteFive' | 'factionChoices' | 'heldUniques' | 'neutralStash' | 'goldSinks'> {
   return {
     difficulty: {},
@@ -118,9 +138,10 @@ export function defaultPhase3SaveFields(): Pick<GameSave, 'difficulty' | 'invent
   };
 }
 
-export function migratePhase3Save(s: GameSave | (Omit<GameSave, 'version' | 'difficulty' | 'inventoryStash' | 'raidProgress' | 'eliteFive' | 'factionChoices' | 'heldUniques' | 'neutralStash' | 'goldSinks'> & { version: number })): GameSave {
-  const base = s as GameSave;
+export function migratePhase3Save(s: { version: number; [k: string]: unknown }): GameSaveV3 {
+  const base = s as unknown as GameSaveV3;
   const defaults = defaultPhase3SaveFields();
+  const settings = (base.settings ?? {}) as LegacySettings;
   return {
     ...base,
     version: 3,
@@ -134,11 +155,13 @@ export function migratePhase3Save(s: GameSave | (Omit<GameSave, 'version' | 'dif
     neutralStash: base.neutralStash ?? defaults.neutralStash,
     goldSinks: base.goldSinks ?? defaults.goldSinks,
     settings: {
-      quickcast: base.settings?.quickcast ?? true,
-      resonance: base.settings?.resonance ?? false,
-      masterVolume: base.settings?.masterVolume ?? 0.8,
-      sfxVolume: base.settings?.sfxVolume ?? 0.8,
-      musicVolume: base.settings?.musicVolume ?? 0.6
+      ...settings,
+      quickcast: settings.quickcast ?? true,
+      resonance: settings.resonance ?? false,
+      minimap: settings.minimap,
+      masterVolume: settings.masterVolume ?? 0.8,
+      sfxVolume: settings.sfxVolume ?? 0.8,
+      musicVolume: settings.musicVolume ?? 0.6
     }
   };
 }

@@ -6,6 +6,7 @@ import { autoPicksForLevel, buildHero } from '../core/hero-setup';
 import { freshEchoProgress, normalizeEchoProgress, recordOwnedHeroEchoKill } from '../core/echo';
 import { computeKillReward, overflowXpToGold } from '../core/progression';
 import { dayNightMods, defaultPhase3SaveFields, migratePhase3Save, scaledBounty } from '../core/phase3';
+import { defaultAudioSettings, defaultPhase4SaveFields, migratePhase4Save } from '../core/phase4';
 import { mergeCreeps, newCreepInstanceId, validateEntourage } from '../core/capture';
 import { computeBuyPlan, executeBuy, itemSaveOf, itemStateFromSave, sellValue, sortInventory } from '../core/items';
 import { resonanceMods } from '../core/resonance';
@@ -21,7 +22,7 @@ import { runGymMatch } from './macro-session';
 // camps, capture/entourage, shop, shrine, day clock, save/load.
 // ------------------------------------------------------------------
 
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 const SLOT_KEYS = ['ancients.save.1', 'ancients.save.2', 'ancients.save.3'];
 const AUTO_KEY = 'ancients.save.auto';
 
@@ -109,7 +110,8 @@ export function newGameSave(starterHeroId: string): GameSave {
     echoRespawn: {},
     campRespawn: {},
     ...phase3,
-    settings: { quickcast: true, resonance: false, masterVolume: 0.8, sfxVolume: 0.8, musicVolume: 0.6 }
+    ...defaultPhase4SaveFields(),
+    settings: { quickcast: true, resonance: false, minimap: true, audio: defaultAudioSettings() }
   };
 }
 
@@ -149,6 +151,9 @@ export class Game {
   heldUniques: string[] = [];
   neutralStash: GameSave['neutralStash'] = [];
   goldSinks: GameSave['goldSinks'] = { buybacks: 0, tomesUsed: 0, respecs: 0 };
+  reputation = 0;
+  codexUnlocks = new Set<string>();
+  journalSeen = new Set<string>();
 
   private camps = new Map<string, CampState>();
   private echoes = new Map<string, EchoState>();
@@ -194,6 +199,9 @@ export class Game {
     this.heldUniques = [...save.heldUniques];
     this.neutralStash = save.neutralStash.map((n) => ({ ...n }));
     this.goldSinks = { ...save.goldSinks };
+    this.reputation = save.reputation ?? 0;
+    this.codexUnlocks = new Set(save.codexUnlocks ?? []);
+    this.journalSeen = new Set(save.journalSeen ?? []);
 
     this.party = save.party.map((heroId) => {
       const hs = save.roster.find((r) => r.heroId === heroId)!;
@@ -242,16 +250,15 @@ export class Game {
     this.settings = {
       quickcast: save.settings.quickcast,
       resonance: save.settings.resonance ?? false,
-      masterVolume: save.settings.masterVolume ?? 0.8,
-      sfxVolume: save.settings.sfxVolume ?? 0.8,
-      musicVolume: save.settings.musicVolume ?? 0.6
+      minimap: save.settings.minimap ?? true,
+      audio: { ...defaultAudioSettings(), ...save.settings.audio }
     };
     this.sim.resonanceEnabled = this.settings.resonance ?? false;
     this.audio.setSettings(this.settings);
     this.refreshResonanceMods(true);
   }
 
-  settings: GameSave['settings'] = { quickcast: true, resonance: false, masterVolume: 0.8, sfxVolume: 0.8, musicVolume: 0.6 };
+  settings: GameSave['settings'] = { quickcast: true, resonance: false, minimap: true, audio: defaultAudioSettings() };
 
   // ---------- helpers ----------
 
@@ -1083,7 +1090,10 @@ export class Game {
       heldUniques: [...this.heldUniques],
       neutralStash: this.neutralStash.map((n) => ({ ...n })),
       goldSinks: { ...this.goldSinks },
-      settings: { ...this.settings }
+      reputation: this.reputation,
+      codexUnlocks: [...this.codexUnlocks],
+      journalSeen: [...this.journalSeen],
+      settings: { ...this.settings, audio: { ...this.settings.audio } }
     };
   }
 
@@ -1153,8 +1163,9 @@ export class Game {
   static migrateSave(s: unknown): GameSave | null {
     if (!s || typeof s !== 'object') return null;
     const v = s as Partial<GameSave>;
-    if (v.version === 2 || v.version === SAVE_VERSION) {
-      const migrated = migratePhase3Save(v as GameSave);
+    if (v.version === 2 || v.version === 3 || v.version === SAVE_VERSION) {
+      // v2/v3 -> v3 shape (phase 3 fields), then v3 -> v4 (audio channels, karma, codex/journal)
+      const migrated = migratePhase4Save(migratePhase3Save(v as unknown as { version: number; [k: string]: unknown }));
       return Game.validateSave(migrated) ? migrated : null;
     }
     return null;
@@ -1197,12 +1208,16 @@ export class Game {
     if (!Array.isArray(v.heldUniques) || !v.heldUniques.every((id) => typeof id === 'string' && REG.items.has(id))) return false;
     if (!Array.isArray(v.neutralStash) || !v.neutralStash.every((n) => REG.neutralItems.has(n.id) && typeof n.count === 'number' && n.count >= 0)) return false;
     if (!v.goldSinks || typeof v.goldSinks.buybacks !== 'number' || typeof v.goldSinks.tomesUsed !== 'number' || typeof v.goldSinks.respecs !== 'number') return false;
+    if (typeof v.reputation !== 'number') return false;
+    if (!Array.isArray(v.codexUnlocks) || !v.codexUnlocks.every((id) => typeof id === 'string')) return false;
+    if (!Array.isArray(v.journalSeen) || !v.journalSeen.every((id) => typeof id === 'string')) return false;
     if (typeof v.activeIdx !== 'number' || v.activeIdx < 0 || v.activeIdx >= v.party.length) return false;
     if (!v.settings || typeof v.settings.quickcast !== 'boolean') return false;
     if (v.settings.resonance !== undefined && typeof v.settings.resonance !== 'boolean') return false;
-    if (v.settings.masterVolume !== undefined && typeof v.settings.masterVolume !== 'number') return false;
-    if (v.settings.sfxVolume !== undefined && typeof v.settings.sfxVolume !== 'number') return false;
-    if (v.settings.musicVolume !== undefined && typeof v.settings.musicVolume !== 'number') return false;
+    if (v.settings.minimap !== undefined && typeof v.settings.minimap !== 'boolean') return false;
+    const audio = v.settings.audio;
+    if (!audio || typeof audio.master !== 'number' || typeof audio.sfx !== 'number') return false;
+    if (typeof audio.voice !== 'number' || typeof audio.stinger !== 'number' || typeof audio.muted !== 'boolean') return false;
     for (const heroId of v.party) {
       if (typeof heroId !== 'string' || !REG.heroes.has(heroId)) return false;
       if (!v.roster.some((r) => r.heroId === heroId)) return false;

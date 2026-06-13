@@ -992,9 +992,11 @@ export class Hud {
           <h3>Options</h3>
           <label class="opt-row"><input type="checkbox" id="opt-quickcast" ${g.settings.quickcast ? 'checked' : ''}> Quick-cast at cursor</label>
           <label class="opt-row"><input type="checkbox" id="opt-resonance" ${g.settings.resonance ? 'checked' : ''}> Resonance mode (micro/raids)</label>
-          <label class="opt-row">Master volume <input type="range" id="opt-master-volume" min="0" max="1" step="0.05" value="${g.settings.masterVolume ?? 0.8}"></label>
-          <label class="opt-row">SFX volume <input type="range" id="opt-sfx-volume" min="0" max="1" step="0.05" value="${g.settings.sfxVolume ?? 0.8}"></label>
-          <label class="opt-row">Music volume <input type="range" id="opt-music-volume" min="0" max="1" step="0.05" value="${g.settings.musicVolume ?? 0.6}"></label>
+          <label class="opt-row"><input type="checkbox" id="opt-mute" ${g.settings.audio.muted ? 'checked' : ''}> Mute all audio</label>
+          <label class="opt-row">Master volume <input type="range" id="opt-master-volume" min="0" max="1" step="0.05" value="${g.settings.audio.master}"></label>
+          <label class="opt-row">SFX volume <input type="range" id="opt-sfx-volume" min="0" max="1" step="0.05" value="${g.settings.audio.sfx}"></label>
+          <label class="opt-row">Voice volume <input type="range" id="opt-voice-volume" min="0" max="1" step="0.05" value="${g.settings.audio.voice}"></label>
+          <label class="opt-row">Stinger volume <input type="range" id="opt-stinger-volume" min="0" max="1" step="0.05" value="${g.settings.audio.stinger}"></label>
           <button class="btn" id="open-journal">Quest Journal</button>
           <button class="btn" id="open-codex">Codex</button>
           <button class="btn" id="export-save">Export save (JSON)</button>
@@ -1026,14 +1028,25 @@ export class Hud {
     this.modal.querySelector('#opt-resonance')?.addEventListener('change', (e) => {
       g.setResonanceEnabled((e.target as HTMLInputElement).checked);
     });
+    this.modal.querySelector('#opt-mute')?.addEventListener('change', (e) => {
+      g.settings.audio.muted = (e.target as HTMLInputElement).checked;
+      g.audio.setSettings(g.settings);
+    });
     this.modal.querySelector('#opt-master-volume')?.addEventListener('input', (e) => {
-      g.settings.masterVolume = Number((e.target as HTMLInputElement).value);
+      g.settings.audio.master = Number((e.target as HTMLInputElement).value);
+      g.audio.setSettings(g.settings);
     });
     this.modal.querySelector('#opt-sfx-volume')?.addEventListener('input', (e) => {
-      g.settings.sfxVolume = Number((e.target as HTMLInputElement).value);
+      g.settings.audio.sfx = Number((e.target as HTMLInputElement).value);
+      g.audio.setSettings(g.settings);
     });
-    this.modal.querySelector('#opt-music-volume')?.addEventListener('input', (e) => {
-      g.settings.musicVolume = Number((e.target as HTMLInputElement).value);
+    this.modal.querySelector('#opt-voice-volume')?.addEventListener('input', (e) => {
+      g.settings.audio.voice = Number((e.target as HTMLInputElement).value);
+      g.audio.setSettings(g.settings);
+    });
+    this.modal.querySelector('#opt-stinger-volume')?.addEventListener('input', (e) => {
+      g.settings.audio.stinger = Number((e.target as HTMLInputElement).value);
+      g.audio.setSettings(g.settings);
     });
     this.modal.querySelector('#export-save')?.addEventListener('click', () => g.exportSave());
     this.modal.querySelector('#open-journal')?.addEventListener('click', () => this.toggleModal('journal'));

@@ -25,7 +25,7 @@ export class ProceduralAudio {
   }
 
   handleEvent(ev: SimEvent): void {
-    if (!this.unlocked) return;
+    if (!this.unlocked || this.settings.audio.muted) return;
     switch (ev.t) {
       case 'cast':
         this.castSound(ev.vfx.archetype);
@@ -68,7 +68,9 @@ export class ProceduralAudio {
   }
 
   private volume(mult = 1): number {
-    return (this.settings.masterVolume ?? 0.8) * (this.settings.sfxVolume ?? 0.8) * mult;
+    const a = this.settings.audio;
+    if (a.muted) return 0;
+    return a.master * a.sfx * mult;
   }
 
   private tone(freq: number, dur: number, type: OscillatorType, vol: number): void {

@@ -75,6 +75,18 @@ export const TUNING = {
   respecCost: 500,
   healServiceCost: 120,
 
+  // --- recruitment ceiling + trials (Phase 6 §3.1, §3.4) ---
+  recruitLevelCap: [15, 18, 21, 23, 25, 27, 29, 30, 30],   // index = badge count, capped at 30
+  relocationShardFloor: 1,        // failed trial drops Find shards to this floor, never locks out
+  findShardsNeeded: 2,            // default echo kills to reveal a trial marker
+
+  // --- reputation / karma (Phase 6 §3.2) ---
+  reputationGoodGate: 3,          // a good-karma recruit opens at/above this
+  reputationSoulsPactDrop: 4,     // Souls Pact greed path lowers karma by this
+
+  // --- audio (Phase 6 §3.12, §3.16) ---
+  audioVoiceCap: 6,               // pooled voice concurrency cap (perf budget)
+
   // --- hero swap (SPEC §6) ---
   swapCooldownSec: 4,
   swapCdFloorPct: 0.5,        // swapped-in hero cooldowns floored at 50% of remaining
