@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { registerAllContent, ALL_HEROES, ALL_REGIONS } from '../data/index';
+import { registerAllContent, ALL_HEROES, ALL_REGIONS, ALL_DUNGEONS, ALL_ROOM_TEMPLATES } from '../data/index';
 import { ALL_GYMS } from '../data/gyms/index';
 import { ALL_QUESTS, ALL_TRIALS } from '../data/quests/index';
 import { ALL_ITEMS } from '../data/items/index';
@@ -346,6 +346,14 @@ describe('data lint: Phase 4/5 polish infrastructure', () => {
     expect(archOf('techies', 'techies-proximity-mines')).toBe('mine');
   });
 
+  it('has per-ability glyph hints for the shipped hero roster (WS-F)', () => {
+    const abilities = ALL_HEROES.flatMap((h) => h.abilities);
+    expect(abilities.length).toBeGreaterThan(0);
+    for (const ability of abilities) {
+      expect(ability.glyph, `${ability.id} glyph`).toBeTruthy();
+    }
+  });
+
   it('has a recognizable likeness profile for the entire shipped roster (WS-A)', () => {
     const byHero = new Map(HERO_LIKENESS_PROFILES.map((p) => [p.heroId, p]));
     for (const hero of ALL_HEROES) {
@@ -521,6 +529,39 @@ describe('data lint: Phase 3 registries', () => {
       expect(REG.quests.has(raid.unlockQuest), `${raid.id}: unlock`).toBe(true);
       for (const id of [...raid.loot.guaranteed, ...raid.loot.assembledPool]) expect(REG.items.has(id), `${raid.id}: loot ${id}`).toBe(true);
       if (raid.signatureExotic) expect(REG.exotics.has(raid.signatureExotic), `${raid.id}: exotic`).toBe(true);
+    }
+    expect(ALL_DUNGEONS.length).toBeGreaterThanOrEqual(4);
+    expect(ALL_ROOM_TEMPLATES.length).toBeGreaterThanOrEqual(ALL_DUNGEONS.length * 3);
+    for (const template of ALL_ROOM_TEMPLATES) {
+      expect(REG.roomTemplates.has(template.id), `${template.id}: registered`).toBe(true);
+      expect(template.size.x, `${template.id}: width`).toBeGreaterThan(1000);
+      expect(template.size.y, `${template.id}: height`).toBeGreaterThan(1000);
+      expect(template.connectors.length, `${template.id}: connectors`).toBeGreaterThan(0);
+      expect(template.spawnAnchors.length, `${template.id}: anchors`).toBeGreaterThan(0);
+      for (const c of template.connectors) {
+        expect(['n', 's', 'e', 'w']).toContain(c.side);
+        expect(c.at.x, `${template.id}: connector x`).toBeGreaterThanOrEqual(0);
+        expect(c.at.x, `${template.id}: connector x`).toBeLessThanOrEqual(template.size.x);
+        expect(c.at.y, `${template.id}: connector y`).toBeGreaterThanOrEqual(0);
+        expect(c.at.y, `${template.id}: connector y`).toBeLessThanOrEqual(template.size.y);
+      }
+      for (const a of template.spawnAnchors) {
+        expect(a.x, `${template.id}: anchor x`).toBeGreaterThan(0);
+        expect(a.x, `${template.id}: anchor x`).toBeLessThan(template.size.x);
+        expect(a.y, `${template.id}: anchor y`).toBeGreaterThan(0);
+        expect(a.y, `${template.id}: anchor y`).toBeLessThan(template.size.y);
+      }
+    }
+    for (const dungeon of ALL_DUNGEONS) {
+      expect(REG.regions.has(dungeon.regionId), `${dungeon.id}: region`).toBe(true);
+      expect(REG.bosses.has(dungeon.guardian), `${dungeon.id}: guardian`).toBe(true);
+      for (const templateId of dungeon.templates) {
+        const template = REG.roomTemplate(templateId);
+        expect(template.biome, `${dungeon.id}: template ${templateId} biome`).toBe(dungeon.biome);
+      }
+      for (const type of ['entrance', 'combat', 'elite', 'treasure', 'rest', 'boss'] as const) {
+        expect(dungeon.templates.some((id) => REG.roomTemplate(id).allowTypes.includes(type)), `${dungeon.id}: template for ${type}`).toBe(true);
+      }
     }
     expect(ALL_DRAFTS.length).toBeGreaterThanOrEqual(1);
     for (const draft of ALL_DRAFTS) {

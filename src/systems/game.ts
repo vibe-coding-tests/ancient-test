@@ -45,7 +45,7 @@ import { ELITE_DRAFT } from '../data/drafts';
 import { resonanceMods } from '../core/resonance';
 import { levelFromXp, xpForLevel } from '../core/stats';
 import { dist, fromAngle, norm, sub } from '../core/math2d';
-import type { ActiveElement, ArmoryLoadouts, BossDef, CreepTier, CreepInstanceSave, DifficultyTier, DraftDef, DropSource, DungeonDef, DungeonModifierDef, DungeonProgressSave, DungeonRoom, EchoProgress, GambitRule, GameSave, GraphicsSettings, HeroLoadoutSlots, HeroSave, ItemDropTable, ItemQuality, ItemRarity, ItemSave, LootBand, MacroHeroSetup, NeutralItemDef, Order, QuestProgress, RaidDef, RegionDef, RoomType, SimEvent, StingerId, Vec2 } from '../core/types';
+import type { ActiveElement, ArmoryLoadouts, BossDef, CreepTier, CreepInstanceSave, DifficultyTier, DraftDef, DropSource, DungeonDef, DungeonModifierDef, DungeonProgressSave, DungeonRoom, EchoProgress, GambitRule, GameSave, GraphicsSettings, HeroLoadoutSlots, HeroSave, ItemDropTable, ItemQuality, ItemRarity, ItemSave, LootBand, MacroHeroSetup, NeutralItemDef, Order, QuestProgress, RaidDef, RegionDef, RoomTemplate, RoomType, SimEvent, StingerId, Vec2 } from '../core/types';
 import { ProceduralAudio } from '../engine/audio';
 import { GameScene } from '../engine/scene';
 import { LiveGymFight, runGymMatch, type GymMatchHero, type GymMatchResult } from './macro-session';
@@ -288,6 +288,7 @@ export interface SceneLike {
   pushEvent(ev: SimEvent, sim: Sim): void;
   update(sim: Sim, followUnit: Unit | null, renderDt: number, timeOfDay01: number): void;
   resetUnitViews?(): void;
+  setDungeonRoom?(template: RoomTemplate | null, room?: DungeonRoom | null): void;
   /** Optional (real GameScene only): live graphics-settings hooks (§6). */
   setQuality?(tier: QualityTier): void;
   setGraphics?(g: { exposure?: number; grade?: number; reducedMotion?: boolean }): void;
@@ -312,6 +313,7 @@ export class HeadlessScene implements SceneLike {
   pushEvent(): void {}
   update(): void {}
   resetUnitViews(): void {}
+  setDungeonRoom(): void {}
 }
 
 /** No-op audio for headless runs. */
@@ -1474,6 +1476,7 @@ export class Game {
     this.liveDungeon = new DungeonSession(def, this.gymPlayerTeam(), tier, seed, { maxSec: opts.maxSec, modifiers, endless, endlessLevel });
     this.queuedOrders = [];
     this.scene.resetUnitViews();
+    this.syncDungeonSceneRoom();
     const u = this.liveDungeon.drivenUnit();
     if (u) this.scene.selectedUid = u.uid;
     const modText = modifiers.length > 0 ? ` · ${modifiers.map((id) => def.modifiers?.find((m) => m.id === id)?.name ?? id).join(', ')}` : '';
@@ -1527,6 +1530,7 @@ export class Game {
       return false;
     }
     const room = dungeon.room;
+    this.syncDungeonSceneRoom();
     this.msg(`${dungeon.def.name}: entered room ${room.index + 1}/${dungeon.layout.depth} (${room.type})`, 'info');
     for (const completed of dungeon.drainCompletedRooms()) {
       this.grantDungeonRoomReward(dungeon.def, dungeon.tier, completed, dungeon.selectedModifiers());
@@ -1539,9 +1543,16 @@ export class Game {
     this.liveDungeonId = null;
     this.liveDungeonModifiers = [];
     this.queuedOrders = [];
+    this.scene.setDungeonRoom?.(null);
     this.scene.resetUnitViews();
     const u = this.activeUnit();
     if (u) this.scene.selectedUid = u.uid;
+  }
+
+  private syncDungeonSceneRoom(): void {
+    const dungeon = this.liveDungeon;
+    if (!dungeon || !this.scene.setDungeonRoom) return;
+    this.scene.setDungeonRoom(dungeon.roomTemplate(), dungeon.room);
   }
 
   private modifiedDungeonLootTable(def: DungeonDef, table: ItemDropTable, modifiers: string[]): ItemDropTable {

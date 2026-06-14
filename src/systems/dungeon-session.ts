@@ -8,15 +8,50 @@ import { REG } from '../core/registry';
 import { Sim } from '../core/sim';
 import { makeItemState, sortInventory } from '../core/items';
 import { TUNING } from '../data/tuning';
-import type { AffixDef, BossDef, DifficultyTier, DungeonDef, DungeonLayout, DungeonRoom, MacroHeroSetup, PlannedPack } from '../core/types';
+import type { AffixDef, BossDef, DifficultyTier, DungeonDef, DungeonLayout, DungeonRoom, MacroHeroSetup, PlannedPack, RoomTemplate } from '../core/types';
 import type { Unit } from '../core/unit';
 
-const ROOM_SIZE = { w: 4200, h: 3000 };
-const PLAYER_START = v2(720, ROOM_SIZE.h / 2);
-const ENEMY_START = v2(3000, ROOM_SIZE.h / 2);
+const FALLBACK_ROOM_SIZE = { x: 4200, y: 3000 };
 type DungeonPacingPhase = 'idle' | 'build-up' | 'peak' | 'relax';
 
 const PACK_PROGRESS_WEIGHT: Record<PlannedPack['rarity'], number> = { normal: 1, champion: 3, rare: 6 };
+
+function syntheticTemplate(id: string, biome: DungeonDef['biome']): RoomTemplate {
+  return {
+    id,
+    biome,
+    size: { ...FALLBACK_ROOM_SIZE },
+    connectors: [
+      { side: 'w', at: { x: 180, y: FALLBACK_ROOM_SIZE.y / 2 } },
+      { side: 'e', at: { x: FALLBACK_ROOM_SIZE.x - 180, y: FALLBACK_ROOM_SIZE.y / 2 } }
+    ],
+    spawnAnchors: [
+      { x: FALLBACK_ROOM_SIZE.x * 0.62, y: FALLBACK_ROOM_SIZE.y * 0.34 },
+      { x: FALLBACK_ROOM_SIZE.x * 0.74, y: FALLBACK_ROOM_SIZE.y * 0.5 },
+      { x: FALLBACK_ROOM_SIZE.x * 0.62, y: FALLBACK_ROOM_SIZE.y * 0.66 }
+    ],
+    allowTypes: ['entrance', 'combat', 'elite', 'treasure', 'shrine', 'rest', 'boss'],
+    props: { treeDensity: 0, rockDensity: 0 }
+  };
+}
+
+function registeredTemplates(def: DungeonDef): RoomTemplate[] | undefined {
+  const templates: RoomTemplate[] = [];
+  for (const id of def.templates) {
+    const t = REG.roomTemplates.get(id);
+    if (!t) return undefined;
+    templates.push(t);
+  }
+  return templates;
+}
+
+function templateMap(def: DungeonDef, templates: RoomTemplate[] | undefined): Map<string, RoomTemplate> {
+  return new Map((templates ?? def.templates.map((id) => syntheticTemplate(id, def.biome))).map((t) => [t.id, t]));
+}
+
+function roomBounds(template: RoomTemplate): { w: number; h: number } {
+  return { w: template.size.x, h: template.size.y };
+}
 
 export interface DungeonSessionResult {
   cleared: boolean;
@@ -40,6 +75,7 @@ export class DungeonSession {
   enemyUids: number[] = [];
   private readonly maxTicks: number;
   private readonly affixes: Map<string, AffixDef>;
+  private readonly roomTemplates: Map<string, RoomTemplate>;
   private currentRoomIndex = 0;
   private readonly cleared = new Set<number>();
   private readonly completedRooms: DungeonRoom[] = [];
@@ -61,8 +97,10 @@ export class DungeonSession {
   constructor(def: DungeonDef, party: MacroHeroSetup[], tier: DifficultyTier, seed: number, opts?: { maxSec?: number; modifiers?: string[]; endless?: boolean; endlessLevel?: number }) {
     this.def = def;
     this.tier = tier;
-    this.layout = generateDungeon(def, tier, seed, { modifiers: opts?.modifiers, endless: opts?.endless, endlessLevel: opts?.endlessLevel });
-    this.sim = new Sim({ seed, bounds: ROOM_SIZE });
+    const templates = registeredTemplates(def);
+    this.layout = generateDungeon(def, tier, seed, { modifiers: opts?.modifiers, roomTemplates: templates, endless: opts?.endless, endlessLevel: opts?.endlessLevel });
+    this.roomTemplates = templateMap(def, templates);
+    this.sim = new Sim({ seed, bounds: roomBounds(this.roomTemplateFor(this.layout.rooms[0])) });
     this.maxTicks = Math.round((opts?.maxSec ?? this.layout.depth * 75) / this.sim.dt);
     this.affixes = new Map((def.affixes ?? []).map((affix) => [affix.id, affix]));
     this.spawnParty(party);
@@ -73,6 +111,10 @@ export class DungeonSession {
 
   get room(): DungeonRoom {
     return this.layout.rooms[this.currentRoomIndex] ?? this.layout.rooms[this.layout.rooms.length - 1];
+  }
+
+  roomTemplate(room = this.room): RoomTemplate {
+    return this.roomTemplateFor(room);
   }
 
   drivenUnit(): Unit | null {
@@ -160,10 +202,13 @@ export class DungeonSession {
   }
 
   private spawnParty(party: MacroHeroSetup[]): void {
+    const template = this.roomTemplateFor(this.layout.rooms[0]);
+    const x = Math.max(220, Math.min(720, template.size.x * 0.18));
+    const y = template.size.y / 2;
     party.slice(0, 5).forEach((setup, i) => {
       const base = REG.hero(setup.heroId);
       const build = buildHero(base);
-      const pos = { x: PLAYER_START.x, y: PLAYER_START.y + (i - 2) * 180 };
+      const pos = { x, y: y + (i - 2) * 180 };
       const u = this.sim.spawnHero(build.def, {
         team: 0,
         pos,
@@ -186,6 +231,7 @@ export class DungeonSession {
   private enterNextPlayableRoom(): void {
     while (!this.done && !this.awaitingExit) {
       const room = this.room;
+      this.sim.bounds = roomBounds(this.roomTemplateFor(room));
       this.repositionParty();
       this.enemyUids = [];
       this.guardianUid = null;
@@ -207,11 +253,14 @@ export class DungeonSession {
   }
 
   private repositionParty(): void {
+    const template = this.roomTemplateFor();
+    const x = Math.max(220, Math.min(720, template.size.x * 0.18));
+    const y = template.size.y / 2;
     const alive = this.partyUids
       .map((uid) => this.sim.unit(uid))
       .filter((u): u is Unit => !!u && u.alive);
     alive.forEach((u, i) => {
-      u.pos = { x: PLAYER_START.x, y: PLAYER_START.y + (i - 2) * 180 };
+      u.pos = { x, y: y + (i - 2) * 180 };
       u.prevPos = { ...u.pos };
       u.facing = 0;
       u.order = { kind: 'stop' };
@@ -241,11 +290,8 @@ export class DungeonSession {
   private spawnNextPack(): void {
     const pack = this.room.packs[this.roomPackCursor];
     if (!pack) return;
-    const packIdx = this.roomPackCursor;
-    const center = {
-      x: ENEMY_START.x + (packIdx % 2) * 360,
-      y: ENEMY_START.y + (Math.floor(packIdx / 2) - 1) * 280
-    };
+    const anchors = this.roomTemplateFor().spawnAnchors;
+    const center = anchors[pack.anchorIndex % Math.max(1, anchors.length)] ?? { x: this.sim.bounds.w * 0.7, y: this.sim.bounds.h / 2 };
     const spawned: Unit[] = [];
     const weight = PACK_PROGRESS_WEIGHT[pack.rarity] ?? 1;
     pack.cards.forEach((card, i) => {
@@ -290,7 +336,8 @@ export class DungeonSession {
     const level = boss.rank === 'boss' ? 30 : 26;
     const build = buildHero(REG.hero(boss.heroId));
     const scale = tierScale(this.tier);
-    const pos = { ...ENEMY_START };
+    const template = this.roomTemplateFor();
+    const pos = template.spawnAnchors.at(-1) ?? { x: template.size.x * 0.72, y: template.size.y / 2 };
     const u = this.sim.spawnHero(build.def, {
       team: 1,
       pos,
@@ -398,6 +445,10 @@ export class DungeonSession {
       progress: this.endlessProgress(),
       hash: this.sim.hash()
     };
+  }
+
+  private roomTemplateFor(room = this.room): RoomTemplate {
+    return this.roomTemplates.get(room.templateId) ?? syntheticTemplate(room.templateId, this.def.biome);
   }
 
   private checkDone(): void {

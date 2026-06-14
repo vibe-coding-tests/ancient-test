@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { AttackVisualSpec, ItemAppearanceSpec, RegionDef } from '../core/types';
+import type { AttackVisualSpec, DungeonRoom, ItemAppearanceSpec, RegionDef, RoomTemplate } from '../core/types';
 import type { Sim } from '../core/sim';
 import type { Unit } from '../core/unit';
 import { REG } from '../core/registry';
@@ -278,6 +278,7 @@ export class GameScene {
   private raycaster = new THREE.Raycaster();
   private groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   private mapMarkers: MapMarker[] = [];
+  private dungeonRoomGroup: THREE.Group | null = null;
 
   cameraMode: CameraMode = 'follow';
   private camTarget = new THREE.Vector3();
@@ -702,6 +703,88 @@ export class GameScene {
     this.views.clear();
     this.selectedUid = -1;
     this.vfx.reset();
+  }
+
+  setDungeonRoom(template: RoomTemplate | null, room: DungeonRoom | null = null): void {
+    this.clearDungeonRoomVisuals();
+    if (!template) return;
+
+    const group = new THREE.Group();
+    group.name = `dungeon-room:${template.id}`;
+    const w = template.size.x / WORLD_SCALE;
+    const h = template.size.y / WORLD_SCALE;
+    const roomColor = room?.type === 'boss'
+      ? 0xe4ae39
+      : room?.type === 'elite'
+        ? 0xd32ce6
+        : room?.type === 'treasure'
+          ? 0xade55c
+          : 0x5e98d9;
+
+    const floorMat = new THREE.MeshBasicMaterial({
+      color: roomColor,
+      transparent: true,
+      opacity: 0.09,
+      depthWrite: false
+    });
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(w, h), floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.set(w / 2, 0.05, h / 2);
+    floor.renderOrder = 6;
+    group.add(floor);
+
+    const edgePoints = [
+      new THREE.Vector3(0, 0.12, 0),
+      new THREE.Vector3(w, 0.12, 0),
+      new THREE.Vector3(w, 0.12, h),
+      new THREE.Vector3(0, 0.12, h),
+      new THREE.Vector3(0, 0.12, 0)
+    ];
+    const edgeGeo = new THREE.BufferGeometry().setFromPoints(edgePoints);
+    const edge = new THREE.Line(edgeGeo, new THREE.LineBasicMaterial({ color: roomColor, transparent: true, opacity: 0.75 }));
+    edge.renderOrder = 7;
+    group.add(edge);
+
+    const doorGeo = new THREE.RingGeometry(0.25, 0.42, 24);
+    const doorMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, depthWrite: false });
+    for (const c of template.connectors) {
+      const door = new THREE.Mesh(doorGeo, doorMat);
+      door.rotation.x = -Math.PI / 2;
+      door.position.set(c.at.x / WORLD_SCALE, 0.14, c.at.y / WORLD_SCALE);
+      door.renderOrder = 8;
+      group.add(door);
+    }
+
+    const anchorGeo = new THREE.CircleGeometry(0.18, 18);
+    const anchorMat = new THREE.MeshBasicMaterial({ color: 0xff7a3a, transparent: true, opacity: 0.32, depthWrite: false });
+    for (const a of template.spawnAnchors) {
+      const marker = new THREE.Mesh(anchorGeo, anchorMat);
+      marker.rotation.x = -Math.PI / 2;
+      marker.position.set(a.x / WORLD_SCALE, 0.13, a.y / WORLD_SCALE);
+      marker.renderOrder = 8;
+      group.add(marker);
+    }
+
+    this.dungeonRoomGroup = group;
+    this.scene.add(group);
+  }
+
+  private clearDungeonRoomVisuals(): void {
+    if (!this.dungeonRoomGroup) return;
+    const group = this.dungeonRoomGroup;
+    this.scene.remove(group);
+    group.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      const line = obj as THREE.Line;
+      const geo = mesh.geometry ?? line.geometry;
+      if (geo) geo.dispose();
+      const material = mesh.material ?? line.material;
+      const dispose = (m: unknown) => {
+        if (m && typeof (m as { dispose?: unknown }).dispose === 'function') (m as { dispose: () => void }).dispose();
+      };
+      Array.isArray(material) ? material.forEach(dispose) : dispose(material);
+    });
+    this.dungeonRoomGroup = null;
   }
 
   private createMapMarkers(region: RegionDef): void {

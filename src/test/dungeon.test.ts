@@ -118,6 +118,19 @@ describe('dungeon generation D0', () => {
     }
   });
 
+  it('uses registered room templates by room type when supplied', () => {
+    const def = REG.dungeon('frost-hollow');
+    const templates = [...REG.roomTemplates.values()];
+    const layout = generateDungeon(def, 'normal', 20260613, { roomTemplates: templates });
+
+    for (const room of layout.rooms) {
+      const template = REG.roomTemplate(room.templateId);
+      expect(def.templates).toContain(template.id);
+      expect(template.allowTypes, `${room.templateId} should allow ${room.type}`).toContain(room.type);
+      expect(template.size.x).not.toBe(4200); // proves this is not the synthetic fallback.
+    }
+  });
+
   it('scales room populations by budget, depth, and tier over a seed sweep', () => {
     const pool: SpawnCard[] = [
       { creepId: 'kobold', weight: 6, cost: 8 },
@@ -331,6 +344,21 @@ describe('dungeon session D1/D2', () => {
 
     chooseFirstExit(g);
     expect(g.liveDungeon!.room.index).toBeGreaterThan(firstRoom);
+  });
+
+  it('sizes live rooms and pack placement from the selected room template', () => {
+    const g = Game.headless(dungeonSave());
+    expect(g.startDungeon('frost-hollow', 'normal', { seed: 1001 })).toBe(true);
+    const session = g.liveDungeon!;
+    const template = session.roomTemplate();
+    expect(session.sim.bounds).toEqual({ w: template.size.x, h: template.size.y });
+    for (const uid of session.enemyUids) {
+      const enemy = session.sim.unit(uid);
+      expect(enemy?.pos.x).toBeGreaterThanOrEqual(0);
+      expect(enemy?.pos.x).toBeLessThanOrEqual(template.size.x);
+      expect(enemy?.pos.y).toBeGreaterThanOrEqual(0);
+      expect(enemy?.pos.y).toBeLessThanOrEqual(template.size.y);
+    }
   });
 
   it('enters from a portal, grants room rewards on clear, clears a multi-room run, and exits', () => {

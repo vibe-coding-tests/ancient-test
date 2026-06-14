@@ -24,10 +24,12 @@ import { ALL_NEUTRAL_ITEMS } from './neutral-items';
 import { ALL_BOSSES } from './bosses';
 import { ALL_RAIDS } from './raids';
 import { ALL_DUNGEONS } from './dungeons';
+import { ALL_ROOM_TEMPLATES } from './room-templates';
 import { ALL_DRAFTS } from './drafts';
 import { ALL_TRAINERS } from './trainers';
 import { elementForAbility, elementForHero } from '../core/resonance';
 import { EXOTIC_IMPLS, type ExoticContext } from '../core/exotics';
+import { glyphForAbility } from '../core/gestures';
 import type { HeroDef } from '../core/types';
 
 function withElementTags(hero: HeroDef): HeroDef {
@@ -37,14 +39,15 @@ function withElementTags(hero: HeroDef): HeroDef {
     ...tagged,
     abilities: hero.abilities.map((ability) => ({
       ...ability,
-      element: ability.element ?? elementForAbility(tagged, ability.id)
+      element: ability.element ?? elementForAbility(tagged, ability.id),
+      glyph: ability.glyph ?? glyphForAbility(ability)
     }))
   };
 }
 
 export const ALL_HEROES: HeroDef[] = [JUGGERNAUT, CRYSTAL_MAIDEN, PUDGE, EARTHSHAKER, SNIPER, LICH, LUNA, SVEN, AXE, ...PHASE2_HEROES, ...PHASE3_HEROES, ...STANDARD_MISSING_HEROES, ...COMPLEX_MISSING_HEROES].map(withElementTags);
 export const ALL_REGIONS = [TRANQUIL_VALE, NIGHTSILVER_WOODS, ICEWRACK, ...PHASE3_REGIONS];
-export { ALL_DUNGEONS };
+export { ALL_DUNGEONS, ALL_ROOM_TEMPLATES };
 
 let registered = false;
 
@@ -62,6 +65,7 @@ export function registerAllContent(): void {
   for (const n of ALL_NEUTRAL_ITEMS) REG.registerNeutralItem(n);
   for (const b of ALL_BOSSES) REG.registerBoss(b);
   for (const r of ALL_RAIDS) REG.registerRaid(r);
+  for (const t of ALL_ROOM_TEMPLATES) REG.registerRoomTemplate(t);
   for (const d of ALL_DUNGEONS) REG.registerDungeon(d);
   for (const d of ALL_DRAFTS) REG.registerDraft(d);
   for (const t of ALL_TRAINERS) REG.registerTrainer(t);

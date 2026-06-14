@@ -635,6 +635,8 @@ export interface DungeonModifierDef {
 
 export interface DungeonGenerationOptions {
   modifiers?: string[];
+  /** Optional authored template pool; omitted tests/data get deterministic synthetic rooms. */
+  roomTemplates?: RoomTemplate[];
   /** Endless descent (Diablo III greater rift): unbounded escalating depth gated by a progress meter. */
   endless?: boolean;
   /** Endless tier index (0 = first endless level); scales depth, budget, and rarity. */

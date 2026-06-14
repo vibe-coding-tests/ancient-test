@@ -7,6 +7,7 @@ import type {
   DungeonLayout,
   DungeonRoom,
   DungeonModifierDef,
+  RoomTemplate,
   ItemDropTable,
   ItemRarity,
   MonsterRarity,
@@ -176,6 +177,44 @@ function roomTypeAt(index: number, depth: number, rng: Rng, endless = false): Ro
 
 const PACK_PROGRESS_WEIGHT: Record<MonsterRarity, number> = { normal: 1, champion: 3, rare: 6 };
 
+const FALLBACK_ROOM_SIZE = { x: 4200, y: 3000 };
+
+function syntheticTemplate(id: string, biome: DungeonDef['biome']): RoomTemplate {
+  return {
+    id,
+    biome,
+    size: { ...FALLBACK_ROOM_SIZE },
+    connectors: [
+      { side: 'w', at: { x: 180, y: FALLBACK_ROOM_SIZE.y / 2 } },
+      { side: 'e', at: { x: FALLBACK_ROOM_SIZE.x - 180, y: FALLBACK_ROOM_SIZE.y / 2 } }
+    ],
+    spawnAnchors: [
+      { x: FALLBACK_ROOM_SIZE.x * 0.62, y: FALLBACK_ROOM_SIZE.y * 0.34 },
+      { x: FALLBACK_ROOM_SIZE.x * 0.74, y: FALLBACK_ROOM_SIZE.y * 0.5 },
+      { x: FALLBACK_ROOM_SIZE.x * 0.62, y: FALLBACK_ROOM_SIZE.y * 0.66 }
+    ],
+    allowTypes: ['entrance', 'combat', 'elite', 'treasure', 'shrine', 'rest', 'boss'],
+    props: { treeDensity: 0, rockDensity: 0 }
+  };
+}
+
+function templatePool(def: DungeonDef, authored: RoomTemplate[] | undefined): RoomTemplate[] {
+  if (!authored || authored.length === 0) return def.templates.map((id) => syntheticTemplate(id, def.biome));
+  const byId = new Map(authored.map((t) => [t.id, t]));
+  return def.templates.map((id) => {
+    const t = byId.get(id);
+    if (!t) throw new Error(`dungeon ${def.id} references unknown room template ${id}`);
+    if (t.biome !== def.biome) throw new Error(`dungeon ${def.id} template ${id} biome ${t.biome} != ${def.biome}`);
+    return t;
+  });
+}
+
+function pickRoomTemplate(def: DungeonDef, pool: RoomTemplate[], type: RoomType, rng: Rng): RoomTemplate {
+  const eligible = pool.filter((t) => t.allowTypes.includes(type));
+  if (eligible.length === 0) throw new Error(`dungeon ${def.id} has no room template for ${type}`);
+  return rng.pick(eligible);
+}
+
 /** Rarity-weighted total the endless meter fills toward; reaching it summons the guardian (Diablo III greater rift). */
 function endlessProgressTarget(rooms: DungeonRoom[]): number {
   let total = 0;
@@ -270,6 +309,7 @@ export function generateDungeon(def: DungeonDef, tier: DifficultyTier, seed: num
   if (!def.tiers.includes(tier)) throw new Error(`dungeon ${def.id} does not support tier ${tier}`);
   if (def.templates.length === 0) throw new Error(`dungeon ${def.id} has no room templates`);
   const rng = new Rng(seed);
+  const templates = templatePool(def, opts.roomTemplates);
   const authoredAffixes = def.affixes ?? [];
   const affixes = def.affixPool.map((id) => authoredAffixes.find((affix) => affix.id === id) ?? { id, name: id, apply: [] });
   const endless = !!opts.endless;
@@ -283,6 +323,7 @@ export function generateDungeon(def: DungeonDef, tier: DifficultyTier, seed: num
   const rooms: DungeonRoom[] = [];
   for (let index = 0; index < depth; index++) {
     const type = roomTypeAt(index, depth, rng, endless);
+    const template = pickRoomTemplate(def, templates, type, rng);
     const exits: number[] = [];
     if (index < depth - 1) exits.push(index + 1);
     if (!endless && index > 0 && index < depth - 3 && rng.chance(0.3)) exits.push(index + 2);
@@ -297,7 +338,7 @@ export function generateDungeon(def: DungeonDef, tier: DifficultyTier, seed: num
     rooms.push({
       index,
       type,
-      templateId: rng.pick(def.templates),
+      templateId: template.id,
       exits,
       reward: rewardFor(type, def.loot[type]),
       packs

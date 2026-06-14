@@ -1526,6 +1526,7 @@ export class Hud {
     const dungeon = this.game.liveDungeon;
     if (!fight && dungeon) {
       const room = dungeon.room;
+      const template = dungeon.roomTemplate();
       const selected = dungeon.sim.unit(this.game.scene.selectedUid);
       const selectedName = selected && selected.team === 0 ? selected.name : 'select 1–5';
       const exitRooms = dungeon.availableExits();
@@ -1534,7 +1535,7 @@ export class Hud {
       const mods = dungeon.selectedModifiers();
       const endless = dungeon.endlessInfo();
       const endlessPct = Math.round(endless.progress * 100);
-      const key = `dungeon|${dungeon.def.id}|${room.index}|${room.type}|${dungeon.enemyUids.length}|${dungeon.exitsUnlocked()}|${pacing.phase}:${pacing.spawnedPacks}:${pacing.remainingPacks}:${Math.ceil(pacing.nextPackIn)}|${exitKey}|${this.game.scene.selectedUid}|${endless.active ? endlessPct : ''}`;
+      const key = `dungeon|${dungeon.def.id}|${room.index}|${room.type}|${room.templateId}|${dungeon.enemyUids.length}|${dungeon.exitsUnlocked()}|${pacing.phase}:${pacing.spawnedPacks}:${pacing.remainingPacks}:${Math.ceil(pacing.nextPackIn)}|${exitKey}|${this.game.scene.selectedUid}|${endless.active ? endlessPct : ''}`;
       if (key === this.lastLiveGymKey) return;
       this.lastLiveGymKey = key;
       const enemies = dungeon.enemyUids.filter((uid) => dungeon.sim.unit(uid)?.alive).length;
@@ -1565,6 +1566,7 @@ export class Hud {
         : '';
       this.liveGymBar.innerHTML = `
         <div class="lg-score"><b>${dungeon.def.name}</b> · ${dungeon.tier}${titleSuffix} · Room ${room.index + 1}/${dungeon.layout.depth} · ${roomType}</div>
+        <div class="lg-calls">Template <b>${template.id}</b> · ${Math.round(template.size.x)}×${Math.round(template.size.y)} · ${template.connectors.length} doors</div>
         <div class="lg-calls">Selected <b>${selectedName}</b></div>
         <div class="lg-calls">Packs ${pacing.spawnedPacks}/${pacing.plannedPacks}${modNames.length > 0 ? ` · ${modNames.join(', ')}` : ''}</div>
         ${endlessLine}
