@@ -10,7 +10,9 @@ The rule stays the same as the rest of the project. The headless deterministic c
 
 ## 0. WHERE WE ARE
 
-The current code already has most of the primitives. What is missing is the contract that ties them together.
+**Status: shipped.** The full rollout in §10 is live and all ten acceptance gates in §9 pass. The contract lives in `src/core/collision.ts` (body resolver, hit helpers, obstacle normalization, segment sweeps), with types in `src/core/types.ts`, authored static bodies in `src/data/world/props.ts` and `src/engine/terrain.ts`, dungeon geometry in `src/data/room-templates.ts`, the debug overlay and cast preview in `src/engine/scene.ts` plus `src/core/cast-preview.ts`, contact labels in `src/ui/hud.ts`, and validation in `src/test/data-lint.test.ts` (collision contract, test 25). Capsule and rect shapes resolve too, so dungeon walls use real capsule geometry rather than circle stand-ins. The section below records the starting point the work built on.
+
+The code already had most of the primitives. What was missing was the contract that ties them together.
 
 **Units have one gameplay body.** Every `Unit` has a `radius` in sim units. Movement separation, attack reach, projectile hits, zone containment, selection rings, and AI spacing all lean on that circle. Heroes spawn with `TUNING.unitRadiusHero`; creeps use tier radii; raid bosses can scale collision through `TUNING.raidBossRadiusScale`.
 

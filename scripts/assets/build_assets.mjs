@@ -121,11 +121,13 @@ function assetType(rel) {
 
 function inferredSource(rel) {
   if (rel.startsWith('heroes/')) {
-    if (rel === 'heroes/snapfire.glb') return 'Quaternius velociraptor via Poly Pizza — CC0';
+    if (['heroes/gyrocopter.glb', 'heroes/hoodwink.glb', 'heroes/snapfire.glb', 'heroes/tusk.glb'].includes(rel)) {
+      return 'generated in-repo: generate_creature_families.mjs';
+    }
     return 'KayKit Adventurers base, tri-tone palette retexture by us — CC0';
   }
   if (rel === 'creeps/serpent.glb') return 'Quaternius snake via Poly Pizza — CC0';
-  if (['creeps/flier.glb', 'creeps/bear.glb', 'creeps/treant.glb', 'creeps/scorpion.glb', 'creeps/centaur.glb', 'creeps/gnoll.glb'].includes(rel)) return 'generated in-repo: generate_creature_families.mjs';
+  if (['creeps/flier.glb', 'creeps/bear.glb', 'creeps/treant.glb', 'creeps/scorpion.glb', 'creeps/centaur.glb', 'creeps/gnoll.glb', 'creeps/owlbear.glb', 'creeps/energy.glb', 'creeps/abomination.glb', 'creeps/fishman.glb'].includes(rel)) return 'generated in-repo: generate_creature_families.mjs';
   if (rel.startsWith('creeps/')) return 'Quaternius creature pack — CC0';
   if (rel.startsWith('holdouts/')) return 'generated in-repo: generate_holdout_signatures.mjs';
   if (rel.startsWith('weapons/heroes/')) return 'generated in-repo: generate_hero_weapons.mjs';

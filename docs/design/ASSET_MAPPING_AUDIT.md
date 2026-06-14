@@ -10,6 +10,29 @@ Sections 1–5 are the audit (state + findings). Section 6 is the flat action li
 **Section 8 is the plan**: sequenced phases, a consolidated download list, and a
 definition of done. Read 8 if you want the roadmap; read 1–6 for the why.
 
+## Current implementation snapshot (2026-06-14)
+
+The code has moved past several early audit findings:
+
+- **No static body GLB ships.** `assets:check` enforces idle + locomotion clips on
+  body GLBs. `tusk`, `hoodwink`, and `gyrocopter` now use generated animated
+  bespoke bodies; `snapfire` uses a generated lizard mount with a rider.
+- **Zero-download remaps are landed.** Former animal-shaped holdouts now ride
+  animated families (`flier`, `serpent`, `bear`, `demon`). Only `io`, `enigma`,
+  `morphling`, and `ancient-apparition` remain procedural holdouts.
+- **Species gaps are mostly closed with generated or downloaded art.** `sand-king`
+  uses `scorpion`, centaurs use `centaur`, `gnoll-assassin` uses `gnoll`,
+  `vhoul-assassin` uses the downloaded CC0 `skeleton`, and wildkin use `owlbear`.
+- **Hero silhouette variety advanced.** `clockwerk`/`timbersaw` moved to `goblin`,
+  `death-prophet` moved to `ghost`, `arc-warden`/`outworld-destroyer`/`razor`
+  moved to `energy`, and `pudge`/`undying` moved to `abomination`.
+- **Phase 5 item-weapon polish landed.** The 13 marquee item GLBs now use tapered
+  blades, ellipsoid cores/gems, higher-segment round parts, and stronger per-item
+  silhouettes.
+- **Cleanup landed.** The old KayKit body/weapon files and `heroes.json` spec
+  entries for heroes moved off humanoid cohorts were removed, so rebuilds do not
+  reintroduce unused bodies.
+
 - **Animation** — does the GLB ship the clips the rig drives
   (`idle`/`run`/`attack`[/`cast`/`death`])? This game leans on motion + vfx, so a
   static body is a defect even when the silhouette is perfect. A static download that
@@ -45,10 +68,10 @@ Provenance below is read from the `ASSETS.md` ledger, which is authoritative.
 
 | Class | What it means | Files |
 |---|---|---|
-| **CUSTOM-GEN** | Generated in-repo by our scripts. Lowest fidelity, first to upgrade. | `creeps/{flier,bear,treant}.glb`; all 22 `holdouts/**`; 80 `weapons/heroes/*`; 13 `weapons/items/*`; the procedural icon/portrait glyphs in `icons.ts` |
-| **RETEX** | CC0 KayKit base, our tri-tone palette retexture. Faithful in archetype, generic in silhouette. | 80 `heroes/*.glb` (knight/mage/barbarian/rogue cohorts) |
-| **DL-CC0** | Downloaded CC0, processed in-repo. | 20 vendored Quaternius `creeps/*`; `creeps/serpent.glb`; `heroes/{snapfire,gyrocopter}.glb`; all `props/**` |
-| **DL-CCBY** | Downloaded CC-BY, attributed in `CREDITS.md`. | `heroes/{tusk,hoodwink}.glb`; 191 `ui/items/<id>.svg` + 56 `ui/items/tokens/*.svg` (game-icons.net) |
+| **CUSTOM-GEN** | Generated in-repo by our scripts. Lowest fidelity, first to upgrade. | `creeps/{flier,bear,treant,scorpion,centaur,gnoll,owlbear,energy,abomination}.glb`; `heroes/{gyrocopter,hoodwink,snapfire,tusk}.glb`; 8 `holdouts/**` for the 4 abstract holdouts; 71 `weapons/heroes/*`; 13 `weapons/items/*`; the procedural icon/portrait glyphs in `icons.ts` |
+| **RETEX** | CC0 KayKit base, our tri-tone palette retexture. Faithful in archetype, generic in silhouette. | 71 `heroes/*.glb` (remaining knight/mage/barbarian/rogue cohorts) |
+| **DL-CC0** | Downloaded CC0, processed in-repo. | 20 vendored Quaternius `creeps/*`; `creeps/{serpent,skeleton}.glb`; all `props/**` |
+| **DL-CCBY** | Downloaded CC-BY, attributed in `CREDITS.md`. | 191 `ui/items/<id>.svg`, 56 `ui/items/tokens/*.svg`, and 23 `ui/status/*.svg` (game-icons.net) |
 
 Items are not one asset — they're a three-layer stack with mixed provenance, covered
 in Section 5: 3D held GLBs (CUSTOM-GEN), 2D icon sprites (DL-CCBY), and a procedural
@@ -63,21 +86,17 @@ of every body GLB family:
 
 | GLB family | Clips | Status |
 |---|---|---|
-| `heroes/*` (80 KayKit RETEX) | idle/run/attack/cast(/channel)/death | ✓ animated |
+| `heroes/*` (71 KayKit RETEX) | idle/run/attack/cast(/channel)/death | ✓ animated |
 | Quaternius `creeps/*` (20 DL-CC0) | per-pack walk/idle/attack | ✓ animated |
-| `creeps/{flier,bear,treant}` (CUSTOM-GEN) | idle/run/attack/cast/death | ✓ animated |
-| `creeps/serpent` (DL-CC0) | idle/run/attack | ✓ animated |
-| `heroes/snapfire` (DL-CC0 velociraptor) | idle/run/attack/death | ✓ animated |
-| `holdouts/replacements/*` (11 CUSTOM-GEN) | idle/run/attack/cast/channel/death | ✓ animated |
-| **`heroes/tusk`** (DL-CCBY walrus) | none | ✗ **STATIC — regression** |
-| **`heroes/hoodwink`** (DL-CCBY squirrel) | none | ✗ **STATIC — regression** |
-| **`heroes/gyrocopter`** (DL-CC0 helicopter) | none | ✗ **STATIC** |
-| `holdouts/*` signature kits (11 CUSTOM-GEN) | additive, no body locomotion | △ fallback only |
-| `weapons/**` (93 CUSTOM-GEN) | n/a (held props) | ✓ acceptable static |
+| `creeps/{flier,bear,treant,scorpion,centaur,gnoll,owlbear,energy,abomination}` (CUSTOM-GEN) | idle/run/attack/cast/death | ✓ animated |
+| `creeps/{serpent,skeleton}` (DL-CC0) | idle/run/attack(/death) | ✓ animated |
+| `heroes/{gyrocopter,hoodwink,snapfire,tusk}` (CUSTOM-GEN bespoke bodies) | idle/run/attack/cast/death | ✓ animated |
+| `holdouts/replacements/*` (4 CUSTOM-GEN) | idle/run/attack/cast/channel/death | ✓ animated |
+| `holdouts/*` signature kits (4 CUSTOM-GEN) | additive, no body locomotion | △ fallback only |
+| `weapons/**` (84 CUSTOM-GEN) | n/a (held props) | ✓ acceptable static |
 
-The three static **body** GLBs are the priority animation defect: `tusk` and `hoodwink`
-each replaced an *animated* shared creature base (`yeti`, `fox`) with a static mesh, so
-they look better in a screenshot and worse in motion. See Section 6-A0.
+The old static `tusk`/`hoodwink`/`gyrocopter` downloads are retired. Generated animated
+bespoke bodies now satisfy the body-animation gate.
 
 ---
 
@@ -85,33 +104,40 @@ they look better in a screenshot and worse in motion. See Section 6-A0.
 
 ### 2.1 Humanoid cohorts (RETEX) — systemic low faithfulness, by design
 
-80 of 122 heroes share **four** KayKit bodies, recolored per hero:
+65 of 122 heroes still share **four** KayKit bodies, recolored per hero:
 
 | Base | Count | Heroes |
 |---|---|---|
-| `knight` | 17 | juggernaut, sven, abaddon, dragon-knight, chaos-knight, legion-commander, omniknight, dawnbreaker, kunkka, mars, wraith-king, chen, clockwerk, timbersaw, slardar, faceless-void, pangolier |
-| `mage` | 30 | crystal-maiden, lich, lina, zeus, witch-doctor, invoker, lion, rubick, pugna, necrophos, death-prophet, disruptor, grimstroke, keeper-of-the-light, shadow-shaman, silencer, skywrath-mage, outworld-destroyer, warlock, dark-seer, dark-willow, enchantress, natures-prophet, queen-of-pain, storm-spirit, vengeful-spirit, dazzle, arc-warden, razor, winter-wyvern |
-| `barbarian` | 15 | pudge, earthshaker, lifestealer, undying, ogre-magi, bristleback, troll-warlord, axe, magnus, brewmaster, alchemist, huskar, beastmaster, slark, underlord |
-| `rogue` | 18 | sniper, mirana, drow-ranger, windranger, phantom-assassin, riki, bounty-hunter, anti-mage, templar-assassin, clinkz, meepo, void-spirit, ember-spirit, marci, phantom-lancer, monkey-king, luna, bloodseeker |
+| `knight` | 13 | juggernaut, sven, abaddon, dragon-knight, chaos-knight, legion-commander, omniknight, dawnbreaker, kunkka, mars, wraith-king, chen, faceless-void |
+| `mage` | 23 | crystal-maiden, lich, lina, zeus, witch-doctor, invoker, lion, rubick, pugna, disruptor, grimstroke, keeper-of-the-light, shadow-shaman, silencer, skywrath-mage, warlock, dark-seer, dark-willow, enchantress, queen-of-pain, storm-spirit, vengeful-spirit, dazzle |
+| `barbarian` | 12 | earthshaker, lifestealer, ogre-magi, bristleback, troll-warlord, axe, magnus, brewmaster, huskar, beastmaster, underlord, bloodseeker |
+| `rogue` | 17 | sniper, mirana, drow-ranger, windranger, phantom-assassin, riki, bounty-hunter, anti-mage, templar-assassin, clinkz, void-spirit, ember-spirit, marci, phantom-lancer, monkey-king, luna, pangolier |
 
 This is the single biggest unfaithfulness in the project: within a cohort every hero
 shares one silhouette and differs only by palette + a generated weapon. It is a
 deliberate budget call, not a bug. Per-hero silhouette identity comes (when it comes)
 from the held-weapon GLB and palette, never the body.
 
-Worst offenders (heroes whose Dota silhouette is strongly non-humanoid yet sit on a
-humanoid base — candidates for a future creature/bespoke remap):
+Worst offenders (heroes whose Dota silhouette is strongly non-humanoid): **Phase 6
+closed the long-tail.** The only heroes still on a humanoid base are genuinely
+bipedal-humanoid, where a polished KayKit body beats a crude generated one:
 
-- `mage`-cohort but non-humanoid in source: `winter-wyvern` (dragon), `death-prophet`
-  (spectral), `necrophos` (floating reaper), `outworld-destroyer` (energy being),
-  `natures-prophet` (treant-ish), `razor` (energy being).
-- `barbarian`-cohort but beast/large in source: `pudge` (bloated flesh golem),
-  `undying` (zombie/tombstone), `bristleback` (boar-man), `magnus` (mammoth-man),
-  `beastmaster` (could ride/summon), `huskar` (fine).
-- `knight`-cohort but non-knightly: `clockwerk` (mech goblin → see `goblin` family),
-  `timbersaw` (mech), `faceless-void` (alien), `pangolier` (pangolin-man).
+- `faceless-void` stays on `knight` — a bipedal alien reads acceptably as armored
+  melee, and no shipped creature base is a closer silhouette (documented compromise).
+- `pangolier` moved `knight → rogue` — a rapier swashbuckler reads as a rogue.
+- `bloodseeker` moved `rogue → barbarian` — a feral melee brute, not a ranger.
 
-These are not wired wrong; they're the heroes most worth a bespoke download later.
+Everything strongly non-humanoid now rides an animated creature/generated base:
+
+- Mage cohort: `necrophos` → `ghost` (floating reaper), `natures-prophet` → `treant`
+  (forest avatar). `winter-wyvern`, `death-prophet`, `outworld-destroyer`,
+  `arc-warden`, `razor` were already moved.
+- Barbarian cohort: `alchemist` → `abomination` (the brute body reads as his ogre
+  mount), `slark` → the new generated `fishman` family. `pudge`/`undying` already on
+  `abomination`.
+- Knight cohort: `slardar` → `fishman`. `clockwerk`/`timbersaw` already on `goblin`.
+- New generated `fishman` family (`creeps/fishman.glb`): bipedal fish-man with finned
+  forearms, jutting jaw, dorsal crest, side-set eyes — serves `slardar` + `slark`.
 
 ### 2.2 Creature-base heroes — faithfulness is good, a few stretch
 
@@ -119,15 +145,18 @@ These reuse vendored Quaternius creeps (DL-CC0) as shared bodies via `heroBaseUr
 
 | Base GLB | Heroes | Read | Verdict |
 |---|---|---|---|
-| `spider` | broodmother, weaver, nyx-assassin, sand-king | arachnid/bug | broodmother ✓; nyx/weaver (beetle/bug) ✓; **sand-king is a scorpion** — spider is closest available but a scorpion GLB would be more faithful |
+| `spider` | broodmother, weaver, nyx-assassin | arachnid/bug | ✓ |
 | `dragonevolved` | jakiro, viper, puck | dragon | all ✓ |
 | `demon` | doom, shadow-demon, shadow-fiend, night-stalker, terrorblade, visage | demon/winged-fiend | all ✓ (visage = gargoyle, close) |
 | `wolf` | lycan | werewolf | ✓ |
 | `giant` | primal-beast | huge brute beast | ✓ — **but the code comment above this line ("Sea leviathan reads more aquatic on the crab base…") is stale/misplaced**; it describes tidehunter, not primal-beast. Fix the comment. |
 | `golelingevolved` | tiny, elder-titan, earth-spirit | rock/earth elemental | all ✓ |
-| `goblin` | techies, gyrocopter, tinker | goblin/keen tinkerer | ✓ (gyrocopter now overridden by bespoke helicopter, see 2.3) |
-| `velociraptor` | venomancer, snapfire | reptile/lizard | venomancer ✓; snapfire now overridden by bespoke velociraptor mount |
-| `bull` | spirit-breaker, centaur-warrunner | horned charger | spirit-breaker ✓; **centaur-warrunner loses the humanoid torso** (no centaur GLB) |
+| `goblin` | techies, gyrocopter fallback, tinker, clockwerk, timbersaw | goblin/keen tinkerer/mech | ✓; gyrocopter now has a generated bespoke body |
+| `velociraptor` | venomancer, snapfire fallback | reptile/lizard | venomancer ✓; snapfire now has a generated lizard-mount + rider body |
+| `bull` | spirit-breaker | horned charger | ✓ |
+| `centaur` | centaur-warrunner | horse-torso centaur | ✓ |
+| `energy` | arc-warden, outworld-destroyer, razor | energy construct | ✓ |
+| `abomination` | pudge, undying | bloated undead/brute | ✓ |
 | `crab` (`crabenemy.glb`) | tidehunter | aquatic crustacean | leviathan/fish-man → crab is a fair aquatic stand-in |
 | `bear` (CUSTOM-GEN) | ursa | bear | ✓ |
 | `treant` (CUSTOM-GEN) | treant-protector | walking tree | ✓ |
@@ -136,24 +165,23 @@ These reuse vendored Quaternius creeps (DL-CC0) as shared bodies via `heroBaseUr
 ### 2.3 Bespoke hero downloads (DL) — preferred over shared base
 
 These four mount through `heroAssetEntry` *before* the shared base, because the shared
-stand-in read too generic. But silhouette was the only axis weighed — three of the
-four are **static**, which trades motion for a better still:
+stand-in read too generic. The old static downloads are retired; all four live entries
+are generated animated bodies:
 
 | Hero | GLB | Source | Silhouette | Animation |
 |---|---|---|---|---|
-| `tusk` | walrus | Poly by Google, CC-BY | walrus-man ✓ (better than `yeti`) | ✗ **static — was animated on `yeti`** |
-| `hoodwink` | squirrel | Poly by Google, CC-BY | squirrel ✓ (better than `fox`) | ✗ **static — was animated on `fox`** |
-| `gyrocopter` | helicopter | kazuma, CC0 | gyro ✓ | ✗ **static** |
-| `snapfire` | velociraptor | Quaternius, CC0 | lizard mount ✓ | ✓ animated (the model to copy) |
+| `tusk` | generated walrus-man | us | walrus-man ✓ | ✓ animated |
+| `hoodwink` | generated squirrel archer | us | squirrel ✓ | ✓ animated |
+| `gyrocopter` | generated gyro + pilot | us | gyro ✓ | ✓ animated |
+| `snapfire` | generated lizard mount + rider | us | mount + rider ✓ | ✓ animated |
 
-`snapfire` is the template: a download that wins on silhouette *and* keeps clips. The
-other three need either an animated replacement or, if none exists, a decision to fall
-back to the animated shared base rather than ship a static body (Section 6-A0).
+These close the static-body regression while keeping the optional-assets fallback.
 
-### 2.4 Holdouts (CUSTOM-GEN) — the biggest upgrade opportunity
+### 2.4 Holdouts (CUSTOM-GEN) — reduced to the abstract set
 
-11 heroes ship generated abstract art (`holdouts/<id>.glb` signature +
-`holdouts/replacements/<id>.glb` animated). These are the lowest-fidelity hero assets.
+4 heroes ship generated abstract art (`holdouts/<id>.glb` signature +
+`holdouts/replacements/<id>.glb` animated). These stay generated because their source
+forms are abstract.
 
 | Holdout | Source form | Procedural defensible? | Better-asset opportunity |
 |---|---|---|---|
@@ -161,17 +189,16 @@ back to the animated shared base rather than ship a static body (Section 6-A0).
 | `enigma` | void / eldritch mass | **Yes** | keep generated |
 | `morphling` | living water | **Yes** | keep generated |
 | `ancient-apparition` | floating ice spirit | **Yes** | keep generated |
-| `leshrac` | tormented horned mage | partial | could move to `demon` base |
-| `phoenix` | fire bird | **No** | reuse `flier.glb` (recolor fire) |
-| `batrider` | rider on a flying bat | **No** | reuse `flier.glb` |
-| `naga-siren` | serpent-woman | **No** | reuse `serpent.glb` |
-| `medusa` | gorgon (snake body) | **No** | reuse `serpent.glb` |
-| `lone-druid` | druid + spirit bear | **No** | reuse `bear.glb` |
-| `bane` | nightmare fiend | partial | could move to `demon` base |
+| `leshrac` | tormented horned mage | moved | `demon` base |
+| `phoenix` | fire bird | moved | `flier.glb` |
+| `batrider` | rider on a flying bat | moved | `flier.glb` |
+| `naga-siren` | serpent-woman | moved | `serpent.glb` |
+| `medusa` | gorgon (snake body) | moved | `serpent.glb` |
+| `lone-druid` | druid + spirit bear | moved | `bear.glb` |
+| `bane` | nightmare fiend | moved | `demon` base |
 
-`naga-siren`, `medusa`, `lone-druid`, `phoenix`, `batrider`, `leshrac`, `bane` already
-have a *better in-repo asset* available — they're abstract generated only because they
-predate those families being added. See Section 6 action A.
+`naga-siren`, `medusa`, `lone-druid`, `phoenix`, `batrider`, `leshrac`, and `bane`
+have moved off generated holdouts onto animated bases.
 
 ---
 
@@ -185,26 +212,27 @@ catches **summoned minions** (build `biped` → `goblin`) and any future unmappe
 | Creep | Maps to | Family read | Faithful? |
 |---|---|---|---|
 | kobold, kobold-foreman | `goblin` | small humanoid | ⚠ kobolds are ratty miners; passable |
-| hill-troll | `orc` | brute | ⚠ trolls usually read tribal (see 3.2-C) |
-| vhoul-assassin | `goblin` | small green humanoid | ✗ **vhoul are desert undead/skeletal** — misread |
-| gnoll-assassin | `goblin` | small humanoid | ✗ **gnolls are hyena-folk** — misread (no gnoll asset) |
+| hill-troll | `tribal` | troll/caster family | ✓ |
+| vhoul-assassin | `skeleton` | undead | ✓ downloaded CC0 skeleton |
+| gnoll-assassin | `gnoll` | hyena-folk | ✓ generated gnoll |
 | satyr-banisher, satyr-mindstealer | `demon` | horned fiend | ✓ |
 | prowler-shaman, prowler-acolyte | `tribal` | shaman | ✗ **prowlers are satyrs** — should match the satyrs above (3.2-A) |
 | hellbear | `bear` | bear | ✓ |
-| wildwing, wildwing-ripper, enraged-wildkin | `bear` | owlbear | ✓ |
-| polar-furbolg | `yeti` | white furry beast | ⚠ furbolgs are bear-folk; `yeti` chosen for frost read (3.2-E) |
+| wildwing, wildwing-ripper, enraged-wildkin | `owlbear` | owlbear | ✓ generated winged bear |
+| polar-furbolg | `bear` | bear-folk | ✓ |
 | harpy-stormcrafter, harpy-scout | `flier` | winged | ✓ |
 | granite-golem, rock-golem, mud-golem | `golelingevolved` | rock golem | ✓ |
-| frostbitten-golem | `yeti` | white furry beast | ✗ **named a golem, mapped to a beast** (3.2-D) |
+| frostbitten-golem | `golelingevolved` | frost golem | ✓ |
 | ghost, fell-spirit | `ghost` | spectre | ✓ |
 | alpha-wolf, giant-wolf | `wolf` | wolf | ✓ |
-| ice-shaman, dark-troll, dark-troll-summoner, ogre-frostmage | `tribal` | shaman/voodoo | ⚠ mixed (ogre + troll on one family, see 3.2-B/C) |
-| centaur-courser, centaur-conqueror | `bull` | horned quadruped | ⚠ **centaurs lose the humanoid torso** (no centaur asset) |
+| ice-shaman, dark-troll, dark-troll-summoner | `tribal` | shaman/voodoo | ✓ |
+| ogre-frostmage | `orcenemy` | ogre/orc caster | ✓ |
+| centaur-courser, centaur-conqueror | `centaur` | horse-torso centaur | ✓ |
 | thunderhide, ancient-thunderhide | `bull` | horned beast | ✓ |
 | ogre-bruiser | `orcenemy` | orc brute | ✓ (deliberately split from `orc`) |
 | ogre-magi-large | `orc` | orc brute | ✓ |
 | black-dragon | `dragonevolved` | dragon | ✓ |
-| elder-jungle-stalker | `stag` | antlered beast | ✓ |
+| elder-jungle-stalker | `wolf` | predator | ✓ |
 | *(any summon minion)* | `goblin` (via build) | small humanoid | ⚠ all summons read as goblins (3.3) |
 
 ### 3.2 Family-consistency flags
@@ -220,16 +248,13 @@ intended "not all identical orc" choice and is fine. The `ogre-frostmage` → `t
 is the outlier; it's defensible as a caster read but breaks the ogre silhouette. Note
 or move to an orc-family body with a caster palette.
 
-**C. Troll family is split.** `hill-troll` → `orc`; `dark-troll(+summoner)` → `tribal`.
-Two different troll reads. Minor; document the intent (hill = bulky brute, dark = caster).
+**C. Troll family is unified.** `hill-troll`, `dark-troll`, and `dark-troll-summoner`
+all resolve to `tribal`.
 
-**D. `frostbitten-golem` → `yeti` is the clearest mismatch.** It's named a *golem* and
-shares the golem role with granite/rock/mud (all on `golelingevolved`), but renders as
-a furry yeti. Recommend `golelingevolved` with a frost-blue palette for family unity.
+**D. `frostbitten-golem` → `golelingevolved` is landed.** It now shares the golem
+family with granite/rock/mud.
 
-**E. `polar-furbolg` → `yeti`.** Furbolgs are bear-folk; `hellbear`/wildkin are on
-`bear`. `yeti` was chosen for the white/frost read. Defensible but inconsistent — could
-move to `bear` with a frost palette to unify the bear family.
+**E. `polar-furbolg` → `bear` is landed.** Furbolgs now share the bear family.
 
 ### 3.3 Summon minions all read as goblins
 
@@ -242,12 +267,9 @@ rows (e.g. dark-troll skeletons → `ghost`/undead, prowler → `demon`).
 
 ### 3.4 Faithfulness flags (creeps)
 
-- `vhoul-assassin` → `goblin`: vhoul are desert undead. A skeletal/rogue or `demon`
-  read would be more faithful; no exact asset exists.
-- `gnoll-assassin` → `goblin`: gnolls are hyena-folk; no gnoll GLB. Closest current
-  options are weak. Download candidate.
-- `centaur-courser` / `centaur-conqueror` → `bull`: no centaur GLB, so the
-  horse-torso humanoid is lost. Download candidate.
+- `vhoul-assassin` → `skeleton`: landed with downloaded CC0 skeleton.
+- `gnoll-assassin` → `gnoll`: landed with generated gnoll.
+- `centaur-courser` / `centaur-conqueror` → `centaur`: landed with generated centaur.
 
 ---
 
@@ -272,7 +294,7 @@ for the HUD icon is per-item sprite → token sprite → procedural glyph (`icon
 
 | Layer | What it is | Count | Provenance | Animation | Where |
 |---|---|---|---|---|---|
-| **3D held GLB** | signature weapon mounted on the hero's hand socket when equipped | 13 | CUSTOM-GEN (script-assembled box/cone/cylinder primitives) | rides the hero rig — static mesh is fine | `weapons/items/*.glb`, `itemWeaponGlbUrl` + `attachSignatureItemWeapon` |
+| **3D held GLB** | signature weapon mounted on the hero's hand socket when equipped | 13 | CUSTOM-GEN (tapered blades, ellipsoid cores/gems, round parts) | rides the hero rig — static mesh is fine | `weapons/items/*.glb`, `itemWeaponGlbUrl` + `attachSignatureItemWeapon` |
 | **2D icon sprite** | per-item silhouette filled + tinted into the gem-slot HUD | 191 + 56 tokens | DL-CCBY (game-icons.net, single-path SVGs) | n/a (static UI) | `ui/items/*.svg`, baked to `item-glyphs.generated.ts` |
 | **Procedural glyph** | hand-drawn canvas glyph floor when no sprite / no `Path2D` | ~40 tokens | CUSTOM-GEN | n/a | `icons.ts` `ITEM_GLYPHS` / `GLYPHS` |
 
@@ -289,20 +311,17 @@ monkey-king-bar, abyssal-blade, mjollnir, satanic, bloodthorn, desolator.
   hero's attack/idle motion, so a static mesh is correct (unlike a body GLB).
 - **Thematic consistency:** ✓ all read as artifact-tier weapons/scepters with an
   emissive accent material; palette per item.
-- **Faithfulness:** fair — they're recognizable by silhouette (sun-blade = radiance,
-  hex-scythe = scythe-of-vyse, frost-orb scepter = eye-of-skadi) but they are blocky
-  primitive assemblies, the lowest-fidelity 3D in the project after the holdout blobs.
+- **Faithfulness:** good for the marquee tier — the Phase 5 pass gives the key items
+  clearer authored silhouettes (sun-blade = radiance, hex-scythe = scythe-of-vyse,
+  frost-orb scepter = eye-of-skadi, storm hammer = mjollnir).
 - **Coverage:** only 13 of ~150 items have a 3D model. This is **by design** (ASSET_GAPS
   P3: most items stay procedural/UI). But several weapon-core artifacts that *would*
   read well as held models have none — candidates if the tier ever expands:
   `crystalys`, `diffusal-blade`, `maelstrom`, `silver-edge`, `echo-sabre`, `nullifier`,
   `skull-basher`, `ethereal-blade`, `dagon`, `meteor-hammer`, `heavens-halberd`.
 
-Upgrade priority: **moderate, and part of the bar** (Phase 5 is required, not optional).
-They're motion-correct so urgency is lower than a static body, but "production-ready"
-means they read as authored silhouettes, not raw primitive assemblies — batch-upgrade the
-generator to smoother shapes (bevels/lathe instead of raw boxes) and give the marquee
-artifacts recognizable shapes. Replace an individual one sooner if it looks wrong.
+Upgrade status: **Phase 5 landed.** Future work here is opportunistic replacement with
+hand-authored downloads, not a production blocker.
 
 ### 5.2 2D icon sprites (191 + 56, DL-CCBY)
 
@@ -324,63 +343,49 @@ artifacts recognizable shapes. Replace an individual one sooner if it looks wron
 floor that keeps the HUD readable with `public/assets/` empty. They are custom but
 intentionally crude — the boot floor, not a shipping target. Leave as-is.
 
-### 5.4 Hero default weapons (80, CUSTOM-GEN)
+### 5.4 Hero default weapons (71, CUSTOM-GEN)
 
-`weapons/heroes/*.glb` — generated default hand weapons for the humanoid cohorts, one
-per hero. Motion-correct (ride the hero rig). They're the main per-hero identity signal
-*within* a shared-body cohort (Section 2.1), so they matter more than item weapons but
-are still low fidelity. Upgrade priority: **low–medium** — a better generated weapon set
-(or per-hero signature shapes) is the cheapest way to differentiate the 80 same-body
-heroes without new body GLBs.
+`weapons/heroes/*.glb` — generated default hand weapons for the remaining humanoid
+KayKit cohorts, one per hero. Motion-correct (ride the hero rig). They remain the main
+per-hero identity signal within a shared-body cohort.
 
 ---
 
 ## 6. Prioritized actions
 
-### A0. Fix the static body GLBs (animation regression) — do first
+### A0. Fix the static body GLBs (animation regression) — landed
 
-`tusk`, `hoodwink`, `gyrocopter` ship static and the game relies on motion. For each,
-pick one:
-
-1. **Best:** find an animated CC0/CC-BY replacement with idle + locomotion (walrus,
-   squirrel, gyrocopter/helicopter with rotor spin) and reprocess through
-   `asset-gaps-polypizza.json` with `keepClips`/`renameClips` like `snapfire`.
-2. **Fallback:** if no animated download exists, drop the bespoke entry and let the
-   hero fall back to its animated shared base (`tusk`→`yeti`, `hoodwink`→`fox`). A
-   moving generic body beats a frozen specific one.
-3. **Last resort:** add a procedural idle bob/rotor-spin in `mountHeroModel` so even a
-   static mesh isn't fully frozen.
-
-Make "ships idle + a locomotion clip" a gate in `assets:check` so a static body GLB
-can't land again.
+`tusk`, `hoodwink`, and `gyrocopter` now ship generated animated bespoke bodies with
+idle/run/attack/cast/death. The old static downloads are retired, and `assets:check`
+now fails body GLBs that lack idle + locomotion clips.
 
 ### A. Remap holdouts onto existing better assets (no download needed)
 
-Highest value, zero new assets. Move these off generated abstract holdout art onto
-in-repo creature bodies, recolored:
+Highest value, zero new assets. These have landed:
 
 | Hero | From | To | Asset exists? |
 |---|---|---|---|
-| `naga-siren` | generated holdout | `serpent.glb` | ✓ shipped |
-| `medusa` | generated holdout | `serpent.glb` | ✓ shipped |
-| `lone-druid` | generated holdout | `bear.glb` | ✓ shipped |
-| `phoenix` | generated holdout | `flier.glb` | ✓ shipped |
-| `batrider` | generated holdout | `flier.glb` | ✓ shipped |
+| `naga-siren` | generated holdout | `serpent.glb` | ✓ landed |
+| `medusa` | generated holdout | `serpent.glb` | ✓ landed |
+| `lone-druid` | generated holdout | `bear.glb` | ✓ landed |
+| `phoenix` | generated holdout | `flier.glb` | ✓ landed |
+| `batrider` | generated holdout | `flier.glb` | ✓ landed |
+| `bane` | generated holdout | `demon.glb` | ✓ landed |
+| `leshrac` | generated holdout | `demon.glb` | ✓ landed |
 
 All five targets (`serpent`, `bear`, `flier`) are animated, so this is animation-safe —
 it swaps generated abstract art for a faithful *and* animated body.
 
-Implementation: add these to a creature cohort in `HERO_COHORTS` (or a holdout→base
-override) instead of `PROCEDURAL_HOLDOUTS`, and drop them from the holdout sets. Keep
-`io`, `enigma`, `morphling`, `ancient-apparition` generated (genuinely abstract).
-`leshrac`, `bane` could optionally move to `demon`.
+`io`, `enigma`, `morphling`, and `ancient-apparition` stay generated because they are
+genuinely abstract.
 
-### B. Fix creep family consistency (mapping-only edits in `CREATURE_BY_ID`)
+### B. Fix creep family consistency (mapping-only edits in `CREATURE_BY_ID`) — landed
 
-1. `prowler-shaman`, `prowler-acolyte`: `tribal` → `demon` (match the satyrs).
-2. `frostbitten-golem`: `yeti` → `golelingevolved` (match the golems; frost palette).
-3. Optional: `polar-furbolg`: `yeti` → `bear` (unify bear family, frost palette).
-4. Optional: `ogre-frostmage`: `tribal` → `orc`/`orcenemy` (unify ogre family).
+1. `prowler-shaman`, `prowler-acolyte`: `tribal` → `demon`.
+2. `frostbitten-golem`: `yeti` → `golelingevolved`.
+3. `polar-furbolg`: `yeti` → `bear`.
+4. `ogre-frostmage`: `tribal` → `orcenemy`.
+5. `wildwing`/wildkin: `bear` → `owlbear`.
 
 ### C. Fix the stale code comment
 
@@ -394,13 +399,14 @@ remove it.
 
 | Need | For | Note |
 |---|---|---|
-| animated walrus | `tusk` | replace the static walrus (A0) |
-| animated squirrel/rodent | `hoodwink` | replace the static squirrel (A0) |
-| animated gyro/helicopter | `gyrocopter` | replace the static helicopter (A0) |
-| scorpion (animated) | `sand-king` | better than `spider` |
-| centaur (animated) | centaur-courser/conqueror, centaur-warrunner | no current centaur asset |
-| gnoll / hyena-beast (animated) | `gnoll-assassin` | currently goblin |
-| skeletal/undead rogue (animated) | `vhoul-assassin` | currently goblin |
+| animated walrus | `tusk` | landed as generated body |
+| animated squirrel/rodent | `hoodwink` | landed as generated body |
+| animated gyro/helicopter | `gyrocopter` | landed as generated body |
+| scorpion (animated) | `sand-king` | landed as generated body |
+| centaur (animated) | centaur-courser/conqueror, centaur-warrunner | landed as generated body |
+| gnoll / hyena-beast (animated) | `gnoll-assassin` | landed as generated body |
+| skeletal/undead rogue (animated) | `vhoul-assassin` | landed as downloaded CC0 skeleton |
+| owlbear / winged bear (animated) | wildkin/wildwing | landed as generated body |
 
 ### E. Replace generated creature families with better downloads (optional)
 
@@ -410,9 +416,9 @@ heroes, so the upgrade propagates widely.
 
 ### F. Item + hero weapons (CUSTOM-GEN) — part of the bar (Phase 5 required)
 
-- 13 item weapon GLBs: motion-correct (hand-socket) but raw primitive assemblies;
-  Phase 5 (required) batch-smooths the generator and gives the marquee artifacts
-  recognizable silhouettes. Replace individually sooner if one looks wrong.
+- 13 item weapon GLBs: **done**. Phase 5 polish added tapered blades, ellipsoid
+  gems/cores, higher-segment round parts, and stronger silhouettes for the marquee
+  artifacts.
 - Hero default weapons: **done** (Phase 4 Tier A). Every humanoid-cohort hero carries a
   per-hero signature weapon shape (`STYLE_BY_HERO` + per-style geometry), so cohort-mates
   diverge by weapon silhouette + palette. Keep it covered by tests.
@@ -461,81 +467,70 @@ Production-ready means all of these hold and are enforced by `assets:check` + te
    carry recognizable silhouettes, not raw primitive blocks (Phase 4 Tier A + Phase 5).
 8. **Gates green.** `npm run assets:check && npm run typecheck && npm test && npm run build`.
 
-### Phase 0 — Guardrails (no art; do first)
+### Phase 0 — Guardrails (landed)
 
-Lock the bar before changing anything, so fixes can't regress.
+The bar is locked so fixes cannot regress.
 
-- Add an **animation gate** to `assets:check`: any GLB under `heroes/`, `creeps/`,
-  `holdouts/replacements/` must expose ≥1 locomotion/idle clip (held weapons exempt).
-- Add a **family-consistency lint** in `data-lint.test.ts`: assert the lore groups in
-  §3.2 each resolve to a single family (with an allowlist for documented exceptions).
-- Populate `manifest.json` `source` in `build_assets.mjs` (Section 7).
-- Fix the stale `primal-beast` comment (Section 6-C).
-- **Exit:** gates green; the lints fail loudly if any later phase breaks #1 or #2.
+- `assets:check` validates body animation: any GLB under `heroes/`, `creeps/`, or
+  `holdouts/replacements/` must expose idle + locomotion clips (held weapons exempt).
+- `data-lint.test.ts` and `model-cache.test.ts` pin the family remaps and disabled
+  static-body replacement behavior.
+- `manifest.json` `source` is populated by `build_assets.mjs`.
+- The stale `primal-beast` comment was removed.
+- **Exit:** gates green; the lints fail loudly if a later phase breaks the bar.
 
-### Phase 1 — Zero-download consistency wins (mapping edits only)
+### Phase 1 — Zero-download consistency wins (landed)
 
-All targets already shipped and animated; pure `assets.ts` edits.
+All targets already shipped and animated; these were pure `assets.ts` edits.
 
-- Remap 5 holdouts onto animated families (Section 6-A): `naga-siren`,`medusa`→`serpent`;
-  `lone-druid`→`bear`; `phoenix`,`batrider`→`flier`. Drop them from `PROCEDURAL_HOLDOUTS`.
-- Creep family fixes (Section 6-B): prowlers→`demon`; `frostbitten-golem`→`golelingevolved`
-  (frost palette); `polar-furbolg`→`bear` (frost palette); `ogre-frostmage`→`orcenemy`.
-- Give summoned minions a sensible family instead of the goblin fallback (Section 3.3):
-  add `*-minion` `CREATURE_BY_ID` rows for the dark-troll and prowler summons.
-- **Exit:** §3.2 family lint passes with no exceptions; holdout set down to the 4 truly
-  abstract heroes (+ optional `leshrac`/`bane`). Visual QA the remapped heroes/creeps.
+- Remapped animal-shaped holdouts onto animated families: `naga-siren`,`medusa`→`serpent`;
+  `lone-druid`→`bear`; `phoenix`,`batrider`→`flier`; `bane`,`leshrac`→`demon`.
+- Creep family fixes landed: prowlers→`demon`; `frostbitten-golem`→`golelingevolved`;
+  `polar-furbolg`→`bear`; `ogre-frostmage`→`orcenemy`.
+- Summoned minions now have sensible family rows for dark-troll and prowler summons.
+- **Exit:** family lint passes; holdout set is down to the 4 truly abstract heroes.
 
-### Phase 2 — Kill the static-body regressions (targeted downloads)
+### Phase 2 — Kill the static-body regressions (landed)
 
-The three static bodies are the only hard *animation* defects.
-
-- For `tusk` / `hoodwink` / `gyrocopter`: source an **animated** CC0/CC-BY replacement
-  (Section 6-A0 step 1) and process it through `asset-gaps-polypizza.json` with
-  `keepClips`/`renameClips` like `snapfire`.
-- If no animated asset is found for one, **revert it to its animated shared base**
-  (`tusk`→`yeti`, `hoodwink`→`fox`, `gyrocopter`→`goblin`) rather than ship static.
-- **Exit:** zero static bodies; animation gate (Phase 0) passes with no exemptions.
+`tusk`, `hoodwink`, and `gyrocopter` now ship generated animated bespoke bodies.
+`assets:check` passes with zero static body exemptions.
 
 ### Phase 3 — Faithfulness downloads (close the species gaps)
 
 Replace the "closest available" stand-ins with faithful, animated creatures.
 
-- Download animated, recolor-friendly CC0/CC-BY creatures for the Section 6-D needs:
-  scorpion (`sand-king`), centaur (centaur creeps + `centaur-warrunner`), gnoll/hyena
-  (`gnoll-assassin`), undead/skeletal rogue (`vhoul-assassin`).
-- Wire each via `CREATURE_BY_ID` (creeps) or a creature cohort (`sand-king`).
-- For anything not found, leave the current mapping and **add a comment** documenting
-  the compromise (satisfies done-criterion #4 without blocking).
-- **Exit:** every species gap is either faithful or explicitly justified in code.
+- Landed with generated bodies: scorpion (`sand-king`), centaur (centaur creeps +
+  `centaur-warrunner`), gnoll/hyena (`gnoll-assassin`), and owlbear/wildkin.
+- Landed with downloaded CC0 art: skeleton (`vhoul-assassin`).
+- **Exit:** every original Phase 3 species gap is either faithful or explicitly
+  justified in code.
 
 ### Phase 4 — Hero silhouette identity (largest effort, do last)
 
-The 80 same-body cohort heroes (Section 2.1) are the biggest remaining unfaithfulness.
-Full per-hero bodies are out of scope; this phase de-risks the *worst* reads only.
+The remaining 71 same-body cohort heroes (Section 2.1) are the biggest remaining
+unfaithfulness. Full per-hero bodies are out of scope; this phase de-risks the worst
+reads first.
 
 - **Tier A (cheap, high value) — landed:** the generated hero weapon set (Section 5.4)
   now carries a per-hero signature shape (`STYLE_BY_HERO` + per-style geometry in
   `generate_hero_weapons.mjs`), so cohort-mates diverge by weapon silhouette + palette,
   not palette alone. Pinned by tests.
 - **Tier B (mapping edits, animated bases) — landed for the clearest reads:** the worst
-  non-humanoid cohort offenders now ride animated creature bodies — `winter-wyvern`→
-  `dragonevolved`, `clockwerk`/`timbersaw`→`goblin` (mech), `death-prophet`→`ghost`
-  (banshee). Remaining offenders (`pudge`/`undying`→a brute/zombie body, the energy
-  elementals) need a download and stay on their cohort body for now.
+  non-humanoid cohort offenders now ride animated creature/generated bodies —
+  `winter-wyvern`→`dragonevolved`, `clockwerk`/`timbersaw`→`goblin`,
+  `death-prophet`→`ghost`, `arc-warden`/`outworld-destroyer`/`razor`→`energy`, and
+  `pudge`/`undying`→`abomination`.
 - **Tier C (backlog):** bespoke per-hero downloads for marquee heroes, opportunistically.
 - **Exit:** no hero whose Dota silhouette is strongly non-humanoid is stuck on a plain
   humanoid base; the rest are accepted cohort stand-ins by design.
 
-### Phase 5 — Item + weapon polish (required)
+### Phase 5 — Item + weapon polish (landed)
 
-The held layer has to read as authored too, so this is part of the production bar, not
-gravy. (Phase 4 Tier A already landed per-hero weapon-shape divergence; this phase closes
-the item-weapon side and keeps the hero side covered.)
+The held layer has to read as authored too, so this is part of the production bar.
+Phase 5 now covers both item-weapon polish and the hero side.
 
-- Smooth the generated item-weapon generator (bevels/lathe vs raw boxes) and give the
-  marquee artifacts the recognizable silhouettes called out in §5.1 (scythe, hammer,
-  orb, sun); add GLBs for the weapon-cores listed there as the tier expands.
+- The generated item-weapon generator now gives the marquee artifacts recognizable
+  silhouettes called out in §5.1 (scythe, hammer, orb, sun).
 - Keep the per-hero weapon-shape divergence (Phase 4 Tier A) covered by tests so a
   regression to one shared shape can't land.
 - Leave the game-icons sprite set and procedural floor as-is (keep CC-BY attribution).
@@ -550,28 +545,45 @@ NonCommercial/ShareAlike (CC-BY-NC / CC-BY-SA / CC-BY-NC-SA) with attribution
 body** (idle + locomotion); reject static meshes. Process through `tmp/asset_src/` → a
 spec under `scripts/assets/specs/` → `build_assets.mjs`, then add an `ASSETS.md` row.
 
-| Need | For | Phase | If not found |
+| Need | For | Phase | Status |
 |---|---|---|---|
-| animated walrus | `tusk` | 2 | revert to `yeti` base |
-| animated squirrel/rodent | `hoodwink` | 2 | revert to `fox` base |
-| animated gyrocopter/helicopter | `gyrocopter` | 2 | revert to `goblin` base + rotor spin |
-| animated scorpion | `sand-king` | 3 | keep `spider`, comment |
-| animated centaur | centaur creeps, `centaur-warrunner` | 3 | keep `bull`, comment |
-| animated gnoll/hyena | `gnoll-assassin` | 3 | keep `goblin`, comment |
-| animated skeletal/undead rogue | `vhoul-assassin` | 3 | keep `goblin`, comment |
-| animated creature bodies for Tier-B heroes | §2.1 offenders | 4 | keep cohort body |
+| animated walrus | `tusk` | 2 | generated body landed |
+| animated squirrel/rodent | `hoodwink` | 2 | generated body landed |
+| animated gyrocopter/helicopter | `gyrocopter` | 2 | generated body landed |
+| animated scorpion | `sand-king` | 3 | generated body landed |
+| animated centaur | centaur creeps, `centaur-warrunner` | 3 | generated body landed |
+| animated gnoll/hyena | `gnoll-assassin` | 3 | generated body landed |
+| animated skeletal/undead rogue | `vhoul-assassin` | 3 | downloaded CC0 skeleton landed |
+| animated owlbear / winged bear | wildkin/wildwing | 3 | generated body landed |
+| animated creature bodies for Tier-B heroes | §2.1 offenders | 4 | generated/shared bases landed for the worst offenders |
+| animated fish-man | `slardar`, `slark` | 6 | generated `fishman` family landed |
+| brute body for the ogre-mount hero | `alchemist` | 6 | shares the generated `abomination` body |
 
 ### Sequencing summary
 
-| Phase | Work | Downloads | Effort | Impact |
+| Phase | Work | Downloads | Effort | Status |
 |---|---|---|---|---|
-| 0 | guardrails + lints + comment | none | S | prevents regressions |
-| 1 | holdout remaps + creep family fixes | none | S | high — consistency |
-| 2 | fix 3 static bodies | 0–3 | M | high — animation |
-| 3 | faithfulness species downloads | 0–4 | M | medium |
-| 4 | hero identity (weapons + worst offenders) | a few | L | medium–high |
-| 5 | item/weapon polish (required) | a few | M | medium |
+| 0 | guardrails + lints + comment | none | S | landed |
+| 1 | holdout remaps + creep family fixes | none | S | landed |
+| 2 | fix 3 static bodies | none | M | landed with generated bodies |
+| 3 | faithfulness species bodies | 1 download + generated bodies | M | landed |
+| 4 | hero identity (weapons + worst offenders) | generated/shared bodies | L | landed for worst offenders |
+| 5 | item/weapon polish (required) | none | M | landed |
+| 6 | long-tail hero identity | generated `fishman` + shared/remap | M | landed |
 
-Run the gates after every phase: `npm run assets:check && npm run typecheck && npm test
-&& npm run build`. Phases 0–4 and the hero-weapon side of Phase 5 are landed; the
-item-weapon polish (Phase 5) and the download-gated faithfulness/identity tail remain.
+Run the gates after every asset batch: `npm run assets:check && npm run typecheck &&
+npm test && npm run build`. Phases 0–6 are landed for the required production bar.
+
+**Phase 6 (long-tail hero identity) — landed.** Every strongly non-humanoid hero now
+rides an animated creature/generated base: `natures-prophet → treant`,
+`necrophos → ghost`, `meepo → goblin`, `alchemist → abomination` (brute body reads as
+his ogre mount), and `slardar` + `slark` → the new generated `fishman` family. The
+three heroes still on a humanoid base are genuinely bipedal — `faceless-void` (knight,
+documented), `pangolier` (moved to rogue), `bloodseeker` (moved to barbarian) — where a
+polished KayKit body is more faithful than a crude generated one.
+
+The only remaining work is **opportunistic, not required**: swapping generated
+stand-in bodies (`flier`, `bear`, `treant`, `fishman`, `abomination`, etc.) for better
+authored/downloaded animated meshes. That is gated on sourcing and vetting external
+CC0/CC-BY assets (the raw packs are not in-repo), so it stays a backlog item rather
+than a blocker — the generated families are the production floor and pass every gate.

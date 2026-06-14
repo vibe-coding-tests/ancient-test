@@ -15,7 +15,7 @@ import {
   refreshAvailability,
   type QuestContext
 } from '../core/quests';
-import { Game, newGameSave } from '../systems/game';
+import { Game, newGameSave, SAVE_VERSION } from '../systems/game';
 import type { GameSave, QuestDef, QuestGiverDef } from '../core/types';
 
 beforeAll(() => registerAllContent());
@@ -304,7 +304,8 @@ function fullSave(): GameSave {
     facetIdx: 0,
     hpPct: 1,
     manaPct: 1,
-    abilityCooldowns: [0, 0, 0, 0]
+    abilityCooldowns: [0, 0, 0, 0],
+    tagGaugeReadyAt: 0
   }));
   save.badges = [...REG.gyms.values()].map((g) => g.badgeId);
   return save;
@@ -403,7 +404,7 @@ describe('quests wired into Game (headless)', () => {
     game.refreshQuests();
     game.advanceQuests({ kind: 'kill-creeps', amount: 5, tier: 'small', regionId: game.region.id });
     const save = game.buildSave();
-    expect(save.version).toBe(7);
+    expect(save.version).toBe(SAVE_VERSION);
     const cull = save.quests['bounty-cull-wilds'];
     expect(cull?.progress[0]).toBe(5);
     const reload = Game.headless(save);
@@ -417,7 +418,7 @@ describe('quests wired into Game (headless)', () => {
     delete v6.quests;
     const migrated = Game.migrateSave(v6);
     expect(migrated).not.toBeNull();
-    expect(migrated!.version).toBe(7);
+    expect(migrated!.version).toBe(SAVE_VERSION);
     expect(migrated!.quests).toEqual({});
   });
 

@@ -55,7 +55,8 @@ function fullPartySave(level = 30): GameSave {
     facetIdx: 0,
     hpPct: 1,
     manaPct: 1,
-    abilityCooldowns: [0, 0, 0, 0]
+    abilityCooldowns: [0, 0, 0, 0],
+    tagGaugeReadyAt: 0
   }));
   save.badges = [...REG.gyms.values()].map((g) => g.badgeId);
   return save;
@@ -84,7 +85,8 @@ function addBenchHero(save: GameSave, heroId: string, level = 20, items: string[
     facetIdx: 0,
     hpPct: 1,
     manaPct: 1,
-    abilityCooldowns: [0, 0, 0, 0]
+    abilityCooldowns: [0, 0, 0, 0],
+    tagGaugeReadyAt: 0
   });
 }
 

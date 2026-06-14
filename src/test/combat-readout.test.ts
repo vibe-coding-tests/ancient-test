@@ -32,7 +32,7 @@ function soloSave(): GameSave {
     heroId: 'juggernaut', level: 20, xp: xpForLevel(20),
     items: [null, null, null, null, null, null], neutralSlot: null,
     talentPicks: [0, 0, 0, 0], gambits: [], echo: freshEchoProgress(),
-    facetIdx: 0, hpPct: 1, manaPct: 1, abilityCooldowns: [0, 0, 0, 0]
+    facetIdx: 0, hpPct: 1, manaPct: 1, abilityCooldowns: [0, 0, 0, 0], tagGaugeReadyAt: 0
   }];
   save.badges = [...REG.gyms.values()].map((g) => g.badgeId);
   return save;

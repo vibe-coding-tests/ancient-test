@@ -224,7 +224,7 @@ function zoneEscapePoint(z: Zone, u: Unit): Vec2 | null {
   return add(closest, scale(safeDir, z.width / 2 + u.radius + TUNING.ai.zoneEscapeMargin));
 }
 
-function evalCondition(sim: Sim, u: Unit, cond: GambitCondition, focus: Unit | undefined): boolean {
+export function evalCondition(sim: Sim, u: Unit, cond: GambitCondition, focus: Unit | undefined): boolean {
   switch (cond.k) {
     case 'always':
       return true;
@@ -278,7 +278,29 @@ function evalCondition(sim: Sim, u: Unit, cond: GambitCondition, focus: Unit | u
       return isDisabled(u.summary);
     case 'incoming-disable':
       return incomingDisable(sim, u);
+    case 'tag-in-ready':
+      return sim.time >= (u.tagGaugeReadyAt ?? 0);
+    case 'combo-setup-active':
+      return focus ? comboSetupActive(sim, focus) : false;
   }
+}
+
+// SWAP_COMBAT_OVERHAUL §3.5: a setup tag (Lockdown/Gather/Soak) leaves a
+// transient state a payoff ally cashes in. The focus carries a live setup if it
+// is under hard or soft control, or holds a lingering element aura (a soak).
+function comboSetupActive(sim: Sim, focus: Unit): boolean {
+  const s = focus.summary;
+  if (
+    s.stunned || s.rooted || s.silenced || s.hexed || s.disarmed ||
+    s.frozen || s.sleeping || s.cycloned || s.feared !== null || s.taunted !== null
+  ) {
+    return true;
+  }
+  if (s.moveSlowFactor < 0.999 || s.attackSlowTotal > 0) return true;
+  for (const aura of Object.values(focus.elementAuras)) {
+    if (aura && aura.until > sim.time) return true;
+  }
+  return false;
 }
 
 function resolveGambitTarget(sim: Sim, u: Unit, mode: GambitTargetMode, focus: Unit | undefined): { unit?: Unit; point?: Vec2 } {

@@ -198,7 +198,7 @@ describe('shared hero bases (WS-A0)', () => {
   });
 
   it('resolves shared base URLs only for shipped creature hero cohorts', () => {
-    expect(ENABLED_HERO_BASES.size).toBe(19);
+    expect(ENABLED_HERO_BASES.size).toBe(22);
     expect(heroBaseUrl(heroBaseId('broodmother'))).toBe('/assets/creeps/spider.glb');
     expect(heroBaseUrl(heroBaseId('doom'))).toBe('/assets/creeps/demon.glb');
     expect(heroBaseUrl(heroBaseId('winter-wyvern'))).toBe('/assets/creeps/dragonevolved.glb');
@@ -206,6 +206,15 @@ describe('shared hero bases (WS-A0)', () => {
     // Phase 3 generated families: sand-king (scorpion) + centaur-warrunner (centaur).
     expect(heroBaseUrl(heroBaseId('sand-king'))).toBe('/assets/creeps/scorpion.glb');
     expect(heroBaseUrl(heroBaseId('centaur-warrunner'))).toBe('/assets/creeps/centaur.glb');
+    expect(heroBaseUrl(heroBaseId('arc-warden'))).toBe('/assets/creeps/energy.glb');
+    expect(heroBaseUrl(heroBaseId('outworld-destroyer'))).toBe('/assets/creeps/energy.glb');
+    expect(heroBaseUrl(heroBaseId('razor'))).toBe('/assets/creeps/energy.glb');
+    expect(heroBaseUrl(heroBaseId('pudge'))).toBe('/assets/creeps/abomination.glb');
+    expect(heroBaseUrl(heroBaseId('undying'))).toBe('/assets/creeps/abomination.glb');
+    expect(heroBaseUrl(heroBaseId('alchemist'))).toBe('/assets/creeps/abomination.glb');
+    // Phase 6 fishman family for the two aquatic heroes.
+    expect(heroBaseUrl(heroBaseId('slardar'))).toBe('/assets/creeps/fishman.glb');
+    expect(heroBaseUrl(heroBaseId('slark'))).toBe('/assets/creeps/fishman.glb');
     // Generated P1.3 families: animal-shaped holdouts now ride animated creature bodies.
     expect(heroBaseUrl(heroBaseId('ursa'))).toBe('/assets/creeps/bear.glb');
     expect(heroBaseUrl(heroBaseId('lone-druid'))).toBe('/assets/creeps/bear.glb');
@@ -215,12 +224,12 @@ describe('shared hero bases (WS-A0)', () => {
     expect(heroBaseUrl(heroBaseId('medusa'))).toBe('/assets/creeps/serpent.glb');
     expect(heroBaseUrl(heroBaseId('treant-protector'))).toBe('/assets/creeps/treant.glb');
     expect(heroBaseUrl(heroBaseId('tidehunter'))).toBe('/assets/creeps/crabenemy.glb');
-    // Static bespoke body downloads are disabled until animated replacements exist.
-    expect(heroAssetEntry('tusk')).toBeNull();
+    // Static bespoke body downloads were replaced with generated animated body GLBs.
+    expect(heroAssetEntry('tusk')?.modelUrl).toBe('/assets/heroes/tusk.glb');
     expect(heroBaseUrl(heroBaseId('tusk'))).toBe('/assets/creeps/yeti.glb');
-    expect(heroAssetEntry('hoodwink')).toBeNull();
+    expect(heroAssetEntry('hoodwink')?.modelUrl).toBe('/assets/heroes/hoodwink.glb');
     expect(heroBaseUrl(heroBaseId('hoodwink'))).toBe('/assets/creeps/fox.glb');
-    expect(heroAssetEntry('gyrocopter')).toBeNull();
+    expect(heroAssetEntry('gyrocopter')?.modelUrl).toBe('/assets/heroes/gyrocopter.glb');
     expect(heroBaseUrl(heroBaseId('gyrocopter'))).toBe('/assets/creeps/goblin.glb');
     expect(heroBaseUrl(heroBaseId('juggernaut'))).toBeNull(); // humanoids use per-hero GLBs.
     expect(heroBaseUrl(heroBaseId('io'))).toBeNull(); // holdouts stay procedural.
@@ -289,16 +298,18 @@ describe('shared hero bases (WS-A0)', () => {
 
   it('ships the generated P1.3 creature families and wires them to creeps + hero bases', () => {
     // Each generated family file exists on disk with real bytes.
-    for (const family of ['flier', 'bear', 'treant']) {
+    for (const family of ['flier', 'bear', 'treant', 'owlbear', 'energy', 'abomination', 'fishman']) {
       const file = path.join(process.cwd(), 'public', 'assets', 'creeps', `${family}.glb`);
       expect(existsSync(file), `${family} family file`).toBe(true);
       expect(statSync(file).size, `${family} family size`).toBeGreaterThan(0);
     }
-    // Harpies and bird build fallbacks fly; owlbears/hellbear read as bears.
+    // Harpies and bird build fallbacks fly; wildkin get a winged owlbear body.
     expect(creepCreatureUrl('harpy-stormcrafter', 'bird')).toBe('/assets/creeps/flier.glb');
     expect(creepCreatureUrl('harpy-scout', undefined)).toBe('/assets/creeps/flier.glb');
     expect(creepCreatureUrl('unknown-bird', 'bird')).toBe('/assets/creeps/flier.glb');
-    expect(creepCreatureUrl('enraged-wildkin', undefined)).toBe('/assets/creeps/bear.glb');
+    expect(creepCreatureUrl('enraged-wildkin', undefined)).toBe('/assets/creeps/owlbear.glb');
+    expect(creepCreatureUrl('wildwing', undefined)).toBe('/assets/creeps/owlbear.glb');
+    expect(creepCreatureUrl('wildwing-ripper', undefined)).toBe('/assets/creeps/owlbear.glb');
     expect(creepCreatureUrl('hellbear', 'brute')).toBe('/assets/creeps/bear.glb');
     expect(creepCreatureUrl('polar-furbolg', undefined)).toBe('/assets/creeps/bear.glb');
     expect(creepCreatureUrl('frostbitten-golem', undefined)).toBe('/assets/creeps/golelingevolved.glb');
@@ -319,16 +330,12 @@ describe('shared hero bases (WS-A0)', () => {
     expect(creepCreatureUrl('phase3-naga-image', undefined)).toBe('/assets/creeps/serpent.glb');
   });
 
-  it('uses only animated downloaded bespoke hero GLBs', () => {
-    for (const id of ['snapfire']) {
+  it('uses only animated bespoke hero GLBs', () => {
+    for (const id of ['gyrocopter', 'hoodwink', 'snapfire', 'tusk']) {
       const file = path.join(process.cwd(), 'public', 'assets', 'heroes', `${id}.glb`);
       expect(existsSync(file), `${id} bespoke hero file`).toBe(true);
       expect(statSync(file).size, `${id} bespoke hero size`).toBeGreaterThan(0);
       expect(heroAssetEntry(id)?.modelUrl).toBe(`/assets/heroes/${id}.glb`);
-    }
-    for (const id of ['gyrocopter', 'hoodwink', 'tusk']) {
-      expect(BESPOKE_HERO_MODELS.has(id), `${id} disabled until animated`).toBe(false);
-      expect(heroAssetEntry(id), `${id} falls back to shared base`).toBeNull();
     }
   });
 

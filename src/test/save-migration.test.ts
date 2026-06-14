@@ -18,6 +18,7 @@ describe('save round-trip and migration', () => {
     expect(save.loadouts).toEqual({});
     expect(save.dungeonProgress).toEqual({});
     expect(save.quests).toEqual({});
+    expect(save.roster[0].tagGaugeReadyAt).toBe(0);
     expect(save.reputation).toBe(0);
     expect(save.codexUnlocks).toEqual([]);
     expect(save.journalSeen).toEqual([]);
@@ -59,6 +60,19 @@ describe('save round-trip and migration', () => {
       questTrackerMax: 3
     });
     expect(Game.validateSave(save)).toBe(true);
+  });
+
+  it('migrates legacy saves with ready tag gauges', () => {
+    const current = newGameSave('juggernaut');
+    const legacy = JSON.parse(JSON.stringify(current)) as Record<string, unknown>;
+    legacy.version = 7;
+    for (const hero of legacy.roster as Record<string, unknown>[]) delete hero.tagGaugeReadyAt;
+
+    const migrated = Game.migrateSave(legacy);
+    expect(migrated).not.toBeNull();
+    expect(migrated!.version).toBe(SAVE_VERSION);
+    expect(migrated!.roster.every((hero) => hero.tagGaugeReadyAt === 0)).toBe(true);
+    expect(Game.validateSave(migrated!)).toBe(true);
   });
 
   it('round-trips custom graphics settings and defaults them for older saves', () => {

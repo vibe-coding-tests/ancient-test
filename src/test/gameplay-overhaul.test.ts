@@ -2,11 +2,13 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { registerAllContent } from '../data';
 import { TUNING } from '../data/tuning';
 import { REG } from '../core/registry';
-import { applyDamage } from '../core/combat';
+import { applyDamage, applyElementAura } from '../core/combat';
 import { itemStateFromSave } from '../core/items';
 import { buildHero } from '../core/hero-setup';
 import { normalizeCollisionObstacle, staticCircleObstacle } from '../core/collision';
+import { resolveCastPreview } from '../core/cast-preview';
 import { Game, newGameSave } from '../systems/game';
+import { tagBoonTeamValue } from '../data/tag-boons';
 import type { Unit } from '../core/unit';
 import type { ItemSave, Vec2 } from '../core/types';
 
@@ -15,6 +17,10 @@ beforeAll(() => registerAllContent());
 function moveUnit(u: Unit, pos: Vec2): void {
   u.pos = { ...pos };
   u.prevPos = { ...pos };
+}
+
+function advance(game: Game, seconds: number): void {
+  for (let t = 0; t < seconds; t += 0.1) game.update(Math.min(0.1, seconds - t));
 }
 
 describe('gameplay overhaul: locomotion and discovery', () => {
@@ -67,6 +73,30 @@ describe('gameplay overhaul: locomotion and discovery', () => {
     expect(d).toBeGreaterThanOrEqual(obstacle.radius + hero.radius + 9.9);
   });
 
+  it('resolves invalid ability targets and line-of-sight blockers before cast issue', () => {
+    const game = Game.headless(newGameSave('juggernaut'));
+    const sim = game.sim;
+    const caster = sim.spawnHero(REG.hero('lich'), { team: 0, pos: { x: 400, y: 500 }, level: 1, ctrl: { kind: 'none' } });
+    const enemy = sim.spawnHero(REG.hero('axe'), { team: 1, pos: { x: 900, y: 500 }, level: 1, ctrl: { kind: 'none' } });
+    const ally = sim.spawnHero(REG.hero('crystal-maiden'), { team: 0, pos: { x: 700, y: 650 }, level: 1, ctrl: { kind: 'none' } });
+    const ability = caster.abilities.find((a) => a.def.targeting === 'unit-target' && a.def.affects === 'enemy')!;
+
+    expect(resolveCastPreview(sim, caster, ability.def, ability.level, { uid: ally.uid }).reason).toBe('wrong-target');
+
+    sim.obstacles = [normalizeCollisionObstacle(staticCircleObstacle({
+      pos: { x: 650, y: 500 },
+      radius: 55,
+      id: 'sight-wall',
+      blocksVision: true,
+      blocksProjectiles: true
+    }))];
+    const blocked = resolveCastPreview(sim, caster, ability.def, ability.level, { uid: enemy.uid });
+
+    expect(blocked.reason).toBe('no-line');
+    expect(blocked.lineBlockedAt?.x).toBeLessThan(enemy.pos.x);
+    expect(blocked.shapes.length).toBeGreaterThan(0);
+  });
+
   it('tag-in items reduce swap cooldown and apply an entrance burst', () => {
     const save = newGameSave('juggernaut');
     const axeSave = newGameSave('axe').roster[0];
@@ -75,12 +105,206 @@ describe('gameplay overhaul: locomotion and discovery', () => {
     save.party.push('axe');
     save.roster.push(axeSave);
     const game = Game.headless(save);
+    game.activeUnit()!.lastEnemyDamageAt = game.sim.time;
 
     expect(game.trySwap(1)).toBe(true);
     const axe = game.activeUnit()!;
-    const baseCd = game.settings.resonance ? TUNING.resonanceSwapCooldownSec : TUNING.swapCooldownSec;
+    const baseCd = game.settings.resonance ? TUNING.resonanceSwapFloorSec : TUNING.swapFloorSec;
     expect(game.swapReadyAt - game.sim.time).toBeLessThan(baseCd);
     expect(axe.statuses.some((s) => s.tag === 'swap-in-burst')).toBe(true);
+    expect(game.party[1].tagGaugeReadyAt).toBeGreaterThan(game.sim.time);
+  });
+
+  it('spent tag gauges still allow reposition swaps without replaying the boon', () => {
+    const save = newGameSave('juggernaut');
+    const axeSave = newGameSave('axe').roster[0];
+    axeSave.items[0] = { id: 'breacher-cloak' };
+    save.recruited.push('axe');
+    save.party.push('axe');
+    save.roster.push(axeSave);
+    const game = Game.headless(save);
+    game.activeUnit()!.lastEnemyDamageAt = game.sim.time;
+
+    expect(game.trySwap(1)).toBe(true);
+    expect(game.activeUnit()!.statuses.some((s) => s.tag === 'swap-in-burst')).toBe(true);
+
+    advance(game, TUNING.resonanceSwapFloorSec + 0.1);
+    expect(game.trySwap(0)).toBe(true);
+    advance(game, TUNING.resonanceSwapFloorSec + 0.1);
+    expect(game.trySwap(1)).toBe(true);
+    expect(game.activeUnit()!.statuses.some((s) => s.tag === 'swap-in-burst')).toBe(false);
+  });
+
+  it('tag boon archetypes resolve as ordinary EffectNodes on swap', () => {
+    const swapInto = (heroId: string, hpPct = 1) => {
+      const save = newGameSave('juggernaut');
+      const heroSave = newGameSave(heroId).roster[0];
+      heroSave.hpPct = hpPct;
+      save.recruited.push(heroId);
+      save.party.push(heroId);
+      save.roster.push(heroSave);
+      const game = Game.headless(save);
+      const active = game.activeUnit()!;
+      active.lastEnemyDamageAt = game.sim.time;
+      const enemy = game.sim.spawnCreep(REG.creep('kobold'), { team: 1, pos: { x: active.pos.x + 120, y: active.pos.y } });
+      expect(game.trySwap(1)).toBe(true);
+      return { game, hero: game.activeUnit()!, enemy };
+    };
+
+    const earthshaker = swapInto('earthshaker');
+    expect(earthshaker.enemy.statuses.some((s) => s.status === 'stun')).toBe(true);
+
+    const pudge = swapInto('pudge');
+    expect(pudge.enemy.forced.some((f) => f.kind === 'pull')).toBe(true);
+
+    const cm = swapInto('crystal-maiden', 0.5);
+    expect(cm.hero.hp / cm.hero.stats.maxHp).toBeGreaterThan(0.5);
+    expect(cm.enemy.elementAuras.cryo).toBeDefined();
+
+    const luna = swapInto('luna');
+    expect(luna.enemy.hp).toBeLessThan(luna.enemy.stats.maxHp);
+  });
+
+  it('ready elemental tag boons preview reactions against nearby auras', () => {
+    const save = newGameSave('juggernaut');
+    const cmSave = newGameSave('crystal-maiden').roster[0];
+    save.recruited.push('crystal-maiden');
+    save.party.push('crystal-maiden');
+    save.roster.push(cmSave);
+    const game = Game.headless(save);
+    const active = game.activeUnit()!;
+    const enemy = game.sim.spawnCreep(REG.creep('kobold'), { team: 1, pos: { x: active.pos.x + 120, y: active.pos.y } });
+    applyElementAura(game.sim, active, enemy, 'pyro', 1, false);
+
+    const preview = game.tagReactionPreview(1);
+    expect(preview?.reaction).toBe('melt');
+    expect(preview?.targetName).toBe(enemy.name);
+
+    game.party[1].tagGaugeReadyAt = game.sim.time + 1;
+    expect(game.tagReactionPreview(1)).toBeNull();
+  });
+
+  it('Tag Chain amplifies chained tag-in effects inside the window', () => {
+    const damageFromLunaTag = (chainFirst: boolean): number => {
+      const save = newGameSave('juggernaut');
+      const sniperSave = newGameSave('sniper').roster[0];
+      const lunaSave = newGameSave('luna').roster[0];
+      save.recruited.push('sniper', 'luna');
+      save.party.push('sniper', 'luna');
+      save.roster.push(sniperSave, lunaSave);
+      const game = Game.headless(save);
+      const active = game.activeUnit()!;
+      active.lastEnemyDamageAt = game.sim.time;
+      const enemy = game.sim.spawnCreep(REG.creep('kobold'), { team: 1, pos: { x: active.pos.x + 120, y: active.pos.y } });
+      if (chainFirst) {
+        expect(game.trySwap(1)).toBe(true);
+        advance(game, TUNING.resonanceSwapFloorSec + 0.05);
+        expect(game.trySwap(2)).toBe(true);
+      } else {
+        expect(game.trySwap(2)).toBe(true);
+      }
+      return enemy.stats.maxHp - enemy.hp;
+    };
+
+    const baseline = damageFromLunaTag(false);
+    const chained = damageFromLunaTag(true);
+    expect(chained).toBeGreaterThan(baseline * 1.1);
+  });
+
+  it('Resonance keeps off-field tag zones ticking long enough to set up reactions', () => {
+    const save = newGameSave('natures-prophet');
+    const sniperSave = newGameSave('sniper').roster[0];
+    const linaSave = newGameSave('lina').roster[0];
+    save.recruited.push('sniper', 'lina');
+    save.party.push('sniper', 'lina');
+    save.roster.push(sniperSave, linaSave);
+    const game = Game.headless(save);
+    const active = game.activeUnit()!;
+    active.lastEnemyDamageAt = game.sim.time;
+    const enemy = game.sim.spawnCreep(REG.creep('kobold'), { team: 1, pos: { x: active.pos.x + 120, y: active.pos.y } });
+
+    expect(game.trySwap(1)).toBe(true);
+    game.update(0);
+    expect(game.party[0].unit?.offFieldUntil).toBeGreaterThan(game.sim.time);
+    expect(game.frameEvents.some((ev) => ev.t === 'off-field' && ev.heroId === 'natures-prophet')).toBe(true);
+    advance(game, 1.15);
+    expect(enemy.elementAuras.dendro).toBeDefined();
+    expect(game.trySwap(2)).toBe(true);
+    game.update(0);
+    expect(game.frameEvents.some((ev) => ev.t === 'reaction' && ev.reaction === 'burning')).toBe(true);
+  });
+
+  it('Imprint tag-out leaves a legacy field while the owner is off-field', () => {
+    const save = newGameSave('warlock');
+    const jugSave = newGameSave('juggernaut').roster[0];
+    save.recruited.push('juggernaut');
+    save.party.push('juggernaut');
+    save.roster.push(jugSave);
+    const game = Game.headless(save);
+    const active = game.activeUnit()!;
+    active.lastEnemyDamageAt = game.sim.time;
+    const enemy = game.sim.spawnCreep(REG.creep('kobold'), { team: 1, pos: { x: active.pos.x + 120, y: active.pos.y } });
+
+    expect(game.trySwap(1)).toBe(true);
+    expect(game.sim.zones.length).toBeGreaterThan(0);
+    expect(game.party[0].unit?.offFieldUntil).toBeGreaterThan(game.sim.time);
+    const hp = enemy.hp;
+    advance(game, 1.1);
+    expect(enemy.hp).toBeLessThan(hp);
+    advance(game, TUNING.resonanceOffFieldPersistenceSec);
+    expect(game.party[0].unit).toBeNull();
+  });
+
+  it('tag-focused items expose S4 stats through normal item stat derivation', () => {
+    const game = Game.headless(newGameSave('crystal-maiden'));
+    const hero = game.activeUnit()!;
+    hero.items[0] = itemStateFromSave({ id: 'relay-standard' }, game.sim.time);
+    hero.items[1] = itemStateFromSave({ id: 'chainweaver-band' }, game.sim.time);
+    hero.markStatsDirty();
+    hero.refresh(game.sim.time);
+
+    expect(REG.item('relay-standard').passiveMods?.tagBoonAmpPct).toBe(30);
+    expect(hero.stats.tagBoonAmpPct).toBeGreaterThanOrEqual(42);
+    expect(hero.stats.tagGaugeReductionPct).toBeGreaterThanOrEqual(25);
+    expect(hero.stats.tagChainWindowBonusSec).toBeGreaterThanOrEqual(1);
+  });
+
+  // SWAP_COMBAT_OVERHAUL §4 acceptance: a two-support rotation out-tempos a
+  // three-carry line. A self-buff is wasted the moment you tag out, so a carry's
+  // tag-in contributes almost nothing to a rotation, while a support's team buffs,
+  // heals, and enemy debuffs keep paying off. The harness greedily rotates each
+  // line over a fixed window on the real swap floor + per-hero gauges and sums the
+  // team value delivered — fully deterministic, no RNG.
+  it('a two-support rotation out-tempos a three-carry line over a fixed window', () => {
+    const rotationTeamValue = (benchIds: string[], windowSec: number): number => {
+      const floor = TUNING.resonanceSwapFloorSec;
+      const heroes = benchIds.map((id) => ({ boon: REG.hero(id).tagBoon!, readyAt: 0 }));
+      let t = 0;
+      let lastSwap = -Infinity;
+      let total = 0;
+      while (t < windowSec) {
+        if (t - lastSwap >= floor) {
+          const ready = heroes
+            .filter((h) => h.readyAt <= t)
+            .sort((a, b) => tagBoonTeamValue(b.boon) - tagBoonTeamValue(a.boon));
+          if (ready.length > 0) {
+            const h = ready[0];
+            total += tagBoonTeamValue(h.boon);
+            h.readyAt = t + h.boon.gaugeSec;
+            lastSwap = t;
+          }
+        }
+        t += 0.1;
+      }
+      return total;
+    };
+
+    const WINDOW = 24;
+    const supports = rotationTeamValue(['crystal-maiden', 'omniknight'], WINDOW);
+    const carries = rotationTeamValue(['sniper', 'juggernaut', 'phantom-assassin'], WINDOW);
+
+    // even outnumbered, the support rotation delivers far more team tempo.
+    expect(supports).toBeGreaterThan(carries * 1.5);
   });
 
   it('Aghanim augments patch real hero ability payloads', () => {

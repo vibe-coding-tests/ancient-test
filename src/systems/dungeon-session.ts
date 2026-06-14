@@ -6,7 +6,8 @@ import { bossBkbItemOverrides, tierScale } from '../core/phase3';
 import { REG } from '../core/registry';
 import { Sim } from '../core/sim';
 import { makeItemState, sortInventory } from '../core/items';
-import { normalizeCollisionObstacle, roomCollisionObstacle } from '../core/collision';
+import { collisionBodyPushOut, normalizeCollisionObstacle, roomCollisionObstacle } from '../core/collision';
+import { DUNGEON_PACK_RING_RADIUS, dungeonPackSpawnPositions } from '../core/dungeon-spawn';
 import { footprintToRadius } from '../engine/scale';
 import { bossVisualScale, bossWorldSize } from '../engine/world-size';
 import { TUNING } from '../data/tuning';
@@ -103,6 +104,16 @@ function roomObstacleInputs(template: RoomTemplate): CollisionObstacleInput[] {
 
 function roomObstacles(template: RoomTemplate): CollisionObstacle[] {
   return roomObstacleInputs(template).map(normalizeCollisionObstacle);
+}
+
+function roomSpawnForbiddenBodies(template: RoomTemplate): { pos: Vec2; body: import('../core/types').CollisionBody }[] {
+  return [
+    ...(template.walls ?? []),
+    ...(template.blockers ?? []),
+    ...(template.doors ?? []).map((door) => door.body),
+    ...(template.noSpawnZones ?? []),
+    ...(template.safeZones ?? [])
+  ];
 }
 
 export interface DungeonSessionResult {
@@ -442,6 +453,31 @@ export class DungeonSession {
     this.spawnNextPack();
   }
 
+  private packSpawnPointClear(template: RoomTemplate, point: Vec2, radius: number): boolean {
+    if (point.x < radius || point.y < radius || point.x > template.size.x - radius || point.y > template.size.y - radius) return false;
+    return roomSpawnForbiddenBodies(template).every((body) => !collisionBodyPushOut(body.pos, body.body, point, radius));
+  }
+
+  private packSpawnPositions(center: Vec2, count: number, radius: number): Vec2[] {
+    const template = this.roomTemplateFor();
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const ring = DUNGEON_PACK_RING_RADIUS + attempt * 35;
+      const rotate = attempt * 0.47;
+      const positions = dungeonPackSpawnPositions(center, count, ring).map((p) => {
+        const dx = p.x - center.x;
+        const dy = p.y - center.y;
+        const c = Math.cos(rotate);
+        const s = Math.sin(rotate);
+        return { x: center.x + dx * c - dy * s, y: center.y + dx * s + dy * c };
+      });
+      if (positions.every((p) => this.packSpawnPointClear(template, p, radius))) return positions;
+    }
+    return dungeonPackSpawnPositions(center, count).map((p) => ({
+      x: Math.max(radius, Math.min(template.size.x - radius, p.x)),
+      y: Math.max(radius, Math.min(template.size.y - radius, p.y))
+    }));
+  }
+
   private spawnNextPack(): void {
     const pack = this.room.packs[this.roomPackCursor];
     if (!pack) return;
@@ -449,12 +485,9 @@ export class DungeonSession {
     const center = anchors[pack.anchorIndex % Math.max(1, anchors.length)] ?? { x: this.sim.bounds.w * 0.7, y: this.sim.bounds.h / 2 };
     const spawned: Unit[] = [];
     const weight = PACK_PROGRESS_WEIGHT[pack.rarity] ?? 1;
+    const positions = this.packSpawnPositions(center, pack.cards.length, Math.max(...Object.values(TUNING.unitRadiusCreep)));
     pack.cards.forEach((card, i) => {
-      const angle = (i / Math.max(1, pack.cards.length)) * Math.PI * 2;
-      const pos = {
-        x: center.x + Math.cos(angle) * 115,
-        y: center.y + Math.sin(angle) * 115
-      };
+      const pos = positions[i] ?? center;
       const u = this.sim.spawnCreep(REG.creep(card.creepId), { team: 1, pos, star: card.star, wild: true, homePos: { ...center }, combatTier: this.tier });
       spawned.push(u);
       this.enemyUids.push(u.uid);

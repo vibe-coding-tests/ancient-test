@@ -1,7 +1,7 @@
 import { TUNING } from '../data/tuning';
 import { angleDelta, clamp, closestOnSeg, dist, dist2, fromAngle, norm, pointSegDist, sub, turnToward, v2 } from './math2d';
 import { cannotMove } from './status';
-import { obstacleBlocksMovement } from './collision';
+import { collisionBodyPushOut, obstacleBlocksMovement } from './collision';
 import type { Unit } from './unit';
 import type { Vec2 } from './types';
 import type { Sim } from './sim';
@@ -103,7 +103,18 @@ export function steerToward(sim: Sim, u: Unit, point: Vec2, dt: number, arriveRa
     u.pos.x += Math.cos(u.facing) * Math.min(step, d);
     u.pos.y += Math.sin(u.facing) * Math.min(step, d);
   }
-  resolveCollisions(sim, u);
+  const contact = resolveCollisions(sim, u);
+  if (contact.blocked && sim.time - u.lastMovementBlockEventAt > 0.7) {
+    u.lastMovementBlockEventAt = sim.time;
+    sim.events.emit({
+      t: 'movement-blocked',
+      uid: u.uid,
+      pos: { ...contact.pos },
+      reason: 'blocked',
+      obstacleId: contact.obstacleId,
+      feedback: contact.feedback
+    });
+  }
   return dist(u.pos, point) <= arriveRadius;
 }
 
@@ -114,8 +125,16 @@ export function faceToward(u: Unit, point: Vec2, dt: number): boolean {
   return Math.abs(angleDelta(u.facing, desired)) < (TUNING.attackFacingDeg * Math.PI) / 180;
 }
 
-/** Circle-collider resolution against units, props, walls, and bounds. */
-export function resolveCollisions(sim: Sim, u: Unit, ignoreUnits = false): void {
+export interface CollisionResolveResult {
+  blocked: boolean;
+  pos: Vec2;
+  obstacleId?: string;
+  feedback?: import('./types').CollisionFeedbackHint;
+}
+
+/** Circle unit resolution against units, authored obstacle shapes, temporary walls, and bounds. */
+export function resolveCollisions(sim: Sim, u: Unit, ignoreUnits = false): CollisionResolveResult {
+  const result: CollisionResolveResult = { blocked: false, pos: { ...u.pos } };
   for (let pass = 0; pass < 2; pass++) {
     if (!ignoreUnits) {
       sim.forEachNearbyUnit(u.pos, u.radius + 96, (o) => {
@@ -137,13 +156,16 @@ export function resolveCollisions(sim: Sim, u: Unit, ignoreUnits = false): void 
     }
     for (const o of sim.obstacles) {
       if (!obstacleBlocksMovement(o)) continue;
-      const minD = o.radius + u.radius;
-      const d2 = dist2(o.pos, u.pos);
-      if (d2 < minD * minD && d2 > 1e-8) {
-        const d = Math.sqrt(d2);
-        const n = norm(sub(u.pos, o.pos));
-        u.pos.x += n.x * (minD - d);
-        u.pos.y += n.y * (minD - d);
+      const push = collisionBodyPushOut(o.pos, o.body, u.pos, u.radius, u.facing);
+      if (push) {
+        u.pos.x += push.normal.x * (push.penetration + 0.25);
+        u.pos.y += push.normal.y * (push.penetration + 0.25);
+        if (!result.blocked) {
+          result.blocked = true;
+          result.pos = { ...push.contact };
+          result.obstacleId = o.id;
+          result.feedback = o.body.feedback;
+        }
       }
     }
     // temporary walls (Fissure / Ice Wall) block everyone, SPEC §2
@@ -158,11 +180,23 @@ export function resolveCollisions(sim: Sim, u: Unit, ignoreUnits = false): void 
         n = norm(n);
         u.pos.x += n.x * (minD - d + 0.5);
         u.pos.y += n.y * (minD - d + 0.5);
+        if (!result.blocked) {
+          result.blocked = true;
+          result.pos = { ...cp };
+          result.feedback = { stopSound: 'magic', impactVfx: 'spark', label: 'Wall zone' };
+        }
       }
     }
   }
+  const beforeClamp = { ...u.pos };
   u.pos.x = clamp(u.pos.x, u.radius, sim.bounds.w - u.radius);
   u.pos.y = clamp(u.pos.y, u.radius, sim.bounds.h - u.radius);
+  if (!result.blocked && (beforeClamp.x !== u.pos.x || beforeClamp.y !== u.pos.y)) {
+    result.blocked = true;
+    result.pos = { ...u.pos };
+    result.feedback = { stopSound: 'stone', impactVfx: 'dust', label: 'Room bounds' };
+  }
+  return result;
 }
 
 /** Integrate knockbacks / pulls / forced pushes. Returns true while a forced move is active. */

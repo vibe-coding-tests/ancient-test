@@ -57,6 +57,9 @@ export const STAT_LABELS: Partial<Record<keyof StatModMap, string>> = {
   swapCdReductionPct: 'Swap CD',
   swapInDamagePct: 'Swap-in damage',
   swapInHealPct: 'Swap-in heal',
+  tagBoonAmpPct: 'Tag boon amp',
+  tagGaugeReductionPct: 'Tag gauge CD',
+  tagChainWindowBonusSec: 'Tag chain window',
   reactionAmpPct: 'Reaction amp',
   elementalGaugeSec: 'Element gauge',
   staminaBonus: 'Stamina'
@@ -574,6 +577,7 @@ function heroStatLines(hero: HeroDef): string[] {
 
 export function buildHeroCard(hero: HeroDef, opts: HeroCardOpts = {}): TooltipCard {
   const roles = hero.roles.slice(0, 4).join(' / ');
+  const tagLine = hero.tagBoon ? [hero.tagBoon.tooltip] : [];
   const abilities = (opts.abilityLimit ? hero.abilities.slice(0, opts.abilityLimit) : hero.abilities)
     .map((a) => `${a.ult ? '\u2605 ' : ''}${a.name} \u2014 ${abilityKind(a)}`);
   const meta = [
@@ -585,7 +589,7 @@ export function buildHeroCard(hero: HeroDef, opts: HeroCardOpts = {}): TooltipCa
     name: hero.name,
     kind: roles || 'Hero',
     blurb: hero.blurb ?? hero.lore,
-    effect: abilities,
+    effect: [...tagLine, ...abilities],
     stats: heroStatLines(hero),
     meta
   };

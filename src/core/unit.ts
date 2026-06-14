@@ -162,6 +162,8 @@ export class Unit {
   elite = false;             // rare gold-bordered camp variant (ITEM_REHAUL §10.3)
   ownerUid?: number;         // summons / entourage
   lifetimeUntil?: number;    // summons
+  offFieldUntil?: number;    // overworld Resonance swap persistence
+  tagGaugeReadyAt?: number;  // mirror of RosterEntry.tagGaugeReadyAt so core gambits can read 'tag-in-ready'
   capturable = false;
   tier?: CreepTier;
   aggroRadius?: number;
@@ -242,6 +244,7 @@ export class Unit {
 
   lastEnemyDamageAt = -999;  // for blink lockout + save combat lock
   lastDealtDamageAt = -999;
+  lastMovementBlockEventAt = -999;
   recentDamagers: { uid: number; at: number }[] = [];
   lastAbilityCastId: string | null = null;
   lastAbilityCastAt = -999;

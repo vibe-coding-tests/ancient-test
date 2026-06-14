@@ -1,10 +1,10 @@
 # INTERACTION VERIFICATION — proving every effect does what it says
 
-A plan to check that every skill, spell, and item effect in the game behaves the way its data declares. Companion to `SPEC.md` (§2 ability vocabulary, §6 micro combat, §7 cross-interactions), `COLLISION_HITBOX_SPEC.md` (the contact contract: who can be hit, by which volume, with what feedback), `GAMEPLAY_OVERHAUL.md` (Resonance/elements), `SWAP_COMBAT_OVERHAUL.md` (tag-in boons: `EffectNode`s fired by a swap, the Tag Gauge, combo chains, off-field persistence), `ITEM_REHAUL.md` (affixes, grades), and `PRESENTATION_SPEC.md` (windup/telegraph contract).
+A plan to check that every skill, spell, and item effect in the game behaves the way its data declares. Companion to `SPEC.md` (§2 ability vocabulary, §6 micro combat, §7 cross-interactions), `COLLISION_HITBOX_SPEC.md` (the contact contract: who can be hit, by which body or volume, with what feedback), `GAMEPLAY_OVERHAUL.md` (Resonance/elements), `SWAP_COMBAT_OVERHAUL.md` (tag-in boons: `EffectNode`s fired by a swap, the Tag Gauge, combo chains, off-field persistence), `ITEM_REHAUL.md` (affixes, grades), `PRESENTATION_SPEC.md` (windup/telegraph contract), `VFX_ASSETS.md` (asset-backed presentation with procedural fallbacks), and `ASSETS.md` (provenance and manifest policy).
 
-This plan checks *what an effect does once it lands*. `COLLISION_HITBOX_SPEC.md` checks *whether it lands and on whom* — the hit volumes, target validity, projectile policy, and the feedback that proves contact. They share the same sim and the same `SimEvent` bus, so they share helpers and assertions rather than duplicating them. §8 reconciles the seam.
+This plan checks *what an effect does once contact has been resolved*. `COLLISION_HITBOX_SPEC.md` checks *how contact is resolved*: unit body derivation, obstacle bodies, target validity, projectile policy, and the feedback that proves contact. Both plans use the same sim, the same `SimEvent` bus, and the shared helpers in `src/core/collision.ts`, so the tests should import the same math the game uses. §8 spells out the overlap.
 
-The game is data-driven. Heroes, items, and creeps declare `EffectNode` compositions in `src/data/`; generic interpreters in `src/core/` execute them; the renderer in `src/engine/` listens to the `SimEvent` bus. So "does this spell work?" splits into three questions that can each be answered headlessly:
+The game is data-driven. Heroes, items, and creeps declare `EffectNode` compositions in `src/data/`; generic interpreters in `src/core/` execute them; the renderer in `src/engine/` listens to the `SimEvent` bus. Asset loaders add GLBs, VFX textures, icons, and sampled audio on top of a procedural floor, but they do not decide gameplay outcomes. So "does this spell work?" splits into three questions that can each be answered headlessly:
 
 1. **Is it well-formed?** The data parses, every `ValueRef` resolves, every cross-reference exists. (static)
 2. **Does it run?** Casting it steps the sim without throwing, at every level. (smoke)
@@ -28,7 +28,7 @@ Every castable thing (`AbilityDef`) is a list of `EffectNode`s plus optional `ch
 | `zone` | a circle/line persists for `duration`; ticks hit the right team; `wall` blocks pathing; `onEnter` fires in its window; `auraMods` apply inside | `sim.zones`, `zone-spawn`/`zone-expire`, periodic damage |
 | `summon` | the unit spawns on the caster's team with its declared abilities and lifespan | `sim.units`, `summon` event |
 | `statmod` | declared mods apply for the duration, then revert | `summary.mods`, expiry |
-| `projectile` | a projectile travels at the declared speed; linear ones can miss; homing ones hit; `onHit` effects run on impact | `projectile-spawn`/`projectile-hit`/`projectile-expire` |
+| `projectile` | a projectile travels at the declared speed; linear ones can miss or be blocked; homing ones hit; `onHit` effects run only on impact | `projectile-spawn`/`projectile-hit`/`projectile-expire`/`projectile-block` |
 | `repeat` | the inner effects run `count` times at `interval` | repeated child events |
 | `capture-channel` / `purge` | capture starts/completes; purge strips buffs | `capture-*` events, status removal |
 | `exotic` | the registered handler runs its bespoke logic | per-exotic assertion |
@@ -51,18 +51,19 @@ The deliverable is one assertion (or a small set) for every cell in this list th
 
 ## 2. Current coverage — what already holds
 
-Three test layers exist and should stay the foundation. Be honest about what each proves.
+Several test layers exist and should stay the foundation. Be honest about what each proves.
 
 | Layer | File | Proves | Limit |
 |---|---|---|---|
 | **Static / data-lint** | `src/test/data-lint.test.ts` | Every ability/item/creep parses; every `ValueRef` key exists; `dtype`/`StatusId`/`VfxArchetype`/`AnimGesture`/`SoundArchetype` are in vocabulary; exotic ids are registered; per-level arrays cover max level; anim+sound present on every castable | Says nothing about runtime behavior. A spell can lint clean and do nothing. |
 | **Smoke** | `src/test/kit-smoke.test.ts` | Every hero ability (L1/15/30) and every item active casts and steps 0.35–0.4s without throwing | Only checks "no exception." A damage spell that heals the enemy passes. |
 | **Behavioral (sampled)** | `src/test/hero-kits.test.ts` | Mechanical identity for hand-picked kits: Pudge hook drag + miss, Fissure wall + double stun, Enchant Totem one-swing, Frostbite root-not-disarm, Freezing Field channel, etc. | Curated, not systematic. Most of the ~400 abilities and ~80 item actives have no behavioral assertion. |
+| **Collision contract** | `src/test/movement.test.ts`, `src/test/dungeon.test.ts`, collision rows in `src/test/data-lint.test.ts` | `resolveUnitBodies`, footprint-decoupled hit/pick bodies, shared radius/line/projectile helpers, movement-blocked and projectile-block events, dungeon collision zones, and spell-volume-to-VFX parity | Proves contact math and collision data coverage. It does not prove that a contacted target receives the right effect. |
 | **Elements** | `src/test/phase5-resonance.test.ts` | Reaction multipliers via `applyDamage` | Scoped to Resonance. |
-| **Presentation** | `src/test/animator.test.ts`, `vfx-cache.test.ts`, `describe.test.ts` | Procedural poses, VFX pooling, auto-descriptions | Renderer-side, not the cast→event contract. |
+| **Presentation / assets** | `src/test/animator.test.ts`, `vfx-cache.test.ts`, `model-cache.test.ts`, `audio.test.ts`, `asset-world-sizes.test.ts`, `describe.test.ts`, `assets:check` | Procedural poses, VFX pooling, asset loader/cache behavior, sampled-audio fallback, world-size-to-asset parity, auto-descriptions, and manifest/provenance checks | Renderer and asset pipeline coverage. It does not prove that a cast emits the right gameplay event sequence. |
 | **Scaling** | `src/test/combat-scaling.test.ts`, `macro-sim.test.ts` | TTK bands, 5v5/5v1 resolution | Aggregate balance, not per-effect correctness. |
 
-The gap is plainly the behavioral layer: it is sampled, not a matrix. A spell can pass lint and smoke while doing the wrong thing.
+Collision and asset coverage are now real foundations, not only design notes. The remaining gap is the behavioral layer: it is sampled, not a matrix. A spell can pass lint, smoke, collision, and asset checks while doing the wrong thing after contact.
 
 ---
 
@@ -103,7 +104,7 @@ Cover each kind with at least: one **positive** case (it does the thing) and one
 - `interactions/status.test.ts` — each `StatusId` produces the right `summary` flag (stun→disabled, root→cannotMove-not-cannotAttack, silence→cannotCast-only, hex→disabled+slow, disarm→cannotAttack-only, etc.); duration expires; status resist shortens debuffs; DoT ticks HP.
 - `interactions/zone.test.ts` — persists for duration, ticks the right team, `wall` blocks a walker, `onEnter` fires once in window, expires.
 - `interactions/displace.test.ts` — blink/knockback/pull/forced each move the right unit the right distance; blink emits `blink`.
-- `interactions/projectile.test.ts` — assert the named policies from `COLLISION_HITBOX_SPEC.md` §5: linear sweep hits the first valid unit within `width/2 + unit.radius`, aim-wide misses and emits `projectile-expire`, `hitsAllies` gates friendly collision, `disjointable` lets a homing projectile be dropped, `onHit` runs on impact.
+- `interactions/projectile.test.ts` — assert the named policies from `COLLISION_HITBOX_SPEC.md` §5: linear sweep hits the first valid unit within `width/2 + unit.hitRadius`, aim-wide misses and emits `projectile-expire`, `hitsAllies` gates friendly collision, projectile-blocking obstacle bodies intercept before units and emit `projectile-block`, `disjointable` lets a homing projectile be dropped, `onHit` runs on impact.
 - `interactions/heal-mana.test.ts` — heal caps at max, `pctMaxHp` scales, mana burn floors at 0.
 - `interactions/summon.test.ts` — unit appears on caster team, expires at lifespan.
 - `interactions/channel-toggle.test.ts` — channel holds/ticks/onEnd; toggle drains resource while on.
@@ -134,11 +135,13 @@ Output: `src/test/interactions/cross.test.ts` (the tag-in trigger/gating rows ma
 
 ## 4. Presentation contract (anim / vfx / sound)
 
-Behavior is the sim; feel is the event bus. Verify the seam between them headlessly (no renderer needed) by reading `sim.events.history`:
+Behavior is the sim; feel is the event bus. Verify the contract between them headlessly (no renderer needed) by reading `sim.events.history`:
 
 - **Cast emits the right event shape.** Every cast produces a `cast` event carrying the `vfx` spec, a resolved `sound`, and `target`/`point`. `gestureForAbility` and `soundForAbility` already resolve a valid gesture/sound for every ability (asserted in `data-lint`); add the runtime half — that casting actually *emits* them.
 - **Effect → event mapping holds.** An `enemies-in-radius` damage/status emits `aoe-burst`; a `projectile` effect emits `projectile-spawn` then `projectile-hit`/`-expire`; a `zone` emits `zone-spawn`/`zone-expire`; a `summon` emits `summon`; a status emits `status-apply`/`status-expire`. Assert these sequences per kind in §3.2 (the events are free once `captureAll` is on).
 - **Failure feedback fires too.** `COLLISION_HITBOX_SPEC.md` §7 requires a readable cue for misses, blocks, and immunity. The events already exist on the bus — assert them: a magic-immune victim hit by a magical spell emits `immune-block` (not `damage`); an attack against evasion/blind emits `miss`; a `piercesImmunity` spell still emits `damage` through BKB. These are the negative half of the cross-interaction matrix (§3.3) viewed through the event stream.
+- **Projectile blockers use the same event path.** A linear projectile stopped by a projectile-blocking obstacle emits `projectile-block` with obstacle id, impact position, and collision feedback. The interaction test should assert the effect did not run after the block, while the collision test owns the obstacle math.
+- **Assets remain an enhancement.** A cast event carries abstract `vfx`, `sound`, impact, and feedback data. `VFX_ASSETS.md` owns the GLB, atlas, icon, UI frame, and sampled-audio pipeline; this plan asserts that missing assets do not change the event contract and that asset-backed renderers receive enough data to show the cue.
 - **Renderer-side stays where it is.** `animator.test.ts` and `vfx-cache.test.ts` keep covering procedural poses and geometry pooling. This plan adds the contract that the sim feeds them the right events, not new rendering tests.
 
 The full windup/telegraph readability contract stays in `PRESENTATION_SPEC.md`; this plan only proves the events fire.
@@ -167,7 +170,7 @@ V0+V1 deliver most of the value: they turn "it didn't throw" into "it did the th
 - **Runner:** Vitest, already wired. New files live under `src/test/interactions/` and run with the suite.
 - **Commands:** `npm test` (full), `npx vitest run src/test/interactions` (just this matrix), `npm run typecheck`.
 - **CI gate:** these join the existing `npm run test:full` chain (`test` → `build` → `assets:check` → `e2e`). The census (V0) prints its table on every run, like the world-size matrix logs `red boxes: 0`.
-- **Pass criteria:** (1) data-lint green — all well-formed; (2) kit-smoke green — all run; (3) every effect kind in the vocabulary has a positive behavioral assertion and a negative control; (4) the cross-interaction table is green; (5) every ability emits the events its effects imply; (6) the census reports zero uncovered registered effect kinds.
+- **Pass criteria:** (1) data-lint green — all well-formed; (2) kit-smoke green — all run; (3) every effect kind in the vocabulary has a positive behavioral assertion and a negative control; (4) the cross-interaction table is green; (5) every ability emits the events its effects imply; (6) collision helpers and data gates stay green; (7) asset checks keep the manifest, provenance, and fallback contracts green; (8) the census reports zero uncovered registered effect kinds.
 
 Determinism makes this tractable: the core is seeded and runs at 30 Hz with no `three`/DOM, so a spell's full effect resolves in milliseconds and assertions are exact, not flaky.
 
@@ -214,13 +217,19 @@ Three places where it supplies a number or policy this plan should adopt rather 
 - **Gate 5 (spell volumes match their preview):** partly static. Extend `data-lint` to check that an ability's hit shape agrees with its VFX archetype (a `skillshot`/line effect carries a line/`beam`/`projectile` vfx, a `ground-aoe` carries a `ground-aoe`/`dome`/`vortex` vfx). The behavioral half — that the volume the preview draws is the volume that hits — falls out of the §3.2 boundary tests.
 - **Gate 8 (feedback fires for success and failure):** the §4 event-contract assertions are the headless proof that the sim emits the cues; the renderer turning them into flashes/labels stays a presentation concern.
 
-### Sequencing: do not test proposed mechanics as if shipped
+### Current implementation boundary
 
-The collision spec is partly forward-looking. `CollisionBody`, capsule/rect shapes, dungeon walls that block projectiles, and decoupled boss hit bodies are **proposed**, not built (it says circle obstacles are the only implemented blocker today). So:
+The collision spec has moved from proposal to partial implementation. The core now has `CollisionBody`/`CollisionShape`, `resolveUnitBodies`, movement/target/hit/pick body derivation, footprint-decoupled boss hit and pick bodies, named radius/line/projectile helpers, authored room collision bodies, movement-block feedback, and projectile-blocking obstacles that can stop linear projectiles before a unit hit.
 
-- The behavioral matrix asserts **current numeric behavior** — circle bodies, `unit.radius` hit expansion, attack projectiles non-disjointable. It does not assume `blocksProjectiles` walls or capsule hit bodies until those land in core.
-- When a collision-spec rollout slice lands (e.g. projectile-blocking walls), it brings its own test, and this matrix's projectile file gains the corresponding boundary case. The census (§3.1) is the tripwire: a new `CollisionShape` kind or hit policy with no behavioral coverage fails closed.
+The behavioral matrix should test the shipped contract:
 
-### Shared seam to build once
+- Radius, line, zone, cleave, and projectile tests use `unitHitRadius` or `unitTargetRadius` through the shared helpers, not local copies of the old `unit.radius` math.
+- Linear projectile tests include both unit-hit and obstacle-block cases. The block case proves that `onHit` effects do not run after `projectile-block`.
+- Movement collision can resolve authored `circle`, `capsule`, and `rect` obstacle bodies in core. Authored content and debug overlays may still be circle-heavy, so tests should pin the helper behavior first and add content-specific cases as those bodies appear in data.
+- Asset-backed visuals stay downstream. A GLB, status icon, VFX atlas, sampled sound, or UI frame can make feedback clearer, but the sim event remains the thing this matrix asserts.
 
-Both specs want a single set of hit-body helpers (collision spec §8 routes radius/zone/projectile/cleave through named helpers; this plan's §3.2 asserts through them). Build that helper layer once, in `src/core/`, and have both test suites import it. If the matrix and the collision tests ever compute the effective radius differently, that is the bug — the shared helper makes the disagreement impossible.
+When a new `CollisionShape`, hit policy, or feedback event lands, it should bring a collision test and, when it affects an effect resolving or failing, a matching interaction case. The census (§3.1) is the tripwire: new contact vocabulary with no behavioral coverage fails closed.
+
+### Shared helpers to keep aligned
+
+Both specs want a single set of hit-body helpers. Collision spec §8 routes radius, zone, projectile, and cleave checks through named helpers; this plan's §3.2 asserts through them. That layer now lives in `src/core/collision.ts`. Both test suites should import it. If the matrix and the collision tests ever compute the effective radius differently, the tests should fail until they return to the shared helper.

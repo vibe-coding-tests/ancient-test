@@ -2884,6 +2884,29 @@ function addPart(rig: UnitRig, part: NonNullable<ItemAppearanceSpec['parts']>[nu
       rig.itemLayer.add(halo);
       break;
     }
+    case 'shield': {
+      const face = mesh(new THREE.CircleGeometry(0.32 * s, 6), lam('#9fb4d8', 0x172034));
+      face.scale.y = 1.18;
+      face.position.set(0.34 * s, 1.08 * s, -0.42 * s);
+      face.rotation.y = Math.PI / 2;
+      const boss = mesh(new THREE.SphereGeometry(0.08 * s, 10, 8), lam('#dbe6ff', 0x1a2438));
+      boss.position.copy(face.position);
+      boss.position.x += 0.025 * s;
+      rig.itemLayer.add(face, boss);
+      break;
+    }
+    case 'banner': {
+      const pole = mesh(new THREE.CylinderGeometry(0.025 * s, 0.025 * s, 1.0 * s, 8), lam('#6b4a24'));
+      pole.position.set(-0.42 * s, 1.18 * s, 0.42 * s);
+      const cloth = mesh(
+        new THREE.PlaneGeometry(0.42 * s, 0.36 * s),
+        new THREE.MeshBasicMaterial({ color: '#ffe08a', transparent: true, opacity: 0.82, depthWrite: false, side: THREE.DoubleSide })
+      );
+      cloth.position.set(-0.39 * s, 1.44 * s, 0.42 * s);
+      cloth.rotation.y = Math.PI / 2;
+      rig.itemLayer.add(pole, cloth);
+      break;
+    }
   }
 }
 

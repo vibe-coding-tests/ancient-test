@@ -104,7 +104,7 @@ describe('item cards', () => {
       const card = buildHeroCard(hero, { level: 5 });
       expect(card.name, `${hero.id} name`).toBe(hero.name);
       expect(card.blurb && card.blurb.trim().length > 0, `${hero.id} blurb`).toBe(true);
-      expect(card.effect.length, `${hero.id} abilities`).toBe(hero.abilities.length);
+      expect(card.effect.length, `${hero.id} abilities`).toBe(hero.abilities.length + (hero.tagBoon ? 1 : 0));
       expect(card.stats.length, `${hero.id} base stats`).toBeGreaterThan(0);
     }
   });

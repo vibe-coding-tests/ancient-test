@@ -30,7 +30,7 @@ exact mapping.
 ## Other vendored assets — CC0 (no attribution required, credited as courtesy)
 
 - 3D characters, creatures, props, and town buildings — **Quaternius** (<https://quaternius.com>) and **Kay Lousberg / KayKit** (<https://kaylousberg.com>), CC0.
-- Additional Poly Pizza models — **Quaternius** snake (<https://poly.pizza/m/x9x0viZs8V>, `serpent`) and velociraptor (<https://poly.pizza/m/cnlGH2UcDd>, `snapfire`), CC0.
+- Additional Poly Pizza models — **Quaternius** snake (<https://poly.pizza/m/x9x0viZs8V>, `serpent`) and skeleton (<https://poly.pizza/m/wODZYCgX5Z>, `skeleton`), CC0.
 - Terrain PBR textures — **ambientCG** (<https://ambientcg.com>), CC0.
 - Sky / IBL maps — **Poly Haven** (<https://polyhaven.com>), CC0.
 - Sound effects — **Kenney** (<https://kenney.nl>), CC0.

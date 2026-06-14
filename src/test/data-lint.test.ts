@@ -22,12 +22,16 @@ import { PERFORMANCE_BUDGET } from '../engine/performance';
 import { TUNING } from '../data/tuning';
 import { heroWorldSize, creepWorldSize, bossWorldSize, summonWorldSize, questGiverWorldSize, bossVisualScale, bossVisualScaleForRank, inBand, SIZE_BANDS, SIZE_PROMPTS, generationPrompt, type ResolvedWorldSize } from '../engine/world-size';
 import { HERO_HEIGHT_M, footprintToRadius } from '../engine/scale';
-import { BUILT_WORLD_SIZES, TOWN_BUILDING_COLLISION } from '../data/world/props';
+import { BUILT_WORLD_SIZES, CHEST_COLLISION, DRESSING_PROP_COLLISION, GROUND_LOOT_COLLISION, SHRINE_COLLISION, TOWN_BUILDING_COLLISION, TOWN_LANDMARK_COLLISION } from '../data/world/props';
 import { readFileSync, writeFileSync } from 'node:fs';
 import type { AbilityDef, AnimGesture, AttackVisualKind, DropSource, EffectNode, ItemAppearancePart, ItemWeaponVisualKind, SoundArchetype, SummonSpec, ValueRef, VfxArchetype } from '../core/types';
 import { abilityMaxLevel } from '../core/values';
 import { gestureForAbility, soundForAbility } from '../core/gestures';
-import { resolveUnitBodies } from '../core/collision';
+import { collisionBodyPushOut, resolveUnitBodies } from '../core/collision';
+import { DUNGEON_PACK_RING_RADIUS, dungeonPackSpawnPositions } from '../core/dungeon-spawn';
+import { resolveCastPreview } from '../core/cast-preview';
+import { Sim } from '../core/sim';
+import { tagBoonPowerScore, tagBudgetTier, type TagBudgetTier } from '../data/tag-boons';
 
 // ============================================================
 // Data lint (SPEC §1.2): every entry validates, every
@@ -100,7 +104,7 @@ function reachableCutsceneIds(): Set<string> {
   return ids;
 }
 const ITEM_WEAPON_VISUALS: ItemWeaponVisualKind[] = ['none', 'sword', 'staff', 'hook', 'totem', 'rifle', 'cleaver', 'broad-cleaver', 'glowing-blade', 'long-pole', 'storm-haft'];
-const ITEM_APPEARANCE_PARTS: ItemAppearancePart[] = ['pauldrons', 'heart-core', 'frost-shards', 'boot-trail', 'wing-blades', 'crystal-edge', 'mana-orb', 'hex-sigil', 'cloak', 'halo'];
+const ITEM_APPEARANCE_PARTS: ItemAppearancePart[] = ['pauldrons', 'heart-core', 'frost-shards', 'boot-trail', 'wing-blades', 'crystal-edge', 'mana-orb', 'hex-sigil', 'cloak', 'halo', 'shield', 'banner'];
 const ATTACK_VISUALS: AttackVisualKind[] = ['cleave-sweep', 'ranged-conversion', 'lightning-bounce', 'tinted-impact', 'crit-lunge', 'armor-shred-flash'];
 
 function dropHomesForItem(itemId: string): Set<DropSource> {
@@ -255,6 +259,13 @@ describe('data lint: heroes', () => {
         expect(hero.animProfile!.castStyle).toBeTruthy();
         expect(hero.animProfile!.voiceTimbre).toBeTruthy();
         expect([...ACTIVE_ELEMENTS, 'neutral']).toContain(elementForHero(hero));
+        expect(hero.tagBoon, `${hero.id}: tag boon`).toBeDefined();
+        expect(hero.tagBoon!.id).toBe(`${hero.id}-tag-boon`);
+        expect(['tag-in', 'tag-out', 'both']).toContain(hero.tagBoon!.fire);
+        expect(hero.tagBoon!.effects.length, `${hero.id}: tag boon effects`).toBeGreaterThan(0);
+        expect(hero.tagBoon!.gaugeSec, `${hero.id}: tag gauge`).toBeGreaterThan(0);
+        expect(hero.tagBoon!.tooltip.startsWith('TAG'), `${hero.id}: tag tooltip`).toBe(true);
+        if (hero.tagBoon!.element) expect(ACTIVE_ELEMENTS).toContain(hero.tagBoon!.element);
         if (hero.recruitmentQuestId) expect(REG.quests.has(hero.recruitmentQuestId), `${hero.id}: quest ${hero.recruitmentQuestId}`).toBe(true);
         if (!hero.starter) expect(ALL_QUESTS.some((q) => q.heroId === hero.id), `${hero.id}: missing recruitment chain`).toBe(true);
         const ults = hero.abilities.filter((a) => a.ult);
@@ -301,6 +312,51 @@ describe('data lint: heroes', () => {
       });
     });
   }
+});
+
+// SWAP_COMBAT_OVERHAUL §4: the inverse-power law. A boon's power score must sit
+// inside its role tier's band, and no carry may ever out-budget a support — so a
+// hard support's tag-in stays the team's biggest swing as the roster grows.
+describe('data lint: tag boon power budget', () => {
+  const BANDS: Record<TagBudgetTier, { score: [number, number]; gauge: [number, number] }> = {
+    hypercarry: { score: [18, 42], gauge: [5, 8] },
+    striker: { score: [12, 52], gauge: [5, 10] },
+    frontline: { score: [22, 98], gauge: [6, 11] },
+    support: { score: [42, 135], gauge: [9, 13] }
+  };
+
+  it('keeps every boon inside its tier band', () => {
+    for (const hero of ALL_HEROES) {
+      const tier = tagBudgetTier(hero);
+      const band = BANDS[tier];
+      const score = tagBoonPowerScore(hero.tagBoon!);
+      expect(score, `${hero.id} (${tier}) score`).toBeGreaterThanOrEqual(band.score[0]);
+      expect(score, `${hero.id} (${tier}) score`).toBeLessThanOrEqual(band.score[1]);
+      expect(hero.tagBoon!.gaugeSec, `${hero.id} (${tier}) gauge`).toBeGreaterThanOrEqual(band.gauge[0]);
+      expect(hero.tagBoon!.gaugeSec, `${hero.id} (${tier}) gauge`).toBeLessThanOrEqual(band.gauge[1]);
+    }
+  });
+
+  it('enforces the inverse-power law: no carry out-budgets a support', () => {
+    let maxCarry = 0;
+    let minSupport = Infinity;
+    let maxCarryGauge = 0;
+    let minSupportGauge = Infinity;
+    for (const hero of ALL_HEROES) {
+      const tier = tagBudgetTier(hero);
+      const score = tagBoonPowerScore(hero.tagBoon!);
+      if (tier === 'hypercarry') {
+        maxCarry = Math.max(maxCarry, score);
+        maxCarryGauge = Math.max(maxCarryGauge, hero.tagBoon!.gaugeSec);
+      } else if (tier === 'support') {
+        minSupport = Math.min(minSupport, score);
+        minSupportGauge = Math.min(minSupportGauge, hero.tagBoon!.gaugeSec);
+      }
+    }
+    // a support's smallest boon still beats a carry's biggest, and re-arms slower.
+    expect(minSupport).toBeGreaterThan(maxCarry);
+    expect(minSupportGauge).toBeGreaterThan(maxCarryGauge);
+  });
 });
 
 describe('data lint: items', () => {
@@ -459,14 +515,17 @@ describe('data lint: Phase 4/5 polish infrastructure', () => {
 
   it('ships a per-hero glTF manifest for every enabled cohort, with procedural fallback', () => {
     const ids = new Set(PHASE5_STARTER_ASSETS.map((a) => a.heroId));
-    // The original starters stay shipped, now alongside the full KayKit cohorts.
-    for (const starter of ['crystal-maiden', 'earthshaker', 'juggernaut', 'lich', 'pudge', 'sniper']) {
+    // Representative starters stay shipped, now alongside the current KayKit cohorts.
+    for (const starter of ['crystal-maiden', 'earthshaker', 'juggernaut', 'lich', 'axe', 'sniper']) {
       expect(ids.has(starter), `${starter} shipped`).toBe(true);
     }
-    // Knight(15) + Mage(28) + Barbarian(15) + Rogue(18) humanoid cohorts. Phase 4 Tier B
-    // moved the worst non-humanoid offenders onto animated creature bases: winter-wyvern
-    // (dragon), clockwerk/timbersaw (mech → goblin), death-prophet (banshee → ghost).
-    expect(PHASE5_STARTER_ASSETS.length).toBe(76);
+    // Knight(13) + Mage(23) + Barbarian(12) + Rogue(17) humanoid cohorts. Phase 4/5/6
+    // moved the worst non-humanoid offenders onto animated creature/generated bases:
+    // winter-wyvern (dragon), clockwerk/timbersaw (mech), death-prophet/necrophos
+    // (banshee/reaper), arc/outworld/razor (energy), pudge/undying/alchemist
+    // (abomination brute), natures-prophet (treant), meepo (goblin), and
+    // slardar/slark (the generated fishman family).
+    expect(PHASE5_STARTER_ASSETS.length).toBe(65);
     for (const asset of PHASE5_STARTER_ASSETS) {
       // Every shipped model belongs to an enabled humanoid cohort.
       expect(ENABLED_HERO_COHORTS.has(heroBaseId(asset.heroId)), `${asset.heroId} cohort`).toBe(true);
@@ -489,7 +548,8 @@ describe('data lint: Phase 4/5 polish infrastructure', () => {
     expectCreepFamily(['satyr-banisher', 'satyr-mindstealer', 'prowler-shaman', 'prowler-acolyte', 'prowler-shaman-minion'], 'demon');
     expectCreepFamily(['hill-troll', 'dark-troll', 'dark-troll-summoner', 'dark-troll-summoner-minion'], 'tribal');
     expectCreepFamily(['granite-golem', 'rock-golem', 'mud-golem', 'frostbitten-golem'], 'golelingevolved');
-    expectCreepFamily(['hellbear', 'wildwing', 'wildwing-ripper', 'enraged-wildkin', 'polar-furbolg'], 'bear');
+    expectCreepFamily(['hellbear', 'polar-furbolg'], 'bear');
+    expectCreepFamily(['wildwing', 'wildwing-ripper', 'enraged-wildkin'], 'owlbear');
     expect(creepCreatureUrl('elder-jungle-stalker', 'golem')).toBe('/assets/creeps/wolf.glb');
     expect(creepCreatureUrl('future-bird', 'bird')).toBe('/assets/creeps/flier.glb');
     // vhoul are desert undead — the downloaded CC0 skeleton reads closer than goblin.
@@ -513,6 +573,26 @@ describe('data lint: Phase 4/5 polish infrastructure', () => {
     expect(heroBaseUrl(heroBaseId('clockwerk'))).toBe('/assets/creeps/goblin.glb');
     expect(heroBaseUrl(heroBaseId('timbersaw'))).toBe('/assets/creeps/goblin.glb');
     expect(heroBaseUrl(heroBaseId('death-prophet'))).toBe('/assets/creeps/ghost.glb');
+    expect(heroBaseUrl(heroBaseId('arc-warden'))).toBe('/assets/creeps/energy.glb');
+    expect(heroBaseUrl(heroBaseId('outworld-destroyer'))).toBe('/assets/creeps/energy.glb');
+    expect(heroBaseUrl(heroBaseId('razor'))).toBe('/assets/creeps/energy.glb');
+    expect(heroBaseUrl(heroBaseId('pudge'))).toBe('/assets/creeps/abomination.glb');
+    expect(heroBaseUrl(heroBaseId('undying'))).toBe('/assets/creeps/abomination.glb');
+    // Phase 6: the last long-tail humanoid-cohort compromises ride faithful animated
+    // bases — alchemist on the brute body, the two fish-men on the new fishman family,
+    // and the tree/reaper/ratling onto treant/ghost/goblin.
+    expect(heroBaseUrl(heroBaseId('alchemist'))).toBe('/assets/creeps/abomination.glb');
+    expect(heroBaseUrl(heroBaseId('slardar'))).toBe('/assets/creeps/fishman.glb');
+    expect(heroBaseUrl(heroBaseId('slark'))).toBe('/assets/creeps/fishman.glb');
+    expect(heroBaseUrl(heroBaseId('natures-prophet'))).toBe('/assets/creeps/treant.glb');
+    expect(heroBaseUrl(heroBaseId('necrophos'))).toBe('/assets/creeps/ghost.glb');
+    expect(heroBaseUrl(heroBaseId('meepo'))).toBe('/assets/creeps/goblin.glb');
+    // faceless-void stays a humanoid knight (a bipedal alien reads acceptably);
+    // pangolier (swashbuckler) and bloodseeker (feral brute) stay humanoid but in
+    // truer cohorts (rogue / barbarian).
+    expect(heroBaseId('faceless-void')).toBe('knight');
+    expect(heroBaseId('pangolier')).toBe('rogue');
+    expect(heroBaseId('bloodseeker')).toBe('barbarian');
     expect(heroBaseId('io')).toBe('procedural');
     expect(heroBaseId('enigma')).toBe('procedural');
     expect(heroBaseId('morphling')).toBe('procedural');
@@ -1487,6 +1567,74 @@ function visitVolumeEffects(effects: readonly EffectNode[] | undefined, fn: (nod
   }
 }
 
+function roomBlockingBodies(template: (typeof ALL_ROOM_TEMPLATES)[number], includeDoors = false): { pos: { x: number; y: number }; body: import('../core/types').CollisionBody; id: string }[] {
+  return [
+    ...(template.walls ?? []),
+    ...(template.blockers ?? []),
+    ...(includeDoors ? (template.doors ?? []).map((door) => door.body) : [])
+  ].filter((body) => body.body.blocksMovement !== false);
+}
+
+function roomPointBlocked(template: (typeof ALL_ROOM_TEMPLATES)[number], point: { x: number; y: number }, radius: number, includeDoors = false): boolean {
+  if (point.x < radius || point.y < radius || point.x > template.size.x - radius || point.y > template.size.y - radius) return true;
+  return roomBlockingBodies(template, includeDoors).some((blocker) => !!collisionBodyPushOut(blocker.pos, blocker.body, point, radius));
+}
+
+function roomSpawnForbiddenBodies(template: (typeof ALL_ROOM_TEMPLATES)[number]): { pos: { x: number; y: number }; body: import('../core/types').CollisionBody; id: string }[] {
+  return [
+    ...(template.walls ?? []),
+    ...(template.blockers ?? []),
+    ...(template.doors ?? []).map((door) => door.body),
+    ...(template.noSpawnZones ?? []),
+    ...(template.safeZones ?? [])
+  ];
+}
+
+function roomSpawnPointBlocked(template: (typeof ALL_ROOM_TEMPLATES)[number], point: { x: number; y: number }, radius: number): boolean {
+  if (point.x < radius || point.y < radius || point.x > template.size.x - radius || point.y > template.size.y - radius) return true;
+  return roomSpawnForbiddenBodies(template).some((blocker) => !!collisionBodyPushOut(blocker.pos, blocker.body, point, radius));
+}
+
+function roomSegmentClear(template: (typeof ALL_ROOM_TEMPLATES)[number], a: { x: number; y: number }, b: { x: number; y: number }, radius: number): boolean {
+  const d = Math.hypot(b.x - a.x, b.y - a.y);
+  const steps = Math.max(1, Math.ceil(d / 90));
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const p = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+    if (roomPointBlocked(template, p, radius)) return false;
+  }
+  return true;
+}
+
+function roomReachable(template: (typeof ALL_ROOM_TEMPLATES)[number], start: { x: number; y: number }, goal: { x: number; y: number }, radius: number): boolean {
+  if (roomPointBlocked(template, start, radius) || roomPointBlocked(template, goal, radius)) return false;
+  const step = 180;
+  const nodes = [start, goal];
+  for (let y = radius; y <= template.size.y - radius; y += step) {
+    for (let x = radius; x <= template.size.x - radius; x += step) {
+      const p = { x, y };
+      if (!roomPointBlocked(template, p, radius)) nodes.push(p);
+    }
+  }
+  const seen = new Set<number>([0]);
+  const queue = [0];
+  while (queue.length) {
+    const idx = queue.shift()!;
+    if (idx === 1) return true;
+    const a = nodes[idx];
+    for (let i = 1; i < nodes.length; i++) {
+      if (seen.has(i)) continue;
+      const b = nodes[i];
+      const d = Math.hypot(b.x - a.x, b.y - a.y);
+      if (d > step * 1.45) continue;
+      if (!roomSegmentClear(template, a, b, radius)) continue;
+      seen.add(i);
+      queue.push(i);
+    }
+  }
+  return false;
+}
+
 // ============================================================
 // Test 25 — collision and hitbox contract (COLLISION_HITBOX_SPEC):
 // authored blockers are circle-only for the first cut, projectile blocker policy
@@ -1499,31 +1647,63 @@ describe('data lint: collision contract (test 25)', () => {
     expect(TOWN_BUILDING_COLLISION.mode).toBe('solid');
     expect(TOWN_BUILDING_COLLISION.radius).toBeGreaterThan(0);
     expect(TOWN_BUILDING_COLLISION.blocksProjectiles).toBe(true);
+    expect(TOWN_LANDMARK_COLLISION.mode).toBe('soft');
+    expect(SHRINE_COLLISION.mode).toBe('soft');
+    expect(CHEST_COLLISION.layer).toBe('loot');
+    expect(GROUND_LOOT_COLLISION.layer).toBe('loot');
+    expect(DRESSING_PROP_COLLISION.well.mode).toBe('solid');
+    expect(DRESSING_PROP_COLLISION.market.mode).toBe('soft');
 
     const terrain = readFileSync('src/engine/terrain.ts', 'utf8');
     expect(terrain).toContain('TOWN_BUILDING_COLLISION.radius');
+    expect(terrain).toContain('TOWN_LANDMARK_COLLISION');
+    expect(terrain).toContain('pushRegionContactObstacles');
+    expect(terrain).toContain('DRESSING_PROP_COLLISION');
     expect(terrain).toContain('source: \'terrain:town\'');
   });
 
-  it('authored dungeon gameplay blockers are circle-only and clear anchors/connectors', () => {
+  it('authored dungeon gameplay blockers use runtime-supported shapes and clear authored points', () => {
     const heroClearance = TUNING.unitRadiusHero + 60;
     for (const template of ALL_ROOM_TEMPLATES) {
       const blockers = [...(template.walls ?? []), ...(template.blockers ?? []), ...(template.doors ?? []).map((door) => door.body)];
+      expect(template.walls?.some((wall) => wall.body.shape.kind === 'capsule'), `${template.id}: needs capsule wall geometry`).toBe(true);
+      expect(template.doors?.length, `${template.id}: door bodies should match connectors`).toBe(template.connectors.length);
       expect(blockers.length, `${template.id}: missing authored collision blockers`).toBeGreaterThan(0);
       for (const blocker of blockers) {
         expect(blocker.pos.x, `${template.id}/${blocker.id}: x inside room`).toBeGreaterThanOrEqual(0);
         expect(blocker.pos.x, `${template.id}/${blocker.id}: x inside room`).toBeLessThanOrEqual(template.size.x);
         expect(blocker.pos.y, `${template.id}/${blocker.id}: y inside room`).toBeGreaterThanOrEqual(0);
         expect(blocker.pos.y, `${template.id}/${blocker.id}: y inside room`).toBeLessThanOrEqual(template.size.y);
-        expect(blocker.body.shape.kind, `${template.id}/${blocker.id}: first-cut blockers must be circles`).toBe('circle');
-        if (blocker.body.shape.kind !== 'circle') continue;
-        expect(blocker.body.shape.radius, `${template.id}/${blocker.id}: radius`).toBeGreaterThan(0);
+        expect(['circle', 'capsule', 'rect'], `${template.id}/${blocker.id}: unsupported shape`).toContain(blocker.body.shape.kind);
+        if (blocker.body.shape.kind === 'circle') expect(blocker.body.shape.radius, `${template.id}/${blocker.id}: radius`).toBeGreaterThan(0);
+        if (blocker.body.shape.kind === 'capsule') {
+          expect(blocker.body.shape.radius, `${template.id}/${blocker.id}: radius`).toBeGreaterThan(0);
+          expect(blocker.body.shape.halfLength, `${template.id}/${blocker.id}: halfLength`).toBeGreaterThan(0);
+        }
+        if (blocker.body.shape.kind === 'rect') {
+          expect(blocker.body.shape.width, `${template.id}/${blocker.id}: width`).toBeGreaterThan(0);
+          expect(blocker.body.shape.depth, `${template.id}/${blocker.id}: depth`).toBeGreaterThan(0);
+        }
         expect(blocker.body.blocksMovement, `${template.id}/${blocker.id}: should block movement`).toBe(true);
         expect(blocker.body.blocksProjectiles, `${template.id}/${blocker.id}: projectile blocker policy`).toBe(true);
+        if (blocker.body.layer === 'door') continue;
         for (const anchor of [...template.spawnAnchors, ...template.connectors.map((c) => c.at)]) {
-          const d = Math.hypot(anchor.x - blocker.pos.x, anchor.y - blocker.pos.y);
-          expect(d, `${template.id}/${blocker.id}: anchor/connector too close`).toBeGreaterThan(blocker.body.shape.radius + heroClearance);
+          expect(collisionBodyPushOut(blocker.pos, blocker.body, anchor, heroClearance), `${template.id}/${blocker.id}: anchor/connector too close`).toBeNull();
         }
+      }
+      for (const door of template.doors ?? []) {
+        expect(door.clearWidth, `${template.id}/${door.id}: clearWidth`).toBeGreaterThan(TUNING.unitRadiusHero * 2 + 80);
+        expect(door.openBody?.body.blocksMovement, `${template.id}/${door.id}: open body should be passable`).toBe(false);
+      }
+    }
+  });
+
+  it('dungeon room anchors and connectors are reachable around authored geometry', () => {
+    const heroRadius = TUNING.unitRadiusHero;
+    for (const template of ALL_ROOM_TEMPLATES) {
+      const start = template.safeZones?.[0]?.pos ?? { x: Math.max(420, template.size.x * 0.18), y: template.size.y / 2 };
+      for (const [i, target] of [...template.spawnAnchors, ...template.connectors.map((c) => c.at)].entries()) {
+        expect(roomReachable(template, start, target, heroRadius), `${template.id}: point ${i} unreachable`).toBe(true);
       }
     }
   });
@@ -1536,6 +1716,26 @@ describe('data lint: collision contract (test 25)', () => {
         expect(zone.body.blocksMovement, `${template.id}/${zone.id}: zones should not block movement`).toBe(false);
         expect(zone.body.shape.kind, `${template.id}/${zone.id}: first-cut zones must be circles`).toBe('circle');
         if (zone.body.shape.kind === 'circle') expect(zone.body.shape.radius, `${template.id}/${zone.id}: radius`).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('dungeon spawn anchors clear max pack rings for the largest creep body', () => {
+    const largestCreepRadius = Math.max(...Object.values(TUNING.unitRadiusCreep));
+    const maxPackBodies = 5;
+    const minPairDistance = largestCreepRadius * 2 + 8;
+    for (const template of ALL_ROOM_TEMPLATES) {
+      for (const [anchorIdx, anchor] of template.spawnAnchors.entries()) {
+        const positions = dungeonPackSpawnPositions(anchor, maxPackBodies, DUNGEON_PACK_RING_RADIUS);
+        for (const [posIdx, pos] of positions.entries()) {
+          expect(roomSpawnPointBlocked(template, pos, largestCreepRadius), `${template.id}: anchor ${anchorIdx} spawn ${posIdx} blocked`).toBe(false);
+        }
+        for (let i = 0; i < positions.length; i++) {
+          for (let j = i + 1; j < positions.length; j++) {
+            const d = Math.hypot(positions[i].x - positions[j].x, positions[i].y - positions[j].y);
+            expect(d, `${template.id}: anchor ${anchorIdx} pack bodies ${i}/${j} overlap`).toBeGreaterThanOrEqual(minPairDistance);
+          }
+        }
       }
     }
   });
@@ -1588,6 +1788,25 @@ describe('data lint: collision contract (test 25)', () => {
         }
       }
     }
+  });
+
+  it('cast preview volumes resolve from the same authored radius and projectile specs', () => {
+    const sim = new Sim({ seed: 2501, bounds: { w: 2400, h: 1600 } });
+    const caster = sim.spawnHero(REG.hero('lina'), { team: 0, pos: { x: 500, y: 800 }, level: 1, ctrl: { kind: 'none' } });
+    const dragonSlave = REG.hero('lina').abilities.find((a) => a.id === 'lina-dragon-slave')!;
+    const slavePreview = resolveCastPreview(sim, caster, dragonSlave, 1, { point: { x: 1500, y: 800 } });
+    const projectile = slavePreview.shapes.find((shape) => shape.kind === 'projectile');
+    expect(projectile?.kind).toBe('projectile');
+    if (projectile?.kind === 'projectile') {
+      expect(projectile.width).toBe(180);
+      expect(Math.hypot(projectile.to.x - projectile.from.x, projectile.to.y - projectile.from.y)).toBeCloseTo(950, 4);
+    }
+
+    const lsa = REG.hero('lina').abilities.find((a) => a.id === 'lina-lsa')!;
+    const lsaPreview = resolveCastPreview(sim, caster, lsa, 1, { point: { x: 700, y: 800 } });
+    const circle = lsaPreview.shapes.find((shape) => shape.kind === 'circle');
+    expect(circle?.kind).toBe('circle');
+    if (circle?.kind === 'circle') expect(circle.radius).toBe(260);
   });
 });
 

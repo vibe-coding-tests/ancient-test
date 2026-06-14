@@ -97,6 +97,9 @@ const STAT_WEIGHTS: Partial<Record<keyof StatModMap, number>> = {
   swapCdReductionPct: 2,
   swapInDamagePct: 2,
   swapInHealPct: 2,
+  tagBoonAmpPct: 2,
+  tagGaugeReductionPct: 2,
+  tagChainWindowBonusSec: 8,
   reactionAmpPct: 2,
   elementalGaugeSec: 8,
   staminaBonus: 0.04
@@ -1381,20 +1384,32 @@ export class Hud {
       const respawnTotal = 15 + rec.level * 3;
       const respawnPct = dead ? Math.max(0, Math.min(1, deadIn / respawnTotal)) : 0;
       const swapKey = glyphForAction(g.settings, `swap-${i + 1}` as InputAction);
+      const boon = def.tagBoon;
+      const tagReadyIn = boon ? Math.max(0, rec.tagGaugeReadyAt - g.sim.time) : 0;
+      const tagPct = boon ? Math.max(0, Math.min(1, 1 - tagReadyIn / Math.max(0.1, boon.gaugeSec))) : 1;
+      const tagState = boon && tagReadyIn > 0 ? `${tagReadyIn.toFixed(tagReadyIn > 5 ? 0 : 1)}s` : 'ready';
+      const reactionPreview = boon && tagReadyIn <= 0 ? g.tagReactionPreview(i) : null;
+      const reactionLine = reactionPreview
+        ? `${reactionPreview.reaction} on ${reactionPreview.targetName}`
+        : '';
       const partyTip = this.registerTip(`party-${i}`, buildHeroCard(def, { level: u ? u.level : rec.level }), {
         accent: def.palette[2] ?? 'var(--brass)',
         extra: [
           `HP ${Math.ceil(u ? u.hp : hpPct)} / ${Math.ceil(u ? u.stats.maxHp : 100)} · Mana ${Math.ceil(u ? u.mana : manaPct)} / ${Math.ceil(u ? u.stats.maxMana : 100)}`,
-          dead ? `Respawns in ${deadIn}s` : `Swap: ${swapKey}`
+          dead ? `Respawns in ${deadIn}s` : `Swap: ${swapKey}`,
+          boon ? `Tag Gauge: ${tagState}` : '',
+          reactionLine ? `Preview: ${reactionLine}` : ''
         ]
       });
       html += `
-        <div class="party-frame ${active ? 'active' : ''} ${dead ? 'dead' : ''}" data-swap="${i}" style="--pf-accent:${def.palette[2] ?? 'var(--brass)'}; --respawn-deg:${(respawnPct * 360).toFixed(1)}deg"${partyTip}>
-          <span class="pf-portrait"><img src="${heroPortrait(def.palette, def.name[0], 72, def.silhouette)}" alt="">${dead ? `<b>${deadIn}</b>` : ''}</span>
+        <div class="party-frame ${active ? 'active' : ''} ${dead ? 'dead' : ''}" data-swap="${i}" style="--pf-accent:${def.palette[2] ?? 'var(--brass)'}; --respawn-deg:${(respawnPct * 360).toFixed(1)}deg; --tag-deg:${(tagPct * 360).toFixed(1)}deg"${partyTip}>
+          <span class="pf-portrait ${boon && tagReadyIn <= 0 ? 'tag-ready' : ''}"><img src="${heroPortrait(def.palette, def.name[0], 72, def.silhouette)}" alt="">${boon ? `<i class="tag-gauge" title="Tag Gauge ${esc(tagState)}"></i>` : ''}${dead ? `<b>${deadIn}</b>` : ''}</span>
           <div class="pf-info">
             <div class="pf-name"><kbd>${esc(swapKey)}</kbd> ${def.name} <em>L${u ? u.level : rec.level}</em></div>
             <div class="bar hp"><div style="width:${hpPct}%"></div></div>
             <div class="bar mana"><div style="width:${manaPct}%"></div></div>
+            ${boon ? `<div class="tag-line">${esc(boon.tooltip)}</div>` : ''}
+            ${reactionLine ? `<div class="reaction-preview">-> ${esc(reactionLine)}</div>` : ''}
             ${u ? this.statusPipsHtml(u, 'party', 4) : ''}
           </div>
         </div>`;
@@ -1734,6 +1749,17 @@ export class Hud {
         case 'movement-blocked': {
           const label = ev.reason === 'out-of-range' ? 'OUT OF RANGE' : ev.reason === 'no-path' ? 'NO PATH' : 'BLOCKED';
           this.addContactFloater(`move-block:${ev.uid}:${ev.reason}`, ev.pos.x, ev.pos.y, label, ev.reason === 'out-of-range' ? 'rangef' : 'blockedf');
+          break;
+        }
+        case 'invalid-target': {
+          const label = ev.reason === 'out-of-range'
+            ? 'OUT OF RANGE'
+            : ev.reason === 'no-line'
+              ? 'NO LINE'
+              : ev.reason === 'immune'
+                ? 'IMMUNE'
+                : 'INVALID TARGET';
+          this.addContactFloater(`invalid:${ev.uid}:${ev.reason}`, ev.pos.x, ev.pos.y, label, ev.reason === 'out-of-range' ? 'rangef' : 'blockedf');
           break;
         }
         case 'death': {
@@ -2263,7 +2289,7 @@ export class Hud {
     { label: 'My state', kinds: ['self-hp-below', 'self-mana-above', 'self-mana-below', 'self-disabled', 'standing-in-zone'] },
     { label: 'Allies', kinds: ['ally-hp-below'] },
     { label: 'Enemies', kinds: ['enemy-hp-below', 'enemies-within', 'focus-is-role', 'enemy-count-by-role', 'distance-to-focus-gt', 'distance-to-focus-lt'] },
-    { label: 'Reactions', kinds: ['enemy-cast-seen', 'incoming-disable'] },
+    { label: 'Reactions', kinds: ['enemy-cast-seen', 'incoming-disable', 'tag-in-ready', 'combo-setup-active'] },
     { label: 'Abilities', kinds: ['ability-ready'] }
   ];
   private static readonly COND_KINDS = Hud.COND_GROUPS.flatMap((g) => g.kinds);
@@ -2273,7 +2299,8 @@ export class Hud {
     'allies-alive': 'Allies alive ≥', 'ability-ready': 'Ability ready', 'fight-time-gt': 'Fight time >',
     'standing-in-zone': 'Standing in zone', 'focus-is-role': 'Focus role is', 'enemy-count-by-role': 'Enemy role count ≥',
     'distance-to-focus-gt': 'Focus farther than', 'distance-to-focus-lt': 'Focus closer than',
-    'enemy-cast-seen': 'Enemy casting', 'self-disabled': "I'm disabled", 'incoming-disable': 'Disable incoming'
+    'enemy-cast-seen': 'Enemy casting', 'self-disabled': "I'm disabled", 'incoming-disable': 'Disable incoming',
+    'tag-in-ready': 'Tag-in ready', 'combo-setup-active': 'Combo setup active'
   };
   private static readonly ACT_KINDS = ['cast', 'use-item', 'attack-focus', 'focus-fire', 'kite', 'peel', 'spread', 'dodge-zones', 'retreat', 'hold'];
   private static readonly ACT_LABEL: Record<string, string> = {
@@ -2334,6 +2361,8 @@ export class Hud {
       case 'enemy-cast-seen': return { k: 'enemy-cast-seen', category: 'ult' };
       case 'self-disabled': return { k: 'self-disabled' };
       case 'incoming-disable': return { k: 'incoming-disable' };
+      case 'tag-in-ready': return { k: 'tag-in-ready' };
+      case 'combo-setup-active': return { k: 'combo-setup-active' };
       default: return { k: 'always' };
     }
   }
@@ -3229,7 +3258,9 @@ export class Hud {
       bars.map((b) => `${b.uid}:${b.ability}:${Math.round(b.pct * 12)}:${b.enemy ? 'e' : 'a'}:${b.isUlt ? 'u' : ''}`).join(','),
       r.bossThreat ? `${r.bossThreat.bossName}>${r.bossThreat.targetName ?? '-'}${r.bossThreat.taunted ? '!' : ''}` : '',
       r.sharedFocus?.name ?? '',
-      r.ultReady.map((u) => u.name).join('+')
+      r.ultReady.map((u) => u.name).join('+'),
+      r.tagChain ? `${r.tagChain.count}:${Math.round(r.tagChain.pct * 12)}:${r.tagChain.ampPct}` : '',
+      `${r.offField.count}:${r.offField.names.join('+')}`
     ].join('|');
     if (key === this.lastCombatReadoutKey) return;
     this.lastCombatReadoutKey = key;
@@ -3251,11 +3282,17 @@ export class Hud {
     const ultHtml = r.ultReady.length
       ? `<div class="ult-line">Ult ready: ${r.ultReady.map((u) => esc(u.name)).join(', ')}${r.live && !this.game.controlledUnit() ? ' — click a portrait to seize' : ''}</div>`
       : '';
+    const tagHtml = r.tagChain
+      ? `<div class="tag-chain-line">Tag chain ×${r.tagChain.count} <span>+${Math.round(r.tagChain.ampPct)}%</span><i><em style="width:${Math.round(r.tagChain.pct * 100)}%"></em></i></div>`
+      : '';
+    const offFieldHtml = r.offField.count
+      ? `<div class="off-field-line">Off-field: ${r.offField.names.map(esc).join(', ')}</div>`
+      : '';
 
     this.combatReadout.classList.remove('hidden');
     this.combatReadout.innerHTML = `
       <div class="readout-casts">${castHtml}</div>
-      <div class="readout-status">${threatHtml}${focusHtml}${ultHtml}</div>`;
+      <div class="readout-status">${threatHtml}${focusHtml}${ultHtml}${tagHtml}${offFieldHtml}</div>`;
   }
 
   private renderLiveGym(): void {

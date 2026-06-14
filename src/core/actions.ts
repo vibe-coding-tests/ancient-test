@@ -2,6 +2,7 @@ import { TUNING } from '../data/tuning';
 import { dist, dist2, pointSegDist, v2 } from './math2d';
 import { attackImpact } from './combat';
 import { execEffects, type EffectCtx } from './effects';
+import { resolveCastPreview } from './cast-preview';
 import { REG } from './registry';
 import { itemReady } from './items';
 import { cannotAttack, cannotCast, cannotMove, isDisabled } from './status';
@@ -299,17 +300,12 @@ function handleCastOrder(sim: Sim, u: Unit, dt: number): void {
   const target = u.order.uid !== undefined ? sim.unit(u.order.uid) : undefined;
   const point = u.order.point;
 
-  if (def.targeting === 'unit-target') {
-    if (!target || !target.alive || target.summary.untargetable || !target.isVisibleTo(u.team, sim.time)) {
-      u.order = { kind: 'stop' };
-      return;
-    }
-    // linken/immunity check for enemy-targeted spells
-    if (target.team !== u.team && target.summary.magicImmune && !def.piercesImmunity) {
-      sim.events.emit({ t: 'immune-block', uid: target.uid });
-      u.order = { kind: 'stop' };
-      return;
-    }
+  const preview = resolveCastPreview(sim, u, def, a.level, { uid: u.order.uid, point });
+  if (preview.reason && preview.reason !== 'out-of-range') {
+    if (preview.reason === 'immune' && target) sim.events.emit({ t: 'immune-block', uid: target.uid });
+    sim.events.emit({ t: 'invalid-target', uid: u.uid, pos: { ...(preview.aim ?? u.pos) }, reason: preview.reason });
+    u.order = { kind: 'stop' };
+    return;
   }
 
   const castRange = (levelArr(asArr(def.castRange, def), a.level, 600) + u.stats.castRangeBonus) * TUNING.rangeScale;

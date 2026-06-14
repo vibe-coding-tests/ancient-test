@@ -4,7 +4,7 @@ import { REG } from '../core/registry';
 import { Sim } from '../core/sim';
 import { resolveCollisions, steerToward } from '../core/movement';
 import { dist, pointSegDist } from '../core/math2d';
-import { obstacleBlocksProjectiles, projectileSegmentHitsObstacle, projectileSegmentHitsUnit, resolveUnitBodies, staticCircleObstacle, zoneContainsUnit } from '../core/collision';
+import { capsuleBody, obstacleBlocksProjectiles, projectileSegmentHitsObstacle, projectileSegmentHitsUnit, rectBody, resolveUnitBodies, staticCircleObstacle, zoneContainsUnit } from '../core/collision';
 
 beforeAll(() => registerAllContent());
 
@@ -166,6 +166,45 @@ describe('movement and collision', () => {
     expect(dist(unit.pos, sim.obstacles[0].pos)).toBeGreaterThanOrEqual(sim.obstacles[0].radius + unit.radius - 0.1);
   });
 
+  it('pushes units out of capsule and rect obstacles', () => {
+    const sim = new Sim({
+      seed: 30,
+      bounds: { w: 2000, h: 2000 },
+      obstacles: [
+        {
+          pos: { x: 600, y: 500 },
+          radius: 0,
+          id: 'capsule-wall',
+          body: capsuleBody(180, 40, { layer: 'wall', blocksMovement: true, blocksProjectiles: true })
+        },
+        {
+          pos: { x: 900, y: 500 },
+          radius: 0,
+          id: 'rect-gate',
+          body: rectBody(180, 120, { layer: 'door', blocksMovement: true, blocksProjectiles: true })
+        }
+      ]
+    });
+    const capsuleUnit = sim.spawnHero(REG.hero('juggernaut'), {
+      team: 0,
+      pos: { x: 600, y: 515 },
+      level: 1,
+      ctrl: { kind: 'none' }
+    });
+    const rectUnit = sim.spawnHero(REG.hero('axe'), {
+      team: 0,
+      pos: { x: 900, y: 500 },
+      level: 1,
+      ctrl: { kind: 'none' }
+    });
+
+    resolveCollisions(sim, capsuleUnit, true);
+    resolveCollisions(sim, rectUnit, true);
+
+    expect(pointSegDist(capsuleUnit.pos, { x: 420, y: 500 }, { x: 780, y: 500 })).toBeGreaterThanOrEqual(40 + capsuleUnit.radius - 0.1);
+    expect(Math.abs(rectUnit.pos.x - 900) >= 90 + rectUnit.radius - 0.1 || Math.abs(rectUnit.pos.y - 500) >= 60 + rectUnit.radius - 0.1).toBe(true);
+  });
+
   it('detects projectile-blocking obstacle contacts along a swept segment', () => {
     const input = staticCircleObstacle({
       pos: { x: 180, y: 0 },
@@ -180,6 +219,25 @@ describe('movement and collision', () => {
     expect(obstacleBlocksProjectiles(obstacle)).toBe(true);
     expect(hit).not.toBeNull();
     expect(hit?.pos.x).toBeCloseTo(130, 4);
+  });
+
+  it('detects projectile contacts against capsule and rect blockers', () => {
+    const capsule = {
+      pos: { x: 200, y: 0 },
+      radius: 0,
+      id: 'capsule-blocker',
+      body: capsuleBody(80, 20, { layer: 'wall', blocksMovement: true, blocksProjectiles: true })
+    };
+    const rect = {
+      pos: { x: 360, y: 0 },
+      radius: 0,
+      id: 'rect-blocker',
+      body: rectBody(80, 120, { layer: 'door', blocksMovement: true, blocksProjectiles: true })
+    };
+    const sim = new Sim({ seed: 31, bounds: { w: 1000, h: 1000 }, obstacles: [capsule, rect] });
+
+    expect(projectileSegmentHitsObstacle({ x: 0, y: 0 }, { x: 500, y: 0 }, 20, sim.obstacles[0])).not.toBeNull();
+    expect(projectileSegmentHitsObstacle({ x: 0, y: 0 }, { x: 500, y: 0 }, 20, sim.obstacles[1])).not.toBeNull();
   });
 
   it('blocks linear projectiles on the first projectile-blocking obstacle', () => {
@@ -226,5 +284,44 @@ describe('movement and collision', () => {
 
     expect(sim.events.history.some((e) => e.t === 'projectile-block')).toBe(false);
     expect(sim.events.history.some((e) => e.t === 'projectile-hit' && e.targetUid === target.uid)).toBe(true);
+  });
+
+  it('blocks homing ability projectiles on projectile-blocking obstacles', () => {
+    const sim = new Sim({
+      seed: 32,
+      bounds: { w: 1200, h: 800 },
+      obstacles: [staticCircleObstacle({ pos: { x: 260, y: 400 }, radius: 45, id: 'homing-pillar', blocksProjectiles: true })]
+    });
+    sim.events.captureAll = true;
+    const caster = sim.spawnHero(REG.hero('lich'), { team: 0, pos: { x: 120, y: 400 }, level: 1, ctrl: { kind: 'none' } });
+    const target = sim.spawnHero(REG.hero('axe'), { team: 1, pos: { x: 520, y: 400 }, level: 1, ctrl: { kind: 'none' } });
+    sim.spawnProjectile(caster, { defId: 'test-homing', level: 1, vfx: { archetype: 'projectile', color: '#fff' } }, {
+      model: 'homing',
+      speed: 1200,
+      width: 40,
+      onHit: [{ kind: 'damage', dtype: 'magical', amount: 10, target: 'target' }]
+    }, { targetUid: target.uid });
+
+    sim.run(0.2);
+
+    expect(sim.events.history.some((e) => e.t === 'projectile-block' && e.obstacleId === 'homing-pillar')).toBe(true);
+    expect(sim.events.history.some((e) => e.t === 'projectile-hit')).toBe(false);
+  });
+
+  it('keeps basic attack homing projectiles from being blocked by obstacles', () => {
+    const sim = new Sim({
+      seed: 33,
+      bounds: { w: 1200, h: 800 },
+      obstacles: [staticCircleObstacle({ pos: { x: 260, y: 400 }, radius: 45, id: 'attack-pillar', blocksProjectiles: true })]
+    });
+    sim.events.captureAll = true;
+    const attacker = sim.spawnHero(REG.hero('sniper'), { team: 0, pos: { x: 120, y: 400 }, level: 1, ctrl: { kind: 'none' } });
+    const target = sim.spawnHero(REG.hero('axe'), { team: 1, pos: { x: 520, y: 400 }, level: 1, ctrl: { kind: 'none' } });
+
+    sim.spawnAttackProjectile(attacker, target, 1200);
+    sim.run(0.5);
+
+    expect(sim.events.history.some((e) => e.t === 'projectile-block' && e.obstacleId === 'attack-pillar')).toBe(false);
+    expect(sim.events.history.some((e) => e.t === 'attack-impact' && e.target === target.uid)).toBe(true);
   });
 });

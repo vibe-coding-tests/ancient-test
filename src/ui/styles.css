@@ -514,6 +514,18 @@ button:disabled { opacity: 0.45; cursor: default; }
   background: conic-gradient(var(--bad) var(--respawn-deg, 0deg), var(--pf-accent, var(--brass)) 0);
   padding: 2px;
 }
+.pf-portrait .tag-gauge {
+  position: absolute;
+  inset: -4px;
+  border-radius: 10px;
+  background: conic-gradient(var(--pf-accent, var(--brass)) var(--tag-deg, 360deg), rgba(8, 10, 15, 0.78) 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 0);
+  mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 0);
+  pointer-events: none;
+}
+.pf-portrait.tag-ready .tag-gauge {
+  filter: drop-shadow(0 0 5px var(--pf-accent, var(--brass)));
+}
 .pf-portrait b {
   position: absolute;
   inset: 6px;
@@ -533,6 +545,24 @@ button:disabled { opacity: 0.45; cursor: default; }
 .pf-info { flex: 1; min-width: 0; }
 .pf-name { font-size: 12px; white-space: nowrap; overflow: hidden; }
 .pf-name em { color: var(--dim); font-style: normal; }
+.tag-line {
+  margin-top: 2px;
+  color: var(--brass-lite);
+  font-size: 9px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.reaction-preview {
+  margin-top: 1px;
+  color: #aee9ff;
+  font-size: 9px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 0 8px rgba(103, 215, 255, 0.35);
+}
 .pf-name kbd {
   display: inline-block;
   min-width: 16px;
@@ -1254,6 +1284,11 @@ button:disabled { opacity: 0.45; cursor: default; }
 #combat-readout .threat-line span, #combat-readout .focus-line span { color: #fff; font-weight: 700; }
 #combat-readout .focus-line { color: #bff0ff; }
 #combat-readout .ult-line { color: #ffe9a8; font-weight: 600; }
+#combat-readout .tag-chain-line { color: var(--brass-lite); font-weight: 700; min-width: 180px; text-align: center; }
+#combat-readout .tag-chain-line span { color: #fff; }
+#combat-readout .tag-chain-line i { display: block; height: 4px; margin-top: 2px; border-radius: 3px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
+#combat-readout .tag-chain-line em { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--brass), #fff0a8); }
+#combat-readout .off-field-line { color: #aee9ff; font-size: 11px; }
 
 /* ---------- gambit editor ---------- */
 

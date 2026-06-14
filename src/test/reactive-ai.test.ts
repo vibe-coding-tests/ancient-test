@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { registerAllContent } from '../data';
 import { setupMacroSim } from '../core/macro';
-import { thinkGambit } from '../core/controllers';
+import { thinkGambit, evalCondition } from '../core/controllers';
 import { enemyCastSeen, incomingDisable, chooseUtilityOrder } from '../core/utility';
 import type { GambitRule, MacroHeroSetup, StatusId } from '../core/types';
 import type { Unit } from '../core/unit';
@@ -99,6 +99,44 @@ describe('reactive reads', () => {
     hero.refresh(sim.time);
     thinkGambit(sim, hero);
     expect(hero.order.kind).toBe('hold'); // disabled: the reaction fires
+  });
+
+  // SWAP_COMBAT_OVERHAUL §3.5/§8.7: the reactive grammar points at the Tag Gauge
+  // and the live combo state so an ally can route the chain.
+  it('tag-in-ready reads the mirrored Tag Gauge on the unit', () => {
+    const sim = macro([{ heroId: 'sniper', level: 18 }], [{ heroId: 'sven', level: 18 }]);
+    const hero = sim.unitsArr.find((u) => u.team === 0)!;
+
+    hero.tagGaugeReadyAt = undefined; // a fielded raid hero with no gauge stamp reads ready
+    expect(evalCondition(sim, hero, { k: 'tag-in-ready' }, undefined)).toBe(true);
+
+    hero.tagGaugeReadyAt = sim.time + 5; // gauge on cooldown → not ready
+    expect(evalCondition(sim, hero, { k: 'tag-in-ready' }, undefined)).toBe(false);
+
+    hero.tagGaugeReadyAt = sim.time - 0.1; // re-armed
+    expect(evalCondition(sim, hero, { k: 'tag-in-ready' }, undefined)).toBe(true);
+  });
+
+  it('combo-setup-active sees a setup state (CC, slow, or soak) on the focus', () => {
+    const sim = macro([{ heroId: 'lina', level: 18 }], [{ heroId: 'sven', level: 18 }]);
+    const hero = sim.unitsArr.find((u) => u.team === 0)!;
+    const focus = sim.unitsArr.find((u) => u.team === 1)!;
+
+    // a clean focus has no setup
+    expect(evalCondition(sim, hero, { k: 'combo-setup-active' }, focus)).toBe(false);
+    expect(evalCondition(sim, hero, { k: 'combo-setup-active' }, undefined)).toBe(false);
+
+    // a Lockdown setup (root) lights it up
+    focus.addStatus({ status: 'root', tag: 'setup', sourceUid: hero.uid, sourceTeam: hero.team, until: sim.time + 1.5, isDebuff: true });
+    focus.refresh(sim.time);
+    expect(evalCondition(sim, hero, { k: 'combo-setup-active' }, focus)).toBe(true);
+
+    // a lingering element aura (a Soak) also counts, even with no CC
+    focus.removeStatusWhere(() => true);
+    focus.refresh(sim.time);
+    expect(evalCondition(sim, hero, { k: 'combo-setup-active' }, focus)).toBe(false);
+    focus.elementAuras.hydro = { gauge: 1, until: sim.time + 3, sourceUid: hero.uid };
+    expect(evalCondition(sim, hero, { k: 'combo-setup-active' }, focus)).toBe(true);
   });
 });
 

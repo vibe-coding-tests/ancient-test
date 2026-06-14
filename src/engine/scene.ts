@@ -1,14 +1,15 @@
 import * as THREE from 'three';
-import type { AttackVisualSpec, DungeonRoom, GraphicsCrowdDetail, GraphicsDistance, GraphicsIntensityOverride, GraphicsTierOverride, GroundItemDrop, ItemAppearanceSpec, RegionDef, RoomTemplate, SilhouetteSpec, StageAction, Vec2, VfxSpec } from '../core/types';
+import type { AttackVisualSpec, CollisionBody, DungeonRoom, GraphicsCrowdDetail, GraphicsDistance, GraphicsIntensityOverride, GraphicsTierOverride, GroundItemDrop, ItemAppearanceSpec, RegionDef, RoomTemplate, SilhouetteSpec, StageAction, Vec2, VfxSpec } from '../core/types';
 import type { Sim } from '../core/sim';
 import type { Unit } from '../core/unit';
+import type { CastPreview } from '../core/cast-preview';
 import { REG } from '../core/registry';
 import { buildTerrain, type TerrainInfo } from './terrain';
 import { applyAuthoredSilhouette, applyHeroLikeness, applyItemAppearances, attachHeroWeaponModel, attachHoldoutSignatureModel, attachSignatureItemWeapon, buildUnitRig, buildSelectionRing, mountHeroModel, recolorToPalette, type UnitRig } from './models';
 import { HeroAssetLoader, heroAssetEntry, creepCreatureUrl, BESPOKE_HERO_MODELS, ENABLED_HOLDOUT_MODELS, heroBaseId, holdoutSignatureUrl, itemWeaponGlbUrl } from './assets';
 import { animateRig, applyCinematicGesture, newAnimState, type AnimState } from './animator';
 import { loadVfxBeamRamp, loadVfxTextureAtlas, VfxManager } from './vfx';
-import { resolveUnitBodies } from '../core/collision';
+import { collisionBodyBoundingRadius, resolveUnitBodies, unitPickRadius as resolvedUnitPickRadius } from '../core/collision';
 import type { CinematicView } from './cinematic';
 import { lodForDistance, shouldAnimateAtLod, shouldUseCrowdImpostor, type LodTier } from './lod';
 import { WORLD_SCALE, heightMFromScale, scaleFromHeightM } from './scale';
@@ -336,8 +337,6 @@ const HP_BAR_WIDTH = 1.5;
 const HP_BAR_HEIGHT = 0.16;
 const MANA_BAR_HEIGHT = 0.035;
 const UNIT_PICK_MIN_RADIUS = 0.85;
-const UNIT_PICK_RADIUS_PADDING = 0.38;
-const UNIT_PICK_VISUAL_RADIUS_FACTOR = 0.64;
 const UNIT_PICK_BOTTOM_FRAC = 0.12;
 const UNIT_PICK_TOP_PADDING = 0.35;
 const GROUND_ITEM_PICK_RADIUS = 0.72;
@@ -406,6 +405,7 @@ export class GameScene {
   private questGivers = new Map<string, QuestGiverMarker>();
   private dungeonRoomGroup: THREE.Group | null = null;
   private dungeonRoomFloorY: number | null = null;
+  private targetingPreviewGroup = new THREE.Group();
   private readonly collisionDebugEnabled = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('debug');
   private collisionDebugGroup = new THREE.Group();
 
@@ -529,6 +529,8 @@ export class GameScene {
     this.collisionDebugGroup.name = 'collision-debug-overlay';
     this.collisionDebugGroup.visible = this.collisionDebugEnabled;
     this.scene.add(this.collisionDebugGroup);
+    this.targetingPreviewGroup.name = 'targeting-preview-overlay';
+    this.scene.add(this.targetingPreviewGroup);
     this.groundItemGroup.name = 'ground-item-drops';
     this.scene.add(this.groundItemGroup);
     if (qualityCfg.tier !== 'low') {
@@ -1144,9 +1146,8 @@ export class GameScene {
     }
 
     for (const obstacle of sim.obstacles) {
-      if (obstacle.body.shape.kind !== 'circle') continue;
       const color = obstacle.body.blocksProjectiles ? '#d88cff' : obstacle.body.blocksMovement === false ? '#8a8a8a' : '#c8b08a';
-      this.addDebugCircle(obstacle.pos, obstacle.body.shape.radius, color, 0.42);
+      this.addDebugBodyShape(obstacle.pos, obstacle.body, color, 0.42);
     }
 
     for (const z of sim.zones) {
@@ -1179,12 +1180,77 @@ export class GameScene {
     }
   }
 
-  private addDebugBodyCircle(pos: Vec2, body: ReturnType<typeof resolveUnitBodies>['movement'], color: string, opacity: number, padding = 0): void {
-    if (body.shape.kind !== 'circle') return;
-    this.addDebugCircle(pos, body.shape.radius + padding, color, opacity);
+  clearCastPreview(): void {
+    this.clearLineGroup(this.targetingPreviewGroup);
   }
 
-  private addDebugCircle(pos: Vec2, radius: number, color: string, opacity: number): void {
+  setCastPreview(preview: CastPreview | null): void {
+    this.clearCastPreview();
+    if (!preview || preview.shapes.length === 0) return;
+    const color = preview.ok || preview.reason === 'out-of-range' ? '#7adfff' : '#ff6a5a';
+    const opacity = preview.ok ? 0.52 : 0.42;
+    for (const shape of preview.shapes) {
+      if (shape.kind === 'circle') {
+        this.addDebugCircle(shape.pos, shape.radius, color, opacity, this.targetingPreviewGroup);
+      } else {
+        const a = shape.kind === 'line' ? shape.a : shape.from;
+        const b = shape.blockedAt ?? (shape.kind === 'line' ? shape.b : shape.to);
+        this.addDebugPolyline([a, b], shape.blockedAt ? '#ff6a5a' : color, opacity, this.targetingPreviewGroup);
+        this.addDebugCircle(a, Math.max(12, shape.width / 2), color, opacity * 0.55, this.targetingPreviewGroup);
+        this.addDebugCircle(b, Math.max(12, shape.width / 2), shape.blockedAt ? '#ff6a5a' : color, opacity * 0.55, this.targetingPreviewGroup);
+      }
+    }
+    if (preview.lineBlockedAt) this.addDebugCircle(preview.lineBlockedAt, 42, '#ff6a5a', 0.56, this.targetingPreviewGroup);
+  }
+
+  private clearLineGroup(group: THREE.Group): void {
+    while (group.children.length > 0) {
+      const child = group.children.pop()!;
+      child.traverse((obj) => {
+        const mesh = obj as THREE.Mesh | THREE.Line;
+        mesh.geometry?.dispose();
+        const mat = mesh.material;
+        if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+        else mat?.dispose();
+      });
+    }
+  }
+
+  private addDebugBodyCircle(pos: Vec2, body: ReturnType<typeof resolveUnitBodies>['movement'], color: string, opacity: number, padding = 0): void {
+    this.addDebugBodyShape(pos, body, color, opacity, padding);
+  }
+
+  private addDebugBodyShape(pos: Vec2, body: CollisionBody, color: string, opacity: number, padding = 0): void {
+    if (body.shape.kind === 'circle') {
+      this.addDebugCircle(pos, body.shape.radius + padding, color, opacity);
+      return;
+    }
+    if (body.shape.kind === 'capsule') {
+      const angle = body.shape.angle ?? 0;
+      const axis = { x: Math.cos(angle) * body.shape.halfLength, y: Math.sin(angle) * body.shape.halfLength };
+      const a = { x: pos.x - axis.x, y: pos.y - axis.y };
+      const b = { x: pos.x + axis.x, y: pos.y + axis.y };
+      this.addDebugPolyline([a, b], color, opacity);
+      this.addDebugCircle(a, body.shape.radius + padding, color, opacity * 0.8);
+      this.addDebugCircle(b, body.shape.radius + padding, color, opacity * 0.8);
+      return;
+    }
+    const angle = body.shape.angle ?? 0;
+    const c = Math.cos(angle);
+    const s = Math.sin(angle);
+    const hx = body.shape.width / 2 + padding;
+    const hy = body.shape.depth / 2 + padding;
+    const corners = [
+      { x: -hx, y: -hy },
+      { x: hx, y: -hy },
+      { x: hx, y: hy },
+      { x: -hx, y: hy },
+      { x: -hx, y: -hy }
+    ].map((p) => ({ x: pos.x + p.x * c - p.y * s, y: pos.y + p.x * s + p.y * c }));
+    this.addDebugPolyline(corners, color, opacity);
+  }
+
+  private addDebugCircle(pos: Vec2, radius: number, color: string, opacity: number, group = this.collisionDebugGroup): void {
     if (radius <= 0) return;
     const points: THREE.Vector3[] = [];
     const steps = 48;
@@ -1193,20 +1259,20 @@ export class GameScene {
       const a = (i / steps) * Math.PI * 2;
       points.push(new THREE.Vector3((pos.x + Math.cos(a) * radius) / WORLD_SCALE, y, (pos.y + Math.sin(a) * radius) / WORLD_SCALE));
     }
-    this.addDebugLineObject(points, color, opacity);
+    this.addDebugLineObject(points, color, opacity, group);
   }
 
-  private addDebugPolyline(points: Vec2[], color: string, opacity: number): void {
+  private addDebugPolyline(points: Vec2[], color: string, opacity: number, group = this.collisionDebugGroup): void {
     if (points.length < 2) return;
-    this.addDebugLineObject(points.map((p) => new THREE.Vector3(p.x / WORLD_SCALE, this.visualGroundHeightAt(p.x, p.y) + 0.34, p.y / WORLD_SCALE)), color, opacity);
+    this.addDebugLineObject(points.map((p) => new THREE.Vector3(p.x / WORLD_SCALE, this.visualGroundHeightAt(p.x, p.y) + 0.34, p.y / WORLD_SCALE)), color, opacity, group);
   }
 
-  private addDebugLineObject(points: THREE.Vector3[], color: string, opacity: number): void {
+  private addDebugLineObject(points: THREE.Vector3[], color: string, opacity: number, group = this.collisionDebugGroup): void {
     const geo = new THREE.BufferGeometry().setFromPoints(points);
     const mat = new THREE.LineBasicMaterial({ color, transparent: true, opacity, depthTest: false, depthWrite: false });
     const line = new THREE.Line(geo, mat);
     line.renderOrder = 40;
-    this.collisionDebugGroup.add(line);
+    group.add(line);
   }
 
   private recordFrameMs(frameMs: number, dt: number): void {
@@ -2658,24 +2724,9 @@ export class GameScene {
 
   // ---------- picking ----------
 
-  /** The unit's resolved visual footprint radius in world meters (OVERWORLD_PLANNING
-   *  §6): an explicit `WorldSize.footprintM` when declared, else the sim radius. */
-  private unitFootprintM(u: Unit): number {
-    if (!u.visual) {
-      if (u.kind === 'hero' && u.heroId) return heroWorldSize(REG.hero(u.heroId)).footprintM;
-      if (u.kind === 'creep' && u.creepId) return creepWorldSize(REG.creep(u.creepId)).footprintM;
-    }
-    return u.radius / WORLD_SCALE;
-  }
-
   private unitPickRadius(u: Unit, view: UnitView): number {
-    const rootScale = Math.max(view.rig.root.scale.x, view.rig.root.scale.z, 1);
-    const simRadius = u.radius / WORLD_SCALE;
-    // §6 selection-ring sanity: the capsule encloses the declared visual footprint
-    // (not just the sim radius), so a wide creature isn't clickable only at its core.
-    const footprintM = this.unitFootprintM(u);
-    const visualRadius = view.rig.scale * UNIT_PICK_VISUAL_RADIUS_FACTOR;
-    return Math.max(UNIT_PICK_MIN_RADIUS, simRadius + UNIT_PICK_RADIUS_PADDING, footprintM, visualRadius) * rootScale;
+    void view;
+    return Math.max(UNIT_PICK_MIN_RADIUS, resolvedUnitPickRadius(u) / WORLD_SCALE);
   }
 
   private unitPickHeight(view: UnitView): number {
@@ -2726,8 +2777,11 @@ export class GameScene {
         this.visualGroundHeightAt(drop.pos.x, drop.pos.y) + 0.42,
         drop.pos.y / WORLD_SCALE
       );
+      const pickRadius = drop.body
+        ? (collisionBodyBoundingRadius(drop.body) + (drop.body.pickPadding ?? 0)) / WORLD_SCALE
+        : GROUND_ITEM_PICK_RADIUS;
       const distSq = this.raycaster.ray.distanceSqToPoint(this.groundItemPoint);
-      if (distSq >= GROUND_ITEM_PICK_RADIUS * GROUND_ITEM_PICK_RADIUS) continue;
+      if (distSq >= pickRadius * pickRadius) continue;
       const along = this.groundItemPoint.clone().sub(this.raycaster.ray.origin).dot(this.raycaster.ray.direction);
       if (along < 0) continue;
       if (!bestItem || along < bestItem.d) bestItem = { uid: drop.uid, d: along };

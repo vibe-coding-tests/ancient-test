@@ -787,11 +787,52 @@ export const EXTENDED_ASSEMBLED: ItemDef[] = [
     appearance: { tint: '#d05a42' }
   },
   {
+    id: 'heralds-token', name: "Heralds' Token", tier: 't1', cost: 1500,
+    components: ['quickstep-cord', 'sages-mask'], recipeCost: 975,
+    passiveMods: { tagGaugeReductionPct: 25, manaRegen: 1.5, int: 5 },
+    lore: 'A small standard for heroes who make the next entrance matter.', glyph: 'banner',
+    description: 'Tag Gauges recharge faster, tightening swap rotations.',
+    appearance: { tint: '#f0d37a' }
+  },
+  {
+    id: 'vanguard-sigil', name: 'Vanguard Sigil', tier: 't1', cost: 1825,
+    components: ['quickstep-cord', 'chainmail', 'ring-of-protection'], recipeCost: 750,
+    passiveMods: { tagBoonAmpPct: 12, armor: 4, damageTakenReductionPct: 6 },
+    lore: 'A front-line seal that turns a tag-in into a shielded arrival.', glyph: 'shield',
+    description: 'Amplifies tag boons while adding durable front-line stats.',
+    appearance: { parts: ['shield'], tint: '#9fb4d8' }
+  },
+  {
     id: 'resonance-catalyst', name: 'Resonance Catalyst', tier: 't1', cost: 2100,
     components: ['prismatic-shard', 'staff-of-wizardry', 'sages-mask'], recipeCost: 525,
     passiveMods: { reactionAmpPct: 25, elementalGaugeSec: 1, spellAmpPct: 10, int: 10, manaRegen: 2.5 },
     lore: 'A tuning fork for elemental openings.', glyph: 'orb',
     appearance: { parts: ['mana-orb'], tint: '#c8a0ff', aura: { archetype: 'shield', color: '#c8a0ff', color2: '#ffffff' } }
+  },
+  {
+    id: 'relay-standard', name: 'Relay Standard', tier: 't2', cost: 3300,
+    components: ['heralds-token', 'headdress', 'buckler'], recipeCost: 950,
+    passiveMods: { tagBoonAmpPct: 30, tagGaugeReductionPct: 10, hpRegen: 3, armor: 3 },
+    aura: { radius: 900, affects: 'allies', mods: { statusResistPct: 6 } },
+    lore: 'A rally flag for supports who win fights by handing power forward.', glyph: 'banner',
+    description: 'Greatly amplifies tag boons and modestly accelerates their recharge.',
+    appearance: { parts: ['banner'], tint: '#ffe08a', aura: { archetype: 'shield', color: '#ffe08a', color2: '#ffffff' } }
+  },
+  {
+    id: 'echo-conduit', name: 'Echo Conduit', tier: 't2', cost: 3350,
+    components: ['resonance-catalyst', 'quickstep-cord'], recipeCost: 900,
+    passiveMods: { reactionAmpPct: 35, elementalGaugeSec: 1.5, tagBoonAmpPct: 10, spellAmpPct: 8 },
+    lore: 'A resonant loop that leaves the element ringing after the swap.', glyph: 'orb',
+    description: 'Boosts reactions and tag boon magnitude for Resonance teams.',
+    appearance: { parts: ['mana-orb'], tint: '#8ee8ff', aura: { archetype: 'dome', color: '#8ee8ff', color2: '#ffffff' } }
+  },
+  {
+    id: 'chainweaver-band', name: 'Chainweaver Band', tier: 't2', cost: 3200,
+    components: ['heralds-token', 'exchange-mark'], recipeCost: 225,
+    passiveMods: { tagChainWindowBonusSec: 1, tagGaugeReductionPct: 15, tagBoonAmpPct: 12, swapCdReductionPct: 10 },
+    lore: 'A ring for players who hear the next tag before the current one lands.', glyph: 'ring',
+    description: 'Extends the Tag Chain window and strengthens chained boons.',
+    appearance: { tint: '#d8b4ff', aura: { archetype: 'chain', color: '#d8b4ff', color2: '#ffffff' } }
   },
   {
     id: 'power-treads', name: 'Power Treads', tier: 'basic', cost: 1400,

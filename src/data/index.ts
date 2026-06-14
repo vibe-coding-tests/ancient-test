@@ -38,6 +38,7 @@ import { ALL_TRAINERS } from './trainers';
 import { elementForAbility, elementForHero } from '../core/resonance';
 import { EXOTIC_IMPLS, type ExoticContext } from '../core/exotics';
 import { glyphForAbility } from '../core/gestures';
+import { withDefaultTagBoon } from './tag-boons';
 import type { AbilityDef, EffectNode, HeroComboRule, HeroDef, StatusId, TargetSel } from '../core/types';
 
 const COMBO_SETUP_STATUSES: ReadonlySet<StatusId> = new Set(['stun', 'root', 'silence', 'hex', 'disarm', 'fear', 'taunt', 'cyclone', 'sleep', 'frozen']);
@@ -127,7 +128,7 @@ function withElementTags(hero: HeroDef): HeroDef {
   return combo.length > 0 ? { ...withTags, combo } : withTags;
 }
 
-export const ALL_HEROES: HeroDef[] = [JUGGERNAUT, CRYSTAL_MAIDEN, PUDGE, EARTHSHAKER, SNIPER, LICH, LUNA, SVEN, AXE, ...PHASE2_HEROES, ...PHASE3_HEROES, ...STANDARD_MISSING_HEROES, ...COMPLEX_MISSING_HEROES].map(withElementTags);
+export const ALL_HEROES: HeroDef[] = [JUGGERNAUT, CRYSTAL_MAIDEN, PUDGE, EARTHSHAKER, SNIPER, LICH, LUNA, SVEN, AXE, ...PHASE2_HEROES, ...PHASE3_HEROES, ...STANDARD_MISSING_HEROES, ...COMPLEX_MISSING_HEROES].map(withElementTags).map(withDefaultTagBoon);
 export const ALL_REGIONS = [TRANQUIL_VALE, NIGHTSILVER_WOODS, ICEWRACK, ...PHASE3_REGIONS];
 export { ALL_DUNGEONS, ALL_ROOM_TEMPLATES };
 

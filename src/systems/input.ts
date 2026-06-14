@@ -2,6 +2,7 @@ import type { Game } from './game';
 import type { Vec2 } from '../core/types';
 import { TUNING } from '../data/tuning';
 import { actionForEvent } from './keybindings';
+import { castInvalidReasonLabel, resolveCastPreview, type CastPreviewInput } from '../core/cast-preview';
 
 // ------------------------------------------------------------------
 // Controls (SPEC §6): keyboard actions resolve through settings.keyBindings;
@@ -114,6 +115,7 @@ export class InputController {
   /** called each frame: refresh hover pick + held-RMB move orders */
   update(): void {
     this.refreshPick();
+    this.syncCastPreview();
     this.updateCursor();
 
     if (this.rmbHeld && !this.uiModalOpen) {
@@ -217,8 +219,45 @@ export class InputController {
       uid: this.hoverUid >= 0 ? this.hoverUid : undefined,
       point: this.hoverGround ?? { ...u.pos }
     };
-    if (t.kind === 'ability') g.castAbility(t.slot, { ...opts, queued: this.clickQueued });
-    else g.useItem(t.slot, { ...opts, queued: this.clickQueued });
+    if (t.kind === 'ability') {
+      if (this.rejectInvalidAbilityTarget(t.slot, opts)) return;
+      g.castAbility(t.slot, { ...opts, queued: this.clickQueued });
+    } else {
+      g.useItem(t.slot, { ...opts, queued: this.clickQueued });
+    }
+  }
+
+  private rejectInvalidAbilityTarget(slot: number, opts: CastPreviewInput): boolean {
+    const g = this.game;
+    const u = g.controlledUnit();
+    if (!u) return true;
+    const a = u.abilities[slot];
+    if (!a) return true;
+    const preview = resolveCastPreview(g.inputSim(), u, a.def, a.level, opts);
+    if (!preview.reason || preview.reason === 'out-of-range') return false;
+    g.msg(castInvalidReasonLabel(preview.reason), 'bad');
+    return true;
+  }
+
+  private syncCastPreview(): void {
+    const g = this.game;
+    const u = g.controlledUnit();
+    if (!u || this.targeting.kind !== 'ability') {
+      g.scene.clearCastPreview();
+      return;
+    }
+    const a = u.abilities[this.targeting.slot];
+    if (!a) {
+      g.scene.clearCastPreview();
+      return;
+    }
+    const target = this.hoverUid >= 0 ? g.inputSim().unit(this.hoverUid) : null;
+    const point = target ? { ...target.pos } : this.hoverGround ?? { ...u.pos };
+    const preview = resolveCastPreview(g.inputSim(), u, a.def, a.level, {
+      uid: this.hoverUid >= 0 ? this.hoverUid : undefined,
+      point
+    });
+    g.scene.setCastPreview(preview);
   }
 
   private onKeyDown(e: KeyboardEvent): void {
@@ -412,6 +451,7 @@ export class InputController {
         g.msg('No target under cursor', 'bad');
         return;
       }
+      if (this.rejectInvalidAbilityTarget(slot, { uid: this.hoverUid })) return;
       g.castAbility(slot, { uid: this.hoverUid, queued });
     } else {
       // point-target / skillshot / ground-aoe: cast at cursor ground
@@ -421,6 +461,7 @@ export class InputController {
       }
       const target = this.hoverUid >= 0 ? g.inputSim().unit(this.hoverUid) : null;
       const point = target ? { ...target.pos } : this.hoverGround!;
+      if (this.rejectInvalidAbilityTarget(slot, { point, uid: this.hoverUid >= 0 ? this.hoverUid : undefined })) return;
       g.castAbility(slot, { point, uid: this.hoverUid >= 0 ? this.hoverUid : undefined, queued });
     }
   }

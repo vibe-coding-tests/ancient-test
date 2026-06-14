@@ -4,6 +4,7 @@ import { GRADE_UP_COSTS, IMPRINT_COSTS, MASTERWORK_COSTS, REFORGE_COSTS, REROLL_
 import { affixDef, affixPoolForItem, rollAffixForKind, rollAffixesFor } from '../data/affixes';
 import { fuseGems, gemDef, isGemId, socketsForDrop } from '../data/gems';
 import { setBonusEffects } from '../data/sets';
+import { tagBoonVfx } from '../data/tag-boons';
 import { ITEM_GRADES, levelReq, percentileForGrade, rollGrade, statMultiplier, type GradeFloorSource } from '../data/grade';
 import { QUALITY_GRADES, nextQuality, rarityColor, setColorblindPalette } from '../data/quality';
 import { applyLootFilter, DEFAULT_LOOT_FILTER, type LootFilterRule } from './loot-filter';
@@ -11,7 +12,8 @@ import { REG } from '../core/registry';
 import { buildAbilityCard } from '../core/describe';
 import { Sim } from '../core/sim';
 import { Unit } from '../core/unit';
-import { applyElementAura, healUnit } from '../core/combat';
+import { applyElementAura } from '../core/combat';
+import { execEffects } from '../core/effects';
 import { autoPicksForLevel, buildHero } from '../core/hero-setup';
 import { spawnHeroEchoUnit } from '../core/echo-unit';
 import { TrialRunner, trialGateOpen, type TrialGateCtx, type TrialOutcome } from '../core/trials';
@@ -50,14 +52,15 @@ import { mergeCreeps, newCreepInstanceId, validateEntourage } from '../core/capt
 import { computeBuyPlan, executeBuy, itemReady, itemSaveOf, itemStateFromSave, sellValue, sortInventory } from '../core/items';
 import { runDomainEncounter, runRaidBattle, runRaidEncounter, runMacroBattle, type RaidEncounterResult } from '../core/macro';
 import { ELITE_DRAFT } from '../data/drafts';
-import { resonanceMods, elementForHero } from '../core/resonance';
+import { isActiveElement, reactionFor, resonanceMods, elementForHero } from '../core/resonance';
 import { levelFromXp, xpForLevel } from '../core/stats';
 import { abilityMaxLevel, abilityRankRequiredHeroLevel, autoAbilityLevels, canLearnAbilityRank, normalizeAbilityLevels } from '../core/values';
 import { dist, fromAngle, norm, sub } from '../core/math2d';
-import { obstacleBlocksMovement } from '../core/collision';
-import type { ActiveElement, ArmoryLoadouts, BossDef, CollisionObstacleInput, CreepTier, CreepInstanceSave, CutsceneDef, DifficultyTier, DishDef, DomainDef, DraftDef, DropSource, DungeonDef, DungeonModifierDef, DungeonProgressSave, DungeonRoom, EchoProgress, EchoSpawnDef, GambitRule, GameSave, GraphicsSettings, GroundItemDrop, HeroAugments, HeroLoadoutSlots, HeroSave, ItemDef, ItemDropTable, ItemGrade, ItemQuality, ItemRarity, ItemSave, ItemTier, LootBand, LoreEntryDef, MacroHeroSetup, NeutralItemDef, NeutralStashEntry, Order, QuestDef, QuestGiverDef, QuestKind, QuestProgress, QuestReward, QuestSave, QuestStatus, RaidDef, RegionDef, RolledAffix, RoomTemplate, RoomType, SeasonalEventDef, SimEvent, StingerId, StatModMap, Vec2 } from '../core/types';
+import { circleBody, nearestPointOutsideCollisionBody, obstacleBlocksMovement } from '../core/collision';
+import type { ActiveElement, ArmoryLoadouts, BossDef, CollisionObstacleInput, CreepTier, CreepInstanceSave, CutsceneDef, DifficultyTier, DishDef, DomainDef, DraftDef, DropSource, DungeonDef, DungeonModifierDef, DungeonProgressSave, DungeonRoom, EchoProgress, EchoSpawnDef, EffectNode, GambitRule, GameSave, GraphicsSettings, GroundItemDrop, HeroAugments, HeroLoadoutSlots, HeroSave, ItemDef, ItemDropTable, ItemGrade, ItemQuality, ItemRarity, ItemSave, ItemTier, LootBand, LoreEntryDef, MacroHeroSetup, NeutralItemDef, NeutralStashEntry, Order, QuestDef, QuestGiverDef, QuestKind, QuestProgress, QuestReward, QuestSave, QuestStatus, RaidDef, RegionDef, RolledAffix, RoomTemplate, RoomType, SeasonalEventDef, SimEvent, StingerId, StatModMap, StatusParams, ValueRef, Vec2, ZoneSpec } from '../core/types';
 import { advance as questAdvance, chosenBranch as questChosenBranch, claim as questClaim, normalizeQuestSave, questGiverPos, refreshAvailability, type QuestContext, type QuestEvent } from '../core/quests';
 import { migratePhase7Save } from '../core/phase7';
+import { GROUND_LOOT_COLLISION } from '../data/world/props';
 import { ProceduralAudio, type CinematicMixMode } from '../engine/audio';
 import { CinematicDirector, type CinematicView, type CutsceneContext } from '../engine/cinematic';
 import { StoryDetector, type StoryObserveCtx, type StoryTrigger } from '../engine/story-detectors';
@@ -144,7 +147,7 @@ function bindIfNeeded(item: ItemSave): ItemSave {
 // camps, capture/entourage, shop, shrine, day clock, save/load.
 // ------------------------------------------------------------------
 
-export const SAVE_VERSION = 7;
+export const SAVE_VERSION = 8;
 const SLOT_KEYS = ['ancients.save.1', 'ancients.save.2', 'ancients.save.3'];
 const AUTO_KEY = 'ancients.save.auto';
 
@@ -165,6 +168,7 @@ export interface RosterEntry {
   augments: HeroAugments;
   abilityCooldowns: number[]; // remaining sec at serialize time
   benchedAt: number;          // game time at swap-out
+  tagGaugeReadyAt: number;    // absolute sim time when this hero's Tag Gauge is ready
   respawnAt: number;          // 0 = alive
   lastCombatAt: number;
   fleshStacks?: Record<string, number>;
@@ -189,8 +193,20 @@ function cloneGroundItemDrop(drop: GroundItemDrop): GroundItemDrop {
   return {
     ...drop,
     item: cloneItemSave(drop.item)!,
-    pos: { ...drop.pos }
+    pos: { ...drop.pos },
+    body: drop.body ?? groundLootBody()
   };
+}
+
+function groundLootBody(): GroundItemDrop['body'] {
+  return circleBody(GROUND_LOOT_COLLISION.radius, {
+    layer: GROUND_LOOT_COLLISION.layer,
+    blocksMovement: false,
+    blocksProjectiles: GROUND_LOOT_COLLISION.blocksProjectiles,
+    interactable: true,
+    pickPadding: Math.round(GROUND_LOOT_COLLISION.radius * 0.18),
+    feedback: { label: GROUND_LOOT_COLLISION.label, impactVfx: 'spark' }
+  });
 }
 
 function normalizeSavedItems(items: (ItemSave | null)[] | undefined): (ItemSave | null)[] {
@@ -240,11 +256,12 @@ function cloneHeroSave(save: HeroSave): HeroSave {
     hpPct: save.hpPct,
     manaPct: save.manaPct,
     abilityCooldowns: [...save.abilityCooldowns],
+    tagGaugeReadyAt: Math.max(0, save.tagGaugeReadyAt ?? 0),
     fleshStacks: save.fleshStacks ? { ...save.fleshStacks } : undefined
   };
 }
 
-function heroSaveFromRosterEntry(rec: RosterEntry): HeroSave {
+function heroSaveFromRosterEntry(rec: RosterEntry, now: number): HeroSave {
   return {
     heroId: rec.heroId,
     level: rec.level,
@@ -265,6 +282,7 @@ function heroSaveFromRosterEntry(rec: RosterEntry): HeroSave {
     hpPct: rec.hpPct,
     manaPct: rec.manaPct,
     abilityCooldowns: [...rec.abilityCooldowns],
+    tagGaugeReadyAt: Math.max(0, rec.tagGaugeReadyAt - now),
     fleshStacks: rec.fleshStacks ? { ...rec.fleshStacks } : undefined
   };
 }
@@ -287,7 +305,8 @@ function freshHeroSave(heroId: string, level = 1): HeroSave {
     facetIdx: 0,
     hpPct: 1,
     manaPct: 1,
-    abilityCooldowns: [0, 0, 0, 0]
+    abilityCooldowns: [0, 0, 0, 0],
+    tagGaugeReadyAt: 0
   };
 }
 
@@ -306,6 +325,8 @@ export interface CombatReadout {
   bossThreat: { bossName: string; targetName: string | null; taunted: boolean } | null;
   sharedFocus: { uid: number; name: string } | null;
   ultReady: { uid: number; name: string }[];
+  tagChain: { count: number; pct: number; ampPct: number } | null;
+  offField: { count: number; names: string[] };
 }
 
 interface CampState {
@@ -416,7 +437,8 @@ export function newGameSave(starterHeroId: string): GameSave {
         facetIdx: 0,
         hpPct: 1,
         manaPct: 1,
-        abilityCooldowns: [0, 0, 0, 0]
+        abilityCooldowns: [0, 0, 0, 0],
+        tagGaugeReadyAt: 0
       }
     ],
     stash: [],
@@ -438,6 +460,18 @@ export function newGameSave(starterHeroId: string): GameSave {
     regionVisits: { [region.id]: 1 },
     discovered: ['tv-waypoint-dawnshade'],
     settings: { quickcast: true, resonance: true, minimap: true, keyBindings: normalizeKeyBindings(undefined), audio: defaultAudioSettings(), graphics: defaultGraphicsSettings(), cutscene: defaultCutsceneSettings(), interface: defaultInterfaceSettings() }
+  };
+}
+
+function migrateTagGaugeSave(s: GameSave | { version: number; [k: string]: unknown }): GameSave {
+  const base = migratePhase7Save(s as GameSave);
+  return {
+    ...base,
+    version: SAVE_VERSION,
+    roster: base.roster.map((hero) => ({
+      ...hero,
+      tagGaugeReadyAt: Math.max(0, typeof hero.tagGaugeReadyAt === 'number' ? hero.tagGaugeReadyAt : 0)
+    }))
   };
 }
 
@@ -503,6 +537,7 @@ export function eventWorldPos(ev: SimEvent, sim: Sim): Vec2 | undefined {
     case 'projectile-block':
     case 'projectile-expire':
     case 'movement-blocked':
+    case 'invalid-target':
     case 'aoe-burst':
     case 'summon':
     case 'revive':
@@ -525,6 +560,9 @@ export function eventWorldPos(ev: SimEvent, sim: Sim): Vec2 | undefined {
     case 'attack-launch':
     case 'heal':
     case 'status-apply':
+    case 'tag-boon':
+    case 'tag-chain':
+    case 'off-field':
     case 'immune-block':
     case 'death':
     case 'bark':
@@ -532,6 +570,71 @@ export function eventWorldPos(ev: SimEvent, sim: Sim): Vec2 | undefined {
     default:
       return undefined;
   }
+}
+
+function scaleValueRef(ref: ValueRef | undefined, amp: number): ValueRef | undefined {
+  return typeof ref === 'number' ? ref * amp : ref;
+}
+
+function scaleValueRecord(mods: Record<string, ValueRef> | undefined, amp: number): Record<string, ValueRef> | undefined {
+  if (!mods) return undefined;
+  return Object.fromEntries(Object.entries(mods).map(([k, v]) => [k, scaleValueRef(v, amp)!]));
+}
+
+function scaleStatusParams(params: StatusParams | undefined, amp: number): StatusParams | undefined {
+  if (!params) return undefined;
+  return {
+    ...params,
+    mods: scaleValueRecord(params.mods, amp),
+    dotDps: scaleValueRef(params.dotDps, amp),
+    moveSlowPct: scaleValueRef(params.moveSlowPct, amp),
+    attackSlowPct: scaleValueRef(params.attackSlowPct, amp),
+    periodic: params.periodic
+      ? { ...params.periodic, effects: scaleTagEffects(params.periodic.effects, amp) }
+      : undefined
+  };
+}
+
+function scaleZoneSpec(zone: ZoneSpec, amp: number): ZoneSpec {
+  return {
+    ...zone,
+    tick: zone.tick ? { ...zone.tick, effects: scaleTagEffects(zone.tick.effects, amp) } : undefined,
+    auraMods: zone.auraMods ? { ...zone.auraMods, mods: scaleValueRecord(zone.auraMods.mods, amp) ?? {} } : undefined,
+    onEnter: zone.onEnter ? { ...zone.onEnter, effects: scaleTagEffects(zone.onEnter.effects, amp) } : undefined
+  };
+}
+
+function scaleTagEffect(node: EffectNode, amp: number): EffectNode {
+  switch (node.kind) {
+    case 'damage':
+      return {
+        ...node,
+        amount: scaleValueRef(node.amount, amp)!,
+        perUnitBonus: scaleValueRef(node.perUnitBonus, amp),
+        attackDamagePct: scaleValueRef(node.attackDamagePct, amp)
+      };
+    case 'heal':
+      return { ...node, amount: scaleValueRef(node.amount, amp)! };
+    case 'mana':
+      return { ...node, amount: scaleValueRef(node.amount, amp)! };
+    case 'status':
+      return { ...node, duration: node.duration, params: scaleStatusParams(node.params, amp) };
+    case 'statmod':
+      return { ...node, mods: scaleValueRecord(node.mods, amp) ?? node.mods };
+    case 'zone':
+      return { ...node, zone: scaleZoneSpec(node.zone, amp) };
+    case 'projectile':
+      return { ...node, proj: { ...node.proj, onHit: scaleTagEffects(node.proj.onHit, amp) } };
+    case 'repeat':
+      return { ...node, effects: scaleTagEffects(node.effects, amp) };
+    default:
+      return node;
+  }
+}
+
+function scaleTagEffects(effects: EffectNode[], amp: number): EffectNode[] {
+  if (Math.abs(amp - 1) < 0.0001) return effects;
+  return effects.map((effect) => scaleTagEffect(effect, amp));
 }
 
 /** The slice of ProceduralAudio the orchestrator calls. */
@@ -674,6 +777,9 @@ export class Game {
   private createdAt = 0;
   private queuedOrders: Order[] = [];
   private lastErrorCueAt = 0;
+  private tagChainCount = 0;
+  private tagChainExpiresAt = 0;
+  private tagChainAmpPct = 0;
 
   /** Active live gym fight (§3.5): when set, update() steps + renders it instead of the overworld. */
   liveGym: LiveGymFight | null = null;
@@ -819,6 +925,7 @@ export class Game {
         augments: { ...(hs.augments ?? {}) },
         abilityCooldowns: [...hs.abilityCooldowns],
         benchedAt: 0,
+        tagGaugeReadyAt: Math.max(0, hs.tagGaugeReadyAt ?? 0),
         respawnAt: 0,
         lastCombatAt: -999,
         fleshStacks: hs.fleshStacks ? { ...hs.fleshStacks } : undefined,
@@ -898,6 +1005,26 @@ export class Game {
     return this.activeUnit();
   }
 
+  tagReactionPreview(idx: number): { reaction: string; targetName: string; elements: [ActiveElement, ActiveElement] } | null {
+    if (!this.settings.resonance) return null;
+    const rec = this.party[idx];
+    const active = this.activeUnit();
+    if (!rec || !active || idx === this.activeIdx) return null;
+    if (this.sim.time < rec.tagGaugeReadyAt) return null;
+    const element = REG.hero(rec.heroId).tagBoon?.element;
+    if (!isActiveElement(element)) return null;
+    const enemies = this.sim.unitsInRadius(active.pos, 900, (u) => u.team !== active.team && u.kind !== 'npc' && !u.summary.untargetable);
+    for (const enemy of enemies) {
+      for (const existing of Object.keys(enemy.elementAuras) as ActiveElement[]) {
+        const aura = enemy.elementAuras[existing];
+        if (!aura || aura.until <= this.sim.time || existing === element) continue;
+        const reaction = reactionFor(existing, element);
+        if (reaction) return { reaction: reaction.id, targetName: enemy.name, elements: [existing, element] };
+      }
+    }
+    return null;
+  }
+
   /**
    * Combat readability snapshot (COMBAT_OVERHAUL §3.4, C4): the facts the HUD turns
    * into cast bars, a boss aggro/threat marker, the shared-focus indicator, and the
@@ -960,13 +1087,24 @@ export class Game {
       }
     }
 
+    const tagRemaining = Math.max(0, this.tagChainExpiresAt - now);
+    const tagWindow = Math.max(0.5, TUNING.tagChainWindowSec);
+    const tagChain: CombatReadout['tagChain'] = this.tagChainCount > 0 && tagRemaining > 0
+      ? { count: this.tagChainCount, pct: Math.min(1, tagRemaining / tagWindow), ampPct: this.tagChainAmpPct }
+      : null;
+    const offFieldNames = sim.unitsArr
+      .filter((u) => u.alive && u.team === playerTeam && u.kind === 'hero' && (u.offFieldUntil ?? 0) > now)
+      .map((u) => u.name);
+
     return {
       active: !!(this.liveRaid || this.liveGym || this.liveDungeon) || this.inCombat(),
       live: !!(this.liveRaid || this.liveGym),
       castBars,
       bossThreat,
       sharedFocus,
-      ultReady
+      ultReady,
+      tagChain,
+      offField: { count: offFieldNames.length, names: offFieldNames }
     };
   }
 
@@ -978,7 +1116,7 @@ export class Game {
     const rec = this.partyEntryByHeroId(heroId);
     if (rec) {
       if (rec.unit) this.serializeHero(rec);
-      return heroSaveFromRosterEntry(rec);
+      return heroSaveFromRosterEntry(rec, this.sim.time);
     }
     const saved = this.benchRoster.get(heroId);
     return saved ? cloneHeroSave(saved) : null;
@@ -987,7 +1125,7 @@ export class Game {
   private allOwnedHeroSaves(): HeroSave[] {
     const fielded = this.party.map((rec) => {
       if (rec.unit) this.serializeHero(rec);
-      return heroSaveFromRosterEntry(rec);
+      return heroSaveFromRosterEntry(rec, this.sim.time);
     });
     const fieldedIds = new Set(fielded.map((h) => h.heroId));
     const benched = [...this.benchRoster.values()]
@@ -1049,6 +1187,7 @@ export class Game {
       uid: this.nextGroundItemUid++,
       item: bindIfNeeded(cloneItemSave(item)!),
       pos: this.scatterDropPos(pos, i),
+      body: groundLootBody(),
       source: opts.source,
       context,
       createdAt: Math.round(this.playtime)
@@ -5527,6 +5666,7 @@ export class Game {
     u.markStatsDirty();
     u.markVisualDirty();
     u.refresh(this.sim.time);
+    u.tagGaugeReadyAt = rec.tagGaugeReadyAt;   // mirror for the core 'tag-in-ready' gambit read
     u.hp = u.stats.maxHp * Math.max(0.05, rec.hpPct);
     u.mana = u.stats.maxMana * rec.manaPct;
     // bench cooldown rule: remaining = max(half of remaining-at-swap-out, remaining - benched time)
@@ -5561,6 +5701,133 @@ export class Game {
 
   // ---------- swap (1-5) ----------
 
+  private partyRecentlyInCombat(): boolean {
+    const now = this.sim.time;
+    return this.party.some((rec) => {
+      const u = rec.unit;
+      const last = Math.max(rec.lastCombatAt, u?.lastDealtDamageAt ?? -999, u?.lastEnemyDamageAt ?? -999);
+      return now - last < TUNING.combatLockSec;
+    });
+  }
+
+  private activeTagEffects(effects: EffectNode[], u: Unit): EffectNode[] {
+    return effects.filter((effect) => {
+      if (effect.kind === 'heal' && effect.amount === 'swapInHealPct') return Math.max(0, u.stats.swapInHealPct) > 0;
+      if (effect.kind === 'status' && effect.params?.tag === 'swap-in-burst') return Math.max(0, u.stats.swapInDamagePct) > 0;
+      return true;
+    });
+  }
+
+  private tagChainWindow(u: Unit): number {
+    return Math.max(0.5, TUNING.tagChainWindowSec + Math.max(0, u.stats.tagChainWindowBonusSec));
+  }
+
+  private advanceTagChain(u: Unit): { count: number; ampPct: number; expiresAt: number } {
+    const now = this.sim.time;
+    const live = now <= this.tagChainExpiresAt;
+    const maxSteps = Math.max(1, Math.round(TUNING.tagChainMaxSteps));
+    const count = live ? Math.min(maxSteps, this.tagChainCount + 1) : 1;
+    const ampPct = Math.max(0, count - 1) * TUNING.tagChainAmpPerStepPct;
+    const expiresAt = now + this.tagChainWindow(u);
+    this.tagChainCount = count;
+    this.tagChainAmpPct = ampPct;
+    this.tagChainExpiresAt = expiresAt;
+    this.sim.events.emit({ t: 'tag-chain', uid: u.uid, count, expiresAt, ampPct });
+    return { count, ampPct, expiresAt };
+  }
+
+  private fireTagBoon(rec: RosterEntry, u: Unit, when: 'tag-in' | 'tag-out', combatEligible: boolean): boolean {
+    const boon = REG.hero(rec.heroId).tagBoon;
+    if (!boon || (boon.fire !== when && boon.fire !== 'both')) return false;
+    if (!combatEligible) return false;
+    if (this.sim.time < rec.tagGaugeReadyAt) return false;
+    const effects = this.activeTagEffects(when === 'tag-out' ? (boon.outEffects ?? boon.effects) : boon.effects, u);
+    if (effects.length === 0) return false;
+
+    const chain = when === 'tag-in' ? this.advanceTagChain(u) : { count: this.tagChainCount, ampPct: 0, expiresAt: this.tagChainExpiresAt };
+    const ampPct = Math.max(0, u.stats.tagBoonAmpPct) + chain.ampPct;
+    const amp = 1 + ampPct / 100;
+    execEffects(this.sim, u, {
+      defId: boon.id,
+      values: {
+        swapInDamagePct: [Math.max(0, u.stats.swapInDamagePct) * amp],
+        swapInHealPct: [Math.max(0, u.stats.swapInHealPct) * amp],
+        tagDuration: [3]
+      },
+      level: 1,
+      element: boon.element,
+      vfx: tagBoonVfx(REG.hero(rec.heroId))
+    }, scaleTagEffects(effects, amp), { point: { ...u.pos } });
+
+    const reductionPct = Math.min(80, Math.max(0, u.stats.swapCdReductionPct) + Math.max(0, u.stats.tagGaugeReductionPct));
+    rec.tagGaugeReadyAt = this.sim.time + boon.gaugeSec * (1 - reductionPct / 100);
+    u.tagGaugeReadyAt = rec.tagGaugeReadyAt;   // mirror for the core 'tag-in-ready' gambit read
+    this.sim.events.emit({ t: 'tag-boon', uid: u.uid, heroId: rec.heroId, when, chain: chain.count, ampPct });
+    return true;
+  }
+
+  private shouldPersistOffField(rec: RosterEntry, combatEligible: boolean): boolean {
+    return !!this.settings.resonance && combatEligible && rec.respawnAt <= this.sim.time;
+  }
+
+  private markOffField(rec: RosterEntry, u: Unit): void {
+    const until = this.sim.time + TUNING.resonanceOffFieldPersistenceSec;
+    // Entrance-only tag boons should not look like they replayed on a reposition swap.
+    u.removeStatusWhere((s) => s.tag === 'swap-in-burst');
+    u.offFieldUntil = until;
+    u.ctrl = { kind: 'none' };
+    u.order = { kind: 'stop' };
+    this.sim.interruptActions(u);
+    u.addStatus({
+      status: 'buff',
+      tag: 'off-field',
+      sourceUid: u.uid,
+      sourceTeam: u.team,
+      until,
+      isDebuff: false,
+      mods: { untargetable: 1, invulnerable: 1 }
+    }, true);
+    u.addStatus({
+      status: 'invis',
+      tag: 'off-field',
+      sourceUid: u.uid,
+      sourceTeam: u.team,
+      until,
+      isDebuff: false,
+      fadeTime: 0
+    }, true);
+    u.refresh(this.sim.time);
+    this.sim.events.emit({ t: 'off-field', uid: u.uid, heroId: rec.heroId, until });
+  }
+
+  private clearOffField(u: Unit): void {
+    u.offFieldUntil = undefined;
+    u.removeStatusWhere((s) => s.tag === 'off-field');
+    u.ctrl = { kind: 'player' };
+    u.order = { kind: 'stop' };
+    u.refresh(this.sim.time);
+  }
+
+  private removeOffField(rec: RosterEntry): void {
+    const u = rec.unit;
+    if (!u || u.offFieldUntil === undefined) return;
+    this.serializeHero(rec);
+    this.sim.removeUnit(u.uid);
+    rec.unit = null;
+  }
+
+  private reapOffFieldUnits(): void {
+    for (let i = 0; i < this.party.length; i++) {
+      if (i === this.activeIdx) continue;
+      const rec = this.party[i];
+      const u = rec.unit;
+      if (!u || u.offFieldUntil === undefined) continue;
+      if (this.sim.time >= u.offFieldUntil || !this.partyRecentlyInCombat() || !this.settings.resonance) {
+        this.removeOffField(rec);
+      }
+    }
+  }
+
   trySwap(idx: number): boolean {
     if (this.liveGym) return this.selectLiveGymHero(idx);
     if (this.liveRaid) return this.selectLiveRaidHero(idx);
@@ -5582,40 +5849,40 @@ export class Game {
       : this.pendingSpawnPos ?? { ...this.region.shrine.pos };
     const facing = cur.unit?.facing ?? 0;
 
+    const combatEligible = this.partyRecentlyInCombat();
+
     if (cur.unit) {
+      this.fireTagBoon(cur, cur.unit, 'tag-out', combatEligible);
       this.serializeHero(cur);
       cur.lastCombatAt = Math.max(
         cur.unit.lastDealtDamageAt,
         cur.unit.lastEnemyDamageAt,
         cur.lastCombatAt
       );
-      this.sim.removeUnit(cur.unit.uid);
-      cur.unit = null;
+      if (this.shouldPersistOffField(cur, combatEligible)) {
+        this.markOffField(cur, cur.unit);
+      } else {
+        this.sim.removeUnit(cur.unit.uid);
+        cur.unit = null;
+      }
     }
 
-    const u = this.spawnHeroFromRecord(rec, pos);
+    let u = rec.unit;
+    if (u && u.offFieldUntil !== undefined) {
+      this.clearOffField(u);
+      u.pos = { ...pos };
+      u.prevPos = { ...pos };
+    } else {
+      u = this.spawnHeroFromRecord(rec, pos);
+    }
     u.facing = facing;
     rec.unit = u;
     rec.respawnAt = 0;
     this.activeIdx = idx;
-    const baseSwapCd = this.settings.resonance ? TUNING.resonanceSwapCooldownSec : TUNING.swapCooldownSec;
+    const baseSwapCd = this.settings.resonance ? TUNING.resonanceSwapFloorSec : TUNING.swapFloorSec;
     const swapCdReduction = Math.min(0.8, Math.max(0, u.stats.swapCdReductionPct) / 100);
     this.swapReadyAt = this.sim.time + baseSwapCd * (1 - swapCdReduction);
-    const tagHealPct = Math.max(0, u.stats.swapInHealPct);
-    if (tagHealPct > 0) healUnit(this.sim, u, u.stats.maxHp * (tagHealPct / 100), u);
-    const tagBurstPct = Math.max(0, u.stats.swapInDamagePct);
-    if (tagBurstPct > 0) {
-      u.addStatus({
-        status: 'buff',
-        tag: 'swap-in-burst',
-        sourceUid: u.uid,
-        sourceTeam: u.team,
-        isDebuff: false,
-        until: this.sim.time + 3,
-        mods: { damagePct: tagBurstPct, spellAmpPct: tagBurstPct }
-      }, true);
-      this.sim.events.emit({ t: 'status-apply', uid: u.uid, status: 'buff', duration: 3 });
-    }
+    this.fireTagBoon(rec, u, 'tag-in', combatEligible);
     this.sim.playerActiveUid = u.uid;
     this.scene.selectedUid = u.uid;
     this.retargetEntourage();
@@ -5684,16 +5951,10 @@ export class Game {
       let moved = false;
       for (const obstacle of sim.obstacles) {
         if (!obstacleBlocksMovement(obstacle)) continue;
-        const minD = obstacle.radius + u.radius + 10;
-        const dx = out.x - obstacle.pos.x;
-        const dy = out.y - obstacle.pos.y;
-        const d2 = dx * dx + dy * dy;
-        if (d2 >= minD * minD) continue;
-        const d = Math.sqrt(d2);
-        const dir = d > 1e-6 ? { x: dx / d, y: dy / d } : norm(sub(u.pos, obstacle.pos));
-        const safeDir = dir.x === 0 && dir.y === 0 ? fromAngle(u.facing) : dir;
-        out.x = obstacle.pos.x + safeDir.x * minD;
-        out.y = obstacle.pos.y + safeDir.y * minD;
+        const next = nearestPointOutsideCollisionBody(obstacle.pos, obstacle.body, out, u.radius + 10, u.facing);
+        if (next.x === out.x && next.y === out.y) continue;
+        out.x = next.x;
+        out.y = next.y;
         moved = true;
       }
       if (!moved) break;
@@ -6076,6 +6337,7 @@ export class Game {
         augments: {},
         abilityCooldowns: [0, 0, 0, 0],
         benchedAt: 0,
+        tagGaugeReadyAt: 0,
         respawnAt: 0,
         lastCombatAt: -999,
         dayNightMods: {},
@@ -6468,7 +6730,7 @@ export class Game {
   buildSave(): GameSave {
     const active = this.party[this.activeIdx];
     if (active.unit) this.serializeHero(active);
-    const partySaves = this.party.map(heroSaveFromRosterEntry);
+    const partySaves = this.party.map((rec) => heroSaveFromRosterEntry(rec, this.sim.time));
     const partyIds = new Set(partySaves.map((r) => r.heroId));
     const benchSaves = [...this.benchRoster.values()]
       .filter((r) => !partyIds.has(r.heroId))
@@ -6595,10 +6857,10 @@ export class Game {
   static migrateSave(s: unknown): GameSave | null {
     if (!s || typeof s !== 'object') return null;
     const v = s as Partial<GameSave>;
-    if (v.version === 2 || v.version === 3 || v.version === 4 || v.version === 5 || v.version === 6 || v.version === SAVE_VERSION) {
+    if (v.version === 2 || v.version === 3 || v.version === 4 || v.version === 5 || v.version === 6 || v.version === 7 || v.version === SAVE_VERSION) {
       // v2/v3 -> v3 shape, v4 audio/codex fields, v5 exploration, v6 Armory,
-      // then v7 board quests.
-      const migrated = migratePhase7Save(migratePhase3Save(v as unknown as { version: number; [k: string]: unknown }));
+      // v7 board quests, then v8 tag-gauge persistence.
+      const migrated = migrateTagGaugeSave(migratePhase3Save(v as unknown as { version: number; [k: string]: unknown }));
       return Game.validateSave(migrated) ? migrated : null;
     }
     return null;
@@ -6760,6 +7022,7 @@ export class Game {
       if (r.abilityLevels !== undefined && (!Array.isArray(r.abilityLevels) || !r.abilityLevels.every((n) => typeof n === 'number' && n >= 0))) return false;
       if (r.attributePoints !== undefined && (typeof r.attributePoints !== 'number' || r.attributePoints < 0)) return false;
       if (!Array.isArray(r.talentPicks) || r.talentPicks.length !== 4) return false;
+      if (typeof r.tagGaugeReadyAt !== 'number' || r.tagGaugeReadyAt < 0) return false;
       if (r.echo !== undefined) {
         if (typeof r.echo.kills !== 'number' || r.echo.kills < 0) return false;
         if (typeof r.echo.facetSwapUnlocked !== 'boolean') return false;
@@ -7387,6 +7650,7 @@ export class Game {
       this.accumulator = 0;
     }
 
+    this.reapOffFieldUnits();
     this.updatePendingRecruit();
 
     // participation tracking for the active hero

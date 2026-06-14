@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..', '..');
 const OUT_DIR = path.join(ROOT, 'public', 'assets', 'creeps');
+const HERO_OUT_DIR = path.join(ROOT, 'public', 'assets', 'heroes');
 
 // OVERWORLD_PLANNING §5.6: generation prompts inherit the band. This .mjs has no
 // TS runtime, so it reads the declared size + per-class anchor language from the
@@ -30,7 +31,8 @@ function loadBridge() {
   }
 }
 function promptFor(bridge, id) {
-  const size = bridge.sizes[`creeps/${id}.glb`];
+  const pathKey = id.includes('/') ? `${id}.glb` : `creeps/${id}.glb`;
+  const size = bridge.sizes[pathKey];
   if (!size) return `${id}: no declared size in bridge — author to the human yardstick (~1.8 m)`;
   const anchor = bridge.prompts[size.sizeClass] ?? size.sizeClass;
   return `${id}: read as ${size.sizeClass}, ~${size.heightM} m (${anchor}); feet at origin, facing +x.`;
@@ -52,7 +54,24 @@ const CREATURES = {
   // dropped the human torso this puts back.
   centaur: { palette: ['#7a5536', '#3a2616', '#d8b070'], style: 'centaur' },
   // Hyena-headed biped for gnoll-assassin: a closer feral read than the goblin base.
-  gnoll: { palette: ['#a98a52', '#4a3a22', '#d8c890'], style: 'gnoll' }
+  gnoll: { palette: ['#a98a52', '#4a3a22', '#d8c890'], style: 'gnoll' },
+  // Winged bear for wildwing / wildkin: keeps the bear mass and restores the owl wings.
+  owlbear: { palette: ['#b8a878', '#4a4230', '#f0e0b0'], style: 'owlbear' },
+  // Shared non-humanoid hero bodies for the remaining obvious cohort misses.
+  energy: { palette: ['#72d8ff', '#1c2a5a', '#ffffff'], style: 'energy' },
+  abomination: { palette: ['#7a9b3a', '#d8a39b', '#8a4b2f'], style: 'abomination' },
+  // Bipedal fish-man for slardar + slark: finned forearms, jutting jaw, dorsal
+  // crest, side-set eyes — the scaled aquatic silhouette the humanoid bases lost.
+  fishman: { palette: ['#3a8fa0', '#1e2f3a', '#9be0ff'], style: 'fishman' }
+};
+
+const GENERATED_HERO_BODIES = {
+  // Generated animated replacements for the static bespoke downloads.
+  tusk: { palette: ['#d8f0ff', '#5c7890', '#ffffff'], style: 'walrus' },
+  hoodwink: { palette: ['#d88a3a', '#2e5a2e', '#ffe0a0'], style: 'squirrel' },
+  gyrocopter: { palette: ['#d86a32', '#606878', '#ffe0a0'], style: 'gyrocopter' },
+  // Snapfire keeps the lizard-mount read but now includes the rider silhouette.
+  snapfire: { palette: ['#e86a32', '#5a3418', '#ffe0a0'], style: 'snapfire-rider' }
 };
 
 function hexToLinearFactor(hex) {
@@ -243,6 +262,27 @@ function partsFor(style) {
       add(box('eye-r', 'accent', 0.06, 0.07, 0.06, { x: 0.32, y: 2.12, z: -0.13 }));
       break;
     }
+    case 'owlbear': {
+      // Owlbear/wildkin: upright bear mass with a hooked owl face and broad wings.
+      add(cylinder('leg-l', 'primary', 0.16, 0.72, 'y', { x: 0.0, y: 0.38, z: 0.23 }, 10));
+      add(cylinder('leg-r', 'primary', 0.16, 0.72, 'y', { x: 0.0, y: 0.38, z: -0.23 }, 10));
+      add(box('talon-l', 'dark', 0.32, 0.08, 0.22, { x: 0.12, y: 0.04, z: 0.23 }));
+      add(box('talon-r', 'dark', 0.32, 0.08, 0.22, { x: 0.12, y: 0.04, z: -0.23 }));
+      add(box('torso', 'primary', 0.66, 0.82, 0.76, { y: 1.2, rz: -0.04 }));
+      add(box('chest-plume', 'secondary', 0.46, 0.56, 0.5, { x: 0.18, y: 1.18 }));
+      add(box('shoulders', 'primary', 0.58, 0.34, 1.02, { y: 1.62 }));
+      add(box('head', 'primary', 0.38, 0.36, 0.4, { x: 0.18, y: 1.98 }));
+      add(cone('beak', 'accent', 0.1, 0.26, 'x', { x: 0.46, y: 1.94 }, 8));
+      add(cone('ear-tuft-l', 'accent', 0.08, 0.24, 'y', { x: 0.08, y: 2.22, z: 0.16 }, 8));
+      add(cone('ear-tuft-r', 'accent', 0.08, 0.24, 'y', { x: 0.08, y: 2.22, z: -0.16 }, 8));
+      add(box('eye-l', 'accent', 0.06, 0.07, 0.06, { x: 0.34, y: 2.04, z: 0.12 }));
+      add(box('eye-r', 'accent', 0.06, 0.07, 0.06, { x: 0.34, y: 2.04, z: -0.12 }));
+      add(box('wing-l', 'secondary', 0.1, 1.0, 0.46, { x: -0.18, y: 1.42, z: 0.58, rz: 0.5 }));
+      add(box('wing-r', 'secondary', 0.1, 1.0, 0.46, { x: -0.18, y: 1.42, z: -0.58, rz: 0.5 }));
+      add(box('wingtip-l', 'accent', 0.07, 0.46, 0.28, { x: -0.42, y: 1.9, z: 0.82, rz: 0.62 }));
+      add(box('wingtip-r', 'accent', 0.07, 0.46, 0.28, { x: -0.42, y: 1.9, z: -0.82, rz: 0.62 }));
+      break;
+    }
     case 'treant': {
       // Walking tree: braced root legs, gnarled trunk, branch arms, leafy canopy.
       add(cylinder('root-l', 'secondary', 0.14, 0.66, 'y', { x: 0.02, y: 0.32, z: 0.26, rz: 0.18 }, 8));
@@ -355,6 +395,149 @@ function partsFor(style) {
       add(cone('ear-r', 'accent', 0.1, 0.2, 'y', { x: 0.26, y: 2.0, z: -0.12 }, 6));
       add(box('eye-l', 'accent', 0.05, 0.06, 0.05, { x: 0.48, y: 1.84, z: 0.1 }));
       add(box('eye-r', 'accent', 0.05, 0.06, 0.05, { x: 0.48, y: 1.84, z: -0.1 }));
+      break;
+    }
+    case 'energy': {
+      // Floating energy construct: legless core, orbiting shards, bright focus eye.
+      add(cylinder('spine-beam', 'secondary', 0.08, 1.2, 'y', { y: 1.0 }, 12));
+      add(box('core', 'primary', 0.48, 0.58, 0.48, { y: 1.28, rz: 0.45 }));
+      add(box('inner-core', 'accent', 0.3, 0.34, 0.3, { x: 0.08, y: 1.32, rz: -0.25 }));
+      add(box('head-orb', 'primary', 0.34, 0.32, 0.34, { x: 0.08, y: 1.84, rz: 0.4 }));
+      add(box('single-eye', 'accent', 0.08, 0.1, 0.12, { x: 0.28, y: 1.86 }));
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2;
+        add(box(`orbit-${i}`, i % 2 ? 'secondary' : 'accent', 0.18, 0.1, 0.1, {
+          x: Math.cos(a) * 0.42,
+          y: 1.3 + (i % 2 ? 0.26 : -0.18),
+          z: Math.sin(a) * 0.42,
+          rz: a
+        }));
+      }
+      add(cone('tail-wisp', 'secondary', 0.18, 0.52, 'y', { y: 0.42, rz: Math.PI }, 10));
+      break;
+    }
+    case 'abomination': {
+      // Bloated undead/brute body for Pudge and Undying style reads.
+      add(cylinder('leg-l', 'secondary', 0.14, 0.62, 'y', { x: 0.0, y: 0.34, z: 0.24 }, 10));
+      add(cylinder('leg-r', 'secondary', 0.14, 0.62, 'y', { x: 0.0, y: 0.34, z: -0.24 }, 10));
+      add(box('foot-l', 'dark', 0.34, 0.1, 0.22, { x: 0.08, y: 0.05, z: 0.24 }));
+      add(box('foot-r', 'dark', 0.34, 0.1, 0.22, { x: 0.08, y: 0.05, z: -0.24 }));
+      add(box('hips', 'secondary', 0.64, 0.42, 0.72, { y: 0.82 }));
+      add(box('belly', 'primary', 0.82, 0.9, 0.9, { x: 0.02, y: 1.28, rz: -0.05 }));
+      add(box('scar', 'accent', 0.08, 0.62, 0.08, { x: 0.46, y: 1.28, z: 0.12, rz: 0.18 }));
+      add(box('shoulders', 'primary', 0.68, 0.36, 1.0, { y: 1.76 }));
+      add(cylinder('arm-l', 'primary', 0.15, 0.82, 'y', { x: 0.04, y: 1.32, z: 0.58, rz: 0.22 }, 10));
+      add(cylinder('arm-r', 'primary', 0.15, 0.82, 'y', { x: 0.04, y: 1.32, z: -0.58, rz: 0.22 }, 10));
+      add(box('fist-l', 'dark', 0.28, 0.2, 0.22, { x: 0.18, y: 0.9, z: 0.62 }));
+      add(box('fist-r', 'dark', 0.28, 0.2, 0.22, { x: 0.18, y: 0.9, z: -0.62 }));
+      add(box('head', 'secondary', 0.4, 0.34, 0.38, { x: 0.12, y: 2.08 }));
+      add(box('jaw', 'dark', 0.26, 0.16, 0.28, { x: 0.34, y: 1.98 }));
+      add(box('eye-l', 'accent', 0.06, 0.07, 0.06, { x: 0.32, y: 2.12, z: 0.11 }));
+      add(box('eye-r', 'accent', 0.06, 0.07, 0.06, { x: 0.32, y: 2.12, z: -0.11 }));
+      break;
+    }
+    case 'fishman': {
+      // Upright fish-man: digitigrade legs with webbed feet, broad scaled torso,
+      // finned forearms, a jutting jaw with side-set eyes, gill slits, a dorsal
+      // sail, head crest fins, and a low tail fin. Reads aquatic, not knightly.
+      add(cylinder('thigh-l', 'primary', 0.11, 0.5, 'y', { x: 0.0, y: 0.72, z: 0.2 }, 8));
+      add(cylinder('thigh-r', 'primary', 0.11, 0.5, 'y', { x: 0.0, y: 0.72, z: -0.2 }, 8));
+      add(cylinder('shin-l', 'secondary', 0.09, 0.5, 'y', { x: 0.08, y: 0.32, z: 0.2, rz: -0.22 }, 8));
+      add(cylinder('shin-r', 'secondary', 0.09, 0.5, 'y', { x: 0.08, y: 0.32, z: -0.2, rz: -0.22 }, 8));
+      add(box('web-foot-l', 'accent', 0.3, 0.05, 0.22, { x: 0.24, y: 0.03, z: 0.2 }));
+      add(box('web-foot-r', 'accent', 0.3, 0.05, 0.22, { x: 0.24, y: 0.03, z: -0.2 }));
+      add(box('hips', 'primary', 0.4, 0.32, 0.5, { x: 0.0, y: 1.04 }));
+      add(box('torso', 'primary', 0.52, 0.62, 0.58, { x: 0.06, y: 1.46, rz: -0.08 }));
+      add(box('belly', 'secondary', 0.36, 0.4, 0.46, { x: 0.22, y: 1.42 }));
+      add(box('gill-l', 'accent', 0.05, 0.2, 0.04, { x: 0.34, y: 1.52, z: 0.26 }));
+      add(box('gill-r', 'accent', 0.05, 0.2, 0.04, { x: 0.34, y: 1.52, z: -0.26 }));
+      add(box('dorsal-fin', 'accent', 0.42, 0.5, 0.05, { x: -0.08, y: 1.86 }));
+      add(cylinder('arm-l', 'primary', 0.08, 0.64, 'y', { x: 0.1, y: 1.4, z: 0.34, rz: 0.24 }, 8));
+      add(cylinder('arm-r', 'primary', 0.08, 0.64, 'y', { x: 0.1, y: 1.4, z: -0.34, rz: 0.24 }, 8));
+      add(box('forearm-fin-l', 'accent', 0.08, 0.42, 0.24, { x: 0.26, y: 1.08, z: 0.42 }));
+      add(box('forearm-fin-r', 'accent', 0.08, 0.42, 0.24, { x: 0.26, y: 1.08, z: -0.42 }));
+      add(box('claw-l', 'dark', 0.13, 0.12, 0.14, { x: 0.34, y: 1.0, z: 0.42 }));
+      add(box('claw-r', 'dark', 0.13, 0.12, 0.14, { x: 0.34, y: 1.0, z: -0.42 }));
+      add(box('head', 'primary', 0.34, 0.34, 0.34, { x: 0.32, y: 1.88 }));
+      add(box('jaw', 'secondary', 0.32, 0.16, 0.28, { x: 0.56, y: 1.82 }));
+      add(box('eye-l', 'accent', 0.06, 0.09, 0.06, { x: 0.42, y: 1.96, z: 0.17 }));
+      add(box('eye-r', 'accent', 0.06, 0.09, 0.06, { x: 0.42, y: 1.96, z: -0.17 }));
+      for (let i = 0; i < 3; i++) add(cone(`crest-${i}`, 'accent', 0.06, 0.24, 'y', { x: 0.3 - i * 0.12, y: 2.04, rz: -0.18 }, 6));
+      add(cone('tail-fin', 'secondary', 0.13, 0.5, 'x', { x: -0.5, y: 0.92, rz: Math.PI }, 8));
+      break;
+    }
+    case 'walrus': {
+      // Animated walrus-man for Tusk: bulky body, flippers, tusks, whisker pads.
+      add(cylinder('leg-l', 'primary', 0.16, 0.56, 'y', { x: 0.0, y: 0.3, z: 0.2 }, 10));
+      add(cylinder('leg-r', 'primary', 0.16, 0.56, 'y', { x: 0.0, y: 0.3, z: -0.2 }, 10));
+      add(box('flipper-l', 'secondary', 0.38, 0.08, 0.22, { x: 0.16, y: 0.04, z: 0.22 }));
+      add(box('flipper-r', 'secondary', 0.38, 0.08, 0.22, { x: 0.16, y: 0.04, z: -0.22 }));
+      add(box('barrel', 'primary', 0.76, 0.9, 0.86, { y: 1.08 }));
+      add(box('chest', 'secondary', 0.5, 0.5, 0.62, { x: 0.22, y: 1.18 }));
+      add(cylinder('arm-l', 'primary', 0.11, 0.74, 'y', { x: 0.08, y: 1.18, z: 0.52, rz: 0.32 }, 10));
+      add(cylinder('arm-r', 'primary', 0.11, 0.74, 'y', { x: 0.08, y: 1.18, z: -0.52, rz: 0.32 }, 10));
+      add(box('head', 'primary', 0.44, 0.4, 0.44, { x: 0.14, y: 1.78 }));
+      add(box('muzzle', 'secondary', 0.32, 0.22, 0.34, { x: 0.4, y: 1.72 }));
+      add(cone('tusk-l', 'accent', 0.045, 0.5, 'y', { x: 0.48, y: 1.38, z: 0.1, rz: Math.PI }, 8));
+      add(cone('tusk-r', 'accent', 0.045, 0.5, 'y', { x: 0.48, y: 1.38, z: -0.1, rz: Math.PI }, 8));
+      add(box('eye-l', 'accent', 0.05, 0.06, 0.05, { x: 0.34, y: 1.88, z: 0.12 }));
+      add(box('eye-r', 'accent', 0.05, 0.06, 0.05, { x: 0.34, y: 1.88, z: -0.12 }));
+      break;
+    }
+    case 'squirrel': {
+      // Animated squirrel body for Hoodwink: small archer silhouette with huge tail.
+      add(cylinder('leg-l', 'primary', 0.08, 0.46, 'y', { x: 0.0, y: 0.26, z: 0.14 }, 8));
+      add(cylinder('leg-r', 'primary', 0.08, 0.46, 'y', { x: 0.0, y: 0.26, z: -0.14 }, 8));
+      add(box('paw-l', 'dark', 0.2, 0.06, 0.12, { x: 0.1, y: 0.03, z: 0.14 }));
+      add(box('paw-r', 'dark', 0.2, 0.06, 0.12, { x: 0.1, y: 0.03, z: -0.14 }));
+      add(box('body', 'primary', 0.36, 0.62, 0.38, { y: 0.82 }));
+      add(box('chest', 'secondary', 0.24, 0.34, 0.3, { x: 0.14, y: 0.86 }));
+      add(cylinder('arm-l', 'primary', 0.055, 0.48, 'y', { x: 0.08, y: 0.76, z: 0.28, rz: 0.28 }, 8));
+      add(cylinder('arm-r', 'primary', 0.055, 0.48, 'y', { x: 0.08, y: 0.76, z: -0.28, rz: 0.28 }, 8));
+      add(box('head', 'primary', 0.3, 0.28, 0.3, { x: 0.14, y: 1.24 }));
+      add(box('snout', 'secondary', 0.2, 0.12, 0.18, { x: 0.34, y: 1.22 }));
+      add(cone('ear-l', 'primary', 0.08, 0.2, 'y', { x: 0.08, y: 1.48, z: 0.12 }, 8));
+      add(cone('ear-r', 'primary', 0.08, 0.2, 'y', { x: 0.08, y: 1.48, z: -0.12 }, 8));
+      add(box('eye-l', 'accent', 0.05, 0.06, 0.05, { x: 0.28, y: 1.3, z: 0.1 }));
+      add(box('eye-r', 'accent', 0.05, 0.06, 0.05, { x: 0.28, y: 1.3, z: -0.1 }));
+      add(cylinder('tail-base', 'secondary', 0.12, 0.72, 'y', { x: -0.34, y: 0.84, rz: -0.72 }, 10));
+      add(cylinder('tail-curl', 'secondary', 0.18, 0.86, 'y', { x: -0.54, y: 1.28, rz: 0.62 }, 12));
+      add(box('bow', 'accent', 0.12, 0.5, 0.06, { x: 0.36, y: 0.92, rz: 0.2 }));
+      break;
+    }
+    case 'gyrocopter': {
+      // Animated gyrocopter: compact hull, visible pilot, rotor mast, tail boom.
+      add(box('hull', 'primary', 0.9, 0.36, 0.52, { y: 0.78 }));
+      add(box('nose', 'secondary', 0.34, 0.26, 0.38, { x: 0.54, y: 0.78 }));
+      add(box('tail-boom', 'secondary', 0.72, 0.12, 0.12, { x: -0.66, y: 0.84 }));
+      add(box('tail-fin', 'accent', 0.08, 0.36, 0.3, { x: -1.02, y: 0.94 }));
+      add(cylinder('skid-l', 'dark', 0.035, 0.9, 'x', { y: 0.38, z: 0.32 }, 8));
+      add(cylinder('skid-r', 'dark', 0.035, 0.9, 'x', { y: 0.38, z: -0.32 }, 8));
+      add(cylinder('mast', 'dark', 0.04, 0.52, 'y', { y: 1.12 }, 8));
+      add(box('rotor-a', 'accent', 1.45, 0.04, 0.08, { y: 1.42 }));
+      add(box('rotor-b', 'accent', 0.08, 0.04, 1.45, { y: 1.42 }));
+      add(box('pilot-body', 'secondary', 0.24, 0.28, 0.22, { x: 0.08, y: 1.02 }));
+      add(box('pilot-head', 'accent', 0.18, 0.16, 0.16, { x: 0.14, y: 1.24 }));
+      add(box('gun-l', 'dark', 0.4, 0.08, 0.08, { x: 0.68, y: 0.7, z: 0.2 }));
+      add(box('gun-r', 'dark', 0.4, 0.08, 0.08, { x: 0.68, y: 0.7, z: -0.2 }));
+      break;
+    }
+    case 'snapfire-rider': {
+      // Lizard mount plus a small goblin rider so Snapfire reads as mounted, not just raptor.
+      add(box('mount-body', 'primary', 1.08, 0.46, 0.44, { x: -0.08, y: 0.72 }));
+      add(box('mount-chest', 'secondary', 0.42, 0.44, 0.4, { x: 0.48, y: 0.78 }));
+      add(cylinder('leg-fl', 'primary', 0.08, 0.58, 'y', { x: 0.42, y: 0.32, z: 0.18 }, 8));
+      add(cylinder('leg-fr', 'primary', 0.08, 0.58, 'y', { x: 0.42, y: 0.32, z: -0.18 }, 8));
+      add(cylinder('leg-bl', 'primary', 0.08, 0.54, 'y', { x: -0.44, y: 0.3, z: 0.18 }, 8));
+      add(cylinder('leg-br', 'primary', 0.08, 0.54, 'y', { x: -0.44, y: 0.3, z: -0.18 }, 8));
+      add(box('head', 'primary', 0.34, 0.28, 0.28, { x: 0.82, y: 0.98 }));
+      add(box('jaw', 'secondary', 0.22, 0.12, 0.24, { x: 1.04, y: 0.92 }));
+      add(cone('tail', 'secondary', 0.12, 0.72, 'x', { x: -0.86, y: 0.72, rz: Math.PI }, 8));
+      add(box('saddle', 'dark', 0.36, 0.08, 0.34, { x: -0.04, y: 1.0 }));
+      add(box('rider-body', 'secondary', 0.24, 0.36, 0.22, { x: -0.02, y: 1.22 }));
+      add(box('rider-head', 'accent', 0.2, 0.18, 0.18, { x: 0.02, y: 1.52 }));
+      add(cone('rider-hat', 'dark', 0.14, 0.18, 'y', { x: 0.0, y: 1.7 }, 8));
+      add(box('scattergun', 'dark', 0.44, 0.08, 0.1, { x: 0.3, y: 1.24, z: 0.22, rz: 0.1 }));
       break;
     }
   }
@@ -522,6 +705,7 @@ function writeGlb(file, id, palette, parts) {
 
 function main() {
   fs.mkdirSync(OUT_DIR, { recursive: true });
+  fs.mkdirSync(HERO_OUT_DIR, { recursive: true });
   const bridge = loadBridge();
   let count = 0;
   for (const [id, def] of Object.entries(CREATURES)) {
@@ -529,7 +713,12 @@ function main() {
     writeGlb(path.join(OUT_DIR, `${id}.glb`), id, def.palette, partsFor(def.style));
     count++;
   }
-  console.log(`generated ${count} creature-family GLBs in ${path.relative(ROOT, OUT_DIR)}`);
+  for (const [id, def] of Object.entries(GENERATED_HERO_BODIES)) {
+    console.log(`  prompt ${promptFor(bridge, `heroes/${id}`)}`);
+    writeGlb(path.join(HERO_OUT_DIR, `${id}.glb`), id, def.palette, partsFor(def.style));
+    count++;
+  }
+  console.log(`generated ${count} creature/hero body GLBs in ${path.relative(ROOT, OUT_DIR)} + ${path.relative(ROOT, HERO_OUT_DIR)}`);
 }
 
 main();

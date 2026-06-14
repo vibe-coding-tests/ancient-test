@@ -58,6 +58,39 @@ export const TOWN_LANDMARK_COLLISION: WorldCollisionSpec = {
   label: 'Town landmark'
 };
 
+export const SHRINE_COLLISION: WorldCollisionSpec = {
+  mode: 'soft',
+  radius: 500,
+  layer: 'trigger',
+  blocksProjectiles: false,
+  label: 'Shrine'
+};
+
+export const CHEST_COLLISION: WorldCollisionSpec = {
+  mode: 'soft',
+  radius: 260,
+  layer: 'loot',
+  blocksProjectiles: false,
+  label: 'Chest'
+};
+
+export const GROUND_LOOT_COLLISION: WorldCollisionSpec = {
+  mode: 'soft',
+  radius: 72,
+  layer: 'loot',
+  blocksProjectiles: false,
+  label: 'Ground loot'
+};
+
+export const REGION_TRIGGER_COLLISION = {
+  gate: { mode: 'soft', layer: 'trigger', blocksProjectiles: false, label: 'Route gate' },
+  dungeon: { mode: 'soft', layer: 'trigger', blocksProjectiles: false, label: 'Dungeon portal' },
+  gym: { mode: 'soft', layer: 'trigger', blocksProjectiles: false, label: 'Gym entrance' },
+  waypoint: { mode: 'soft', layer: 'trigger', blocksProjectiles: false, label: 'Waypoint' },
+  discovery: { mode: 'soft', layer: 'trigger', blocksProjectiles: false, label: 'Discovery' },
+  shard: { mode: 'soft', layer: 'loot', blocksProjectiles: false, label: 'Mad Moon shard' }
+} as const satisfies Record<string, Omit<WorldCollisionSpec, 'radius'>>;
+
 /** Authored town dressing props already on disk, each with its declared size. */
 export const DRESSING_PROP_SIZES = {
   well: { heightM: 1.9, footprintM: 0.9, sizeClass: 'prop', pose: 'static' },
@@ -65,6 +98,13 @@ export const DRESSING_PROP_SIZES = {
   barrel: { heightM: 1.0, footprintM: 0.4, sizeClass: 'prop', pose: 'static' },
   market: { heightM: 2.0, footprintM: 1.2, sizeClass: 'prop', pose: 'static' }
 } as const satisfies Record<string, WorldSize>;
+
+export const DRESSING_PROP_COLLISION = {
+  well: { mode: 'solid', radius: 95, layer: 'static', blocksProjectiles: false, label: 'Town well' },
+  cart: { mode: 'solid', radius: 90, layer: 'static', blocksProjectiles: false, label: 'Market cart' },
+  barrel: { mode: 'solid', radius: 42, layer: 'static', blocksProjectiles: false, label: 'Barrel' },
+  market: { mode: 'soft', radius: 110, layer: 'trigger', blocksProjectiles: false, label: 'Market stand' }
+} as const satisfies Record<keyof typeof DRESSING_PROP_SIZES, WorldCollisionSpec>;
 
 /** Instanced foliage fit targets — replaces the 4.6 / 1.5 literals in terrain.ts. */
 export const FOLIAGE_SIZES = {

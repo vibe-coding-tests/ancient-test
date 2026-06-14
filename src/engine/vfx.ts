@@ -433,6 +433,23 @@ export class VfxManager {
         }
         break;
       }
+      case 'tag-boon': {
+        const p = unitPos(ev.uid);
+        if (p) {
+          const chained = ev.chain > 1;
+          this.burst(p.x, p.y, chained ? '#ffe08a' : '#aee9ff', chained ? 1.35 : 1.0, 0.36, '#ffffff', chained ? 'shard' : 'soft');
+          this.pillar(p.x, p.y, chained ? '#ffe08a' : '#aee9ff', 0.28);
+        }
+        break;
+      }
+      case 'off-field': {
+        const p = unitPos(ev.uid);
+        if (p) {
+          this.impactDecal(p.x, p.y, '#aee9ff', 0.85, 0.7);
+          this.pillar(p.x, p.y, '#aee9ff', 0.24);
+        }
+        break;
+      }
       case 'immune-block': {
         const p = unitPos(ev.uid);
         if (p) this.burst(p.x, p.y, '#ffffff', 0.65, 0.22, '#7adf6a');

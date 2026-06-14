@@ -591,8 +591,30 @@ export class Sim {
           this.projectileImpact(p, target, caster);
         } else {
           const dir = norm(sub(target.pos, p.pos));
-          p.pos.x += dir.x * step;
-          p.pos.y += dir.y * step;
+          const from = { ...p.pos };
+          const next = { x: p.pos.x + dir.x * step, y: p.pos.y + dir.y * step };
+          let blocked: { distance: number; pos: Vec2; obstacle: CollisionObstacle } | null = null;
+          if (!p.attackPayload) {
+            for (const obstacle of this.obstacles) {
+              const impact = projectileSegmentHitsObstacle(from, next, p.width, obstacle);
+              if (impact && impact.distance < (blocked?.distance ?? Infinity)) {
+                blocked = { distance: impact.distance, pos: impact.pos, obstacle };
+              }
+            }
+          }
+          if (blocked) {
+            p.pos = { ...blocked.pos };
+            p.dead = true;
+            this.events.emit({
+              t: 'projectile-block',
+              pid: p.pid,
+              pos: { ...blocked.pos },
+              obstacleId: blocked.obstacle.id,
+              feedback: blocked.obstacle.body.feedback
+            });
+          } else {
+            p.pos = next;
+          }
         }
       } else {
         // linear skillshot

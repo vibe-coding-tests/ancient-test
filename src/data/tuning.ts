@@ -256,10 +256,16 @@ export const TUNING = {
   audioVoiceCap: 6,               // pooled voice concurrency cap (perf budget)
 
   // --- hero swap (SPEC §6) ---
-  swapCooldownSec: 4,
+  swapFloorSec: 1.5,
+  swapCooldownSec: 1.5,
   swapCdFloorPct: 0.5,        // swapped-in hero cooldowns floored at 50% of remaining
-  resonanceSwapCooldownSec: 1.2,
+  resonanceSwapFloorSec: 1.0,
+  resonanceSwapCooldownSec: 1.0,
   resonanceElementGaugeSec: 4,
+  tagChainWindowSec: 2.5,
+  tagChainAmpPerStepPct: 15,
+  tagChainMaxSteps: 3,
+  resonanceOffFieldPersistenceSec: 5,
 
   // --- Genshin-overworld locomotion / traversal (GAMEPLAY_OVERHAUL G1/G3) ---
   locomotion: {

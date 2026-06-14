@@ -13,6 +13,12 @@
     "landmark": "the tallest thing in view — read from across the region"
   },
   "sizes": {
+    "creeps/abomination.glb": {
+      "heightM": 2.25,
+      "sizeClass": "large",
+      "pose": "standing",
+      "source": "shared-creature"
+    },
     "creeps/alpaca.glb": {
       "heightM": 1.3,
       "sizeClass": "small",
@@ -52,6 +58,18 @@
     "creeps/dragonevolved.glb": {
       "heightM": 2.61,
       "sizeClass": "large",
+      "pose": "standing",
+      "source": "shared-creature"
+    },
+    "creeps/energy.glb": {
+      "heightM": 1.944,
+      "sizeClass": "human",
+      "pose": "standing",
+      "source": "shared-creature"
+    },
+    "creeps/fishman.glb": {
+      "heightM": 2.016,
+      "sizeClass": "human",
       "pose": "standing",
       "source": "shared-creature"
     },
@@ -111,6 +129,12 @@
     },
     "creeps/orcenemy.glb": {
       "heightM": 1.53,
+      "sizeClass": "human",
+      "pose": "standing",
+      "source": "shared-creature"
+    },
+    "creeps/owlbear.glb": {
+      "heightM": 2.07,
       "sizeClass": "human",
       "pose": "standing",
       "source": "shared-creature"

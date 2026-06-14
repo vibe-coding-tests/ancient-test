@@ -28,6 +28,9 @@ export interface DerivedStats {
   swapCdReductionPct: number;
   swapInDamagePct: number;
   swapInHealPct: number;
+  tagBoonAmpPct: number;
+  tagGaugeReductionPct: number;
+  tagChainWindowBonusSec: number;
   reactionAmpPct: number;
   elementalGaugeSec: number;
   staminaBonus: number;
@@ -105,6 +108,9 @@ export function deriveStats(inp: StatInputs): DerivedStats {
     swapCdReductionPct: M(mods, 'swapCdReductionPct'),
     swapInDamagePct: M(mods, 'swapInDamagePct'),
     swapInHealPct: M(mods, 'swapInHealPct'),
+    tagBoonAmpPct: M(mods, 'tagBoonAmpPct'),
+    tagGaugeReductionPct: M(mods, 'tagGaugeReductionPct'),
+    tagChainWindowBonusSec: M(mods, 'tagChainWindowBonusSec'),
     reactionAmpPct: M(mods, 'reactionAmpPct'),
     elementalGaugeSec: M(mods, 'elementalGaugeSec'),
     staminaBonus: M(mods, 'staminaBonus')

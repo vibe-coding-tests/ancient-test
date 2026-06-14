@@ -1,25 +1,25 @@
 {
   "version": 1,
-  "hash": "624280b4f754",
-  "generatedAt": "2026-06-14T18:30:23.875Z",
+  "hash": "13bde43d48da",
+  "generatedAt": "2026-06-14T19:19:07.217Z",
   "assetRoot": "/assets/",
-  "totalBytes": 139454038,
+  "totalBytes": 119742482,
   "groups": {
     "audio": {
       "count": 54,
       "bytes": 14634052
     },
     "creep": {
-      "count": 28,
-      "bytes": 3451612
+      "count": 32,
+      "bytes": 3588404
     },
     "env": {
       "count": 2,
       "bytes": 3180251
     },
     "hero": {
-      "count": 80,
-      "bytes": 111709760
+      "count": 69,
+      "bytes": 91940556
     },
     "holdout": {
       "count": 22,
@@ -42,8 +42,8 @@
       "bytes": 79918
     },
     "weapon": {
-      "count": 92,
-      "bytes": 719568
+      "count": 78,
+      "bytes": 640424
     }
   },
   "files": [
@@ -588,6 +588,39 @@
       "source": "generated in-repo: generate_audio.mjs"
     },
     {
+      "path": "creeps/abomination.glb",
+      "url": "/assets/creeps/abomination.glb",
+      "bytes": 33776,
+      "type": "model",
+      "group": "creep",
+      "preloadGroup": "creep",
+      "sourceSpec": null,
+      "source": "generated in-repo: generate_creature_families.mjs",
+      "animations": [
+        "idle",
+        "run",
+        "attack",
+        "cast",
+        "death"
+      ],
+      "worldSize": {
+        "heightM": 2.25,
+        "sizeClass": "large",
+        "pose": "standing",
+        "source": "shared-creature"
+      },
+      "dims": {
+        "w": 0.9668,
+        "h": 2.25,
+        "d": 1.46
+      },
+      "dimsM": {
+        "h": 2.25,
+        "w": 0.9668,
+        "d": 1.46
+      }
+    },
+    {
       "path": "creeps/alpaca.glb",
       "url": "/assets/creeps/alpaca.glb",
       "bytes": 340456,
@@ -843,6 +876,72 @@
         "h": 2.61,
         "w": 5.9156,
         "d": 3.0875
+      }
+    },
+    {
+      "path": "creeps/energy.glb",
+      "url": "/assets/creeps/energy.glb",
+      "bytes": 21492,
+      "type": "model",
+      "group": "creep",
+      "preloadGroup": "creep",
+      "sourceSpec": null,
+      "source": "generated in-repo: generate_creature_families.mjs",
+      "animations": [
+        "idle",
+        "run",
+        "attack",
+        "cast",
+        "death"
+      ],
+      "worldSize": {
+        "heightM": 1.944,
+        "sizeClass": "human",
+        "pose": "standing",
+        "source": "shared-creature"
+      },
+      "dims": {
+        "w": 1.02,
+        "h": 1.8936,
+        "d": 0.94
+      },
+      "dimsM": {
+        "h": 1.944,
+        "w": 1.0471,
+        "d": 0.965
+      }
+    },
+    {
+      "path": "creeps/fishman.glb",
+      "url": "/assets/creeps/fishman.glb",
+      "bytes": 48704,
+      "type": "model",
+      "group": "creep",
+      "preloadGroup": "creep",
+      "sourceSpec": null,
+      "source": "generated in-repo: generate_creature_families.mjs",
+      "animations": [
+        "idle",
+        "run",
+        "attack",
+        "cast",
+        "death"
+      ],
+      "worldSize": {
+        "heightM": 2.016,
+        "sizeClass": "human",
+        "pose": "standing",
+        "source": "shared-creature"
+      },
+      "dims": {
+        "w": 1.47,
+        "h": 2.1531,
+        "d": 1.08
+      },
+      "dimsM": {
+        "h": 2.016,
+        "w": 1.3764,
+        "d": 1.0112
       }
     },
     {
@@ -1235,6 +1334,39 @@
       }
     },
     {
+      "path": "creeps/owlbear.glb",
+      "url": "/assets/creeps/owlbear.glb",
+      "bytes": 32820,
+      "type": "model",
+      "group": "creep",
+      "preloadGroup": "creep",
+      "sourceSpec": null,
+      "source": "generated in-repo: generate_creature_families.mjs",
+      "animations": [
+        "idle",
+        "run",
+        "attack",
+        "cast",
+        "death"
+      ],
+      "worldSize": {
+        "heightM": 2.07,
+        "sizeClass": "human",
+        "pose": "standing",
+        "source": "shared-creature"
+      },
+      "dims": {
+        "w": 1.1721,
+        "h": 2.34,
+        "d": 1.92
+      },
+      "dimsM": {
+        "h": 2.07,
+        "w": 1.0369,
+        "d": 1.6985
+      }
+    },
+    {
       "path": "creeps/scorpion.glb",
       "url": "/assets/creeps/scorpion.glb",
       "bytes": 60636,
@@ -1622,39 +1754,6 @@
       }
     },
     {
-      "path": "heroes/alchemist.glb",
-      "url": "/assets/heroes/alchemist.glb",
-      "bytes": 1417376,
-      "type": "model",
-      "group": "hero",
-      "preloadGroup": "hero",
-      "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0",
-      "animations": [
-        "attack",
-        "death",
-        "idle",
-        "run",
-        "cast"
-      ],
-      "worldSize": {
-        "heightM": 2.052,
-        "sizeClass": "human",
-        "pose": "standing",
-        "source": "hero"
-      },
-      "dims": {
-        "w": 65534,
-        "h": 65534,
-        "d": 65534
-      },
-      "dimsM": {
-        "h": 2.052,
-        "w": 2.052,
-        "d": 2.052
-      }
-    },
-    {
       "path": "heroes/anti-mage.glb",
       "url": "/assets/heroes/anti-mage.glb",
       "bytes": 1406196,
@@ -1668,40 +1767,6 @@
         "death",
         "idle",
         "run",
-        "cast"
-      ],
-      "worldSize": {
-        "heightM": 1.8,
-        "sizeClass": "human",
-        "pose": "standing",
-        "source": "hero"
-      },
-      "dims": {
-        "w": 65534,
-        "h": 65534,
-        "d": 65534
-      },
-      "dimsM": {
-        "h": 1.8,
-        "w": 1.8,
-        "d": 1.8
-      }
-    },
-    {
-      "path": "heroes/arc-warden.glb",
-      "url": "/assets/heroes/arc-warden.glb",
-      "bytes": 1407260,
-      "type": "model",
-      "group": "hero",
-      "preloadGroup": "hero",
-      "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0",
-      "animations": [
-        "death",
-        "idle",
-        "run",
-        "channel",
-        "attack",
         "cast"
       ],
       "worldSize": {
@@ -2019,39 +2084,6 @@
       }
     },
     {
-      "path": "heroes/clockwerk.glb",
-      "url": "/assets/heroes/clockwerk.glb",
-      "bytes": 1427040,
-      "type": "model",
-      "group": "hero",
-      "preloadGroup": "hero",
-      "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0",
-      "animations": [
-        "attack",
-        "death",
-        "idle",
-        "run",
-        "cast"
-      ],
-      "worldSize": {
-        "heightM": 1.944,
-        "sizeClass": "human",
-        "pose": "standing",
-        "source": "hero"
-      },
-      "dims": {
-        "w": 65534,
-        "h": 65534,
-        "d": 60670
-      },
-      "dimsM": {
-        "h": 1.944,
-        "w": 1.944,
-        "d": 1.7997
-      }
-    },
-    {
       "path": "heroes/crystal-maiden.glb",
       "url": "/assets/heroes/crystal-maiden.glb",
       "bytes": 1406828,
@@ -2218,40 +2250,6 @@
         "h": 1.8,
         "w": 1.8,
         "d": 1.8
-      }
-    },
-    {
-      "path": "heroes/death-prophet.glb",
-      "url": "/assets/heroes/death-prophet.glb",
-      "bytes": 1407036,
-      "type": "model",
-      "group": "hero",
-      "preloadGroup": "hero",
-      "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0",
-      "animations": [
-        "death",
-        "idle",
-        "run",
-        "channel",
-        "attack",
-        "cast"
-      ],
-      "worldSize": {
-        "heightM": 1.944,
-        "sizeClass": "human",
-        "pose": "standing",
-        "source": "hero"
-      },
-      "dims": {
-        "w": 65534,
-        "h": 65534,
-        "d": 65534
-      },
-      "dimsM": {
-        "h": 1.944,
-        "w": 1.944,
-        "d": 1.944
       }
     },
     {
@@ -2519,6 +2517,72 @@
         "h": 1.8,
         "w": 1.8,
         "d": 1.8
+      }
+    },
+    {
+      "path": "heroes/gyrocopter.glb",
+      "url": "/assets/heroes/gyrocopter.glb",
+      "bytes": 26192,
+      "type": "model",
+      "group": "hero",
+      "preloadGroup": "hero",
+      "sourceSpec": null,
+      "source": "generated in-repo: generate_creature_families.mjs",
+      "animations": [
+        "idle",
+        "run",
+        "attack",
+        "cast",
+        "death"
+      ],
+      "worldSize": {
+        "heightM": 1.8,
+        "sizeClass": "human",
+        "pose": "standing",
+        "source": "hero"
+      },
+      "dims": {
+        "w": 1.94,
+        "h": 1.095,
+        "d": 1.45
+      },
+      "dimsM": {
+        "h": 1.8,
+        "w": 3.189,
+        "d": 2.3836
+      }
+    },
+    {
+      "path": "heroes/hoodwink.glb",
+      "url": "/assets/heroes/hoodwink.glb",
+      "bytes": 38512,
+      "type": "model",
+      "group": "hero",
+      "preloadGroup": "hero",
+      "sourceSpec": null,
+      "source": "generated in-repo: generate_creature_families.mjs",
+      "animations": [
+        "idle",
+        "run",
+        "attack",
+        "cast",
+        "death"
+      ],
+      "worldSize": {
+        "heightM": 1.8,
+        "sizeClass": "human",
+        "pose": "standing",
+        "source": "hero"
+      },
+      "dims": {
+        "w": 1.4048,
+        "h": 1.7346,
+        "d": 0.67
+      },
+      "dimsM": {
+        "h": 1.8,
+        "w": 1.4578,
+        "d": 0.6953
       }
     },
     {
@@ -2989,39 +3053,6 @@
       }
     },
     {
-      "path": "heroes/meepo.glb",
-      "url": "/assets/heroes/meepo.glb",
-      "bytes": 1406148,
-      "type": "model",
-      "group": "hero",
-      "preloadGroup": "hero",
-      "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0",
-      "animations": [
-        "attack",
-        "death",
-        "idle",
-        "run",
-        "cast"
-      ],
-      "worldSize": {
-        "heightM": 1.8,
-        "sizeClass": "human",
-        "pose": "standing",
-        "source": "hero"
-      },
-      "dims": {
-        "w": 65534,
-        "h": 65534,
-        "d": 65534
-      },
-      "dimsM": {
-        "h": 1.8,
-        "w": 1.8,
-        "d": 1.8
-      }
-    },
-    {
       "path": "heroes/mirana.glb",
       "url": "/assets/heroes/mirana.glb",
       "bytes": 1405056,
@@ -3088,74 +3119,6 @@
       }
     },
     {
-      "path": "heroes/natures-prophet.glb",
-      "url": "/assets/heroes/natures-prophet.glb",
-      "bytes": 1407012,
-      "type": "model",
-      "group": "hero",
-      "preloadGroup": "hero",
-      "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0",
-      "animations": [
-        "death",
-        "idle",
-        "run",
-        "channel",
-        "attack",
-        "cast"
-      ],
-      "worldSize": {
-        "heightM": 1.8,
-        "sizeClass": "human",
-        "pose": "standing",
-        "source": "hero"
-      },
-      "dims": {
-        "w": 65534,
-        "h": 65534,
-        "d": 65534
-      },
-      "dimsM": {
-        "h": 1.8,
-        "w": 1.8,
-        "d": 1.8
-      }
-    },
-    {
-      "path": "heroes/necrophos.glb",
-      "url": "/assets/heroes/necrophos.glb",
-      "bytes": 1407084,
-      "type": "model",
-      "group": "hero",
-      "preloadGroup": "hero",
-      "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0",
-      "animations": [
-        "death",
-        "idle",
-        "run",
-        "channel",
-        "attack",
-        "cast"
-      ],
-      "worldSize": {
-        "heightM": 1.944,
-        "sizeClass": "human",
-        "pose": "standing",
-        "source": "hero"
-      },
-      "dims": {
-        "w": 65534,
-        "h": 65534,
-        "d": 65534
-      },
-      "dimsM": {
-        "h": 1.944,
-        "w": 1.944,
-        "d": 1.944
-      }
-    },
-    {
       "path": "heroes/ogre-magi.glb",
       "url": "/assets/heroes/ogre-magi.glb",
       "bytes": 1417520,
@@ -3219,40 +3182,6 @@
         "h": 1.8,
         "w": 1.8,
         "d": 1.6664
-      }
-    },
-    {
-      "path": "heroes/outworld-destroyer.glb",
-      "url": "/assets/heroes/outworld-destroyer.glb",
-      "bytes": 1407188,
-      "type": "model",
-      "group": "hero",
-      "preloadGroup": "hero",
-      "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0",
-      "animations": [
-        "death",
-        "idle",
-        "run",
-        "channel",
-        "attack",
-        "cast"
-      ],
-      "worldSize": {
-        "heightM": 1.8,
-        "sizeClass": "human",
-        "pose": "standing",
-        "source": "hero"
-      },
-      "dims": {
-        "w": 65534,
-        "h": 65534,
-        "d": 65534
-      },
-      "dimsM": {
-        "h": 1.8,
-        "w": 1.8,
-        "d": 1.8
       }
     },
     {
@@ -3355,39 +3284,6 @@
       }
     },
     {
-      "path": "heroes/pudge.glb",
-      "url": "/assets/heroes/pudge.glb",
-      "bytes": 1417144,
-      "type": "model",
-      "group": "hero",
-      "preloadGroup": "hero",
-      "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0",
-      "animations": [
-        "attack",
-        "death",
-        "idle",
-        "run",
-        "cast"
-      ],
-      "worldSize": {
-        "heightM": 2.25,
-        "sizeClass": "large",
-        "pose": "standing",
-        "source": "hero"
-      },
-      "dims": {
-        "w": 65534,
-        "h": 65534,
-        "d": 65534
-      },
-      "dimsM": {
-        "h": 2.25,
-        "w": 2.25,
-        "d": 2.25
-      }
-    },
-    {
       "path": "heroes/pugna.glb",
       "url": "/assets/heroes/pugna.glb",
       "bytes": 1407156,
@@ -3453,40 +3349,6 @@
         "h": 1.8,
         "w": 1.8,
         "d": 1.8
-      }
-    },
-    {
-      "path": "heroes/razor.glb",
-      "url": "/assets/heroes/razor.glb",
-      "bytes": 1407148,
-      "type": "model",
-      "group": "hero",
-      "preloadGroup": "hero",
-      "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0",
-      "animations": [
-        "death",
-        "idle",
-        "run",
-        "channel",
-        "attack",
-        "cast"
-      ],
-      "worldSize": {
-        "heightM": 1.944,
-        "sizeClass": "human",
-        "pose": "standing",
-        "source": "hero"
-      },
-      "dims": {
-        "w": 65534,
-        "h": 65534,
-        "d": 65534
-      },
-      "dimsM": {
-        "h": 1.944,
-        "w": 1.944,
-        "d": 1.944
       }
     },
     {
@@ -3659,75 +3521,9 @@
       }
     },
     {
-      "path": "heroes/slardar.glb",
-      "url": "/assets/heroes/slardar.glb",
-      "bytes": 1426856,
-      "type": "model",
-      "group": "hero",
-      "preloadGroup": "hero",
-      "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0",
-      "animations": [
-        "attack",
-        "death",
-        "idle",
-        "run",
-        "cast"
-      ],
-      "worldSize": {
-        "heightM": 2.016,
-        "sizeClass": "human",
-        "pose": "standing",
-        "source": "hero"
-      },
-      "dims": {
-        "w": 65534,
-        "h": 65534,
-        "d": 60670
-      },
-      "dimsM": {
-        "h": 2.016,
-        "w": 2.016,
-        "d": 1.8664
-      }
-    },
-    {
-      "path": "heroes/slark.glb",
-      "url": "/assets/heroes/slark.glb",
-      "bytes": 1417288,
-      "type": "model",
-      "group": "hero",
-      "preloadGroup": "hero",
-      "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0",
-      "animations": [
-        "attack",
-        "death",
-        "idle",
-        "run",
-        "cast"
-      ],
-      "worldSize": {
-        "heightM": 1.8,
-        "sizeClass": "human",
-        "pose": "standing",
-        "source": "hero"
-      },
-      "dims": {
-        "w": 65534,
-        "h": 65534,
-        "d": 65534
-      },
-      "dimsM": {
-        "h": 1.8,
-        "w": 1.8,
-        "d": 1.8
-      }
-    },
-    {
       "path": "heroes/snapfire.glb",
       "url": "/assets/heroes/snapfire.glb",
-      "bytes": 97264,
+      "bytes": 30104,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
@@ -3890,39 +3686,6 @@
       }
     },
     {
-      "path": "heroes/timbersaw.glb",
-      "url": "/assets/heroes/timbersaw.glb",
-      "bytes": 1427056,
-      "type": "model",
-      "group": "hero",
-      "preloadGroup": "hero",
-      "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0",
-      "animations": [
-        "attack",
-        "death",
-        "idle",
-        "run",
-        "cast"
-      ],
-      "worldSize": {
-        "heightM": 1.944,
-        "sizeClass": "human",
-        "pose": "standing",
-        "source": "hero"
-      },
-      "dims": {
-        "w": 65534,
-        "h": 65534,
-        "d": 60670
-      },
-      "dimsM": {
-        "h": 1.944,
-        "w": 1.944,
-        "d": 1.7997
-      }
-    },
-    {
       "path": "heroes/troll-warlord.glb",
       "url": "/assets/heroes/troll-warlord.glb",
       "bytes": 1410480,
@@ -3956,6 +3719,39 @@
       }
     },
     {
+      "path": "heroes/tusk.glb",
+      "url": "/assets/heroes/tusk.glb",
+      "bytes": 32120,
+      "type": "model",
+      "group": "hero",
+      "preloadGroup": "hero",
+      "sourceSpec": null,
+      "source": "generated in-repo: generate_creature_families.mjs",
+      "animations": [
+        "idle",
+        "run",
+        "attack",
+        "cast",
+        "death"
+      ],
+      "worldSize": {
+        "heightM": 1.8,
+        "sizeClass": "human",
+        "pose": "standing",
+        "source": "hero"
+      },
+      "dims": {
+        "w": 0.94,
+        "h": 1.98,
+        "d": 1.2492
+      },
+      "dimsM": {
+        "h": 1.8,
+        "w": 0.8545,
+        "d": 1.1356
+      }
+    },
+    {
       "path": "heroes/underlord.glb",
       "url": "/assets/heroes/underlord.glb",
       "bytes": 1417536,
@@ -3986,39 +3782,6 @@
         "h": 2.088,
         "w": 2.088,
         "d": 2.088
-      }
-    },
-    {
-      "path": "heroes/undying.glb",
-      "url": "/assets/heroes/undying.glb",
-      "bytes": 1417232,
-      "type": "model",
-      "group": "hero",
-      "preloadGroup": "hero",
-      "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0",
-      "animations": [
-        "attack",
-        "death",
-        "idle",
-        "run",
-        "cast"
-      ],
-      "worldSize": {
-        "heightM": 2.016,
-        "sizeClass": "human",
-        "pose": "standing",
-        "source": "hero"
-      },
-      "dims": {
-        "w": 65534,
-        "h": 65534,
-        "d": 65534
-      },
-      "dimsM": {
-        "h": 2.016,
-        "w": 2.016,
-        "d": 2.016
       }
     },
     {
@@ -8099,29 +7862,9 @@
       "source": "generated in-repo: generate_hero_weapons.mjs"
     },
     {
-      "path": "weapons/heroes/alchemist.glb",
-      "url": "/assets/weapons/heroes/alchemist.glb",
-      "bytes": 6648,
-      "type": "model",
-      "group": "weapon",
-      "preloadGroup": "weapon",
-      "sourceSpec": null,
-      "source": "generated in-repo: generate_hero_weapons.mjs"
-    },
-    {
       "path": "weapons/heroes/anti-mage.glb",
       "url": "/assets/weapons/heroes/anti-mage.glb",
       "bytes": 7904,
-      "type": "model",
-      "group": "weapon",
-      "preloadGroup": "weapon",
-      "sourceSpec": null,
-      "source": "generated in-repo: generate_hero_weapons.mjs"
-    },
-    {
-      "path": "weapons/heroes/arc-warden.glb",
-      "url": "/assets/weapons/heroes/arc-warden.glb",
-      "bytes": 11364,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",
@@ -8219,16 +7962,6 @@
       "source": "generated in-repo: generate_hero_weapons.mjs"
     },
     {
-      "path": "weapons/heroes/clockwerk.glb",
-      "url": "/assets/weapons/heroes/clockwerk.glb",
-      "bytes": 6224,
-      "type": "model",
-      "group": "weapon",
-      "preloadGroup": "weapon",
-      "sourceSpec": null,
-      "source": "generated in-repo: generate_hero_weapons.mjs"
-    },
-    {
       "path": "weapons/heroes/crystal-maiden.glb",
       "url": "/assets/weapons/heroes/crystal-maiden.glb",
       "bytes": 11636,
@@ -8272,16 +8005,6 @@
       "path": "weapons/heroes/dazzle.glb",
       "url": "/assets/weapons/heroes/dazzle.glb",
       "bytes": 8248,
-      "type": "model",
-      "group": "weapon",
-      "preloadGroup": "weapon",
-      "sourceSpec": null,
-      "source": "generated in-repo: generate_hero_weapons.mjs"
-    },
-    {
-      "path": "weapons/heroes/death-prophet.glb",
-      "url": "/assets/weapons/heroes/death-prophet.glb",
-      "bytes": 7600,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",
@@ -8509,16 +8232,6 @@
       "source": "generated in-repo: generate_hero_weapons.mjs"
     },
     {
-      "path": "weapons/heroes/meepo.glb",
-      "url": "/assets/weapons/heroes/meepo.glb",
-      "bytes": 3520,
-      "type": "model",
-      "group": "weapon",
-      "preloadGroup": "weapon",
-      "sourceSpec": null,
-      "source": "generated in-repo: generate_hero_weapons.mjs"
-    },
-    {
       "path": "weapons/heroes/mirana.glb",
       "url": "/assets/weapons/heroes/mirana.glb",
       "bytes": 6324,
@@ -8539,26 +8252,6 @@
       "source": "generated in-repo: generate_hero_weapons.mjs"
     },
     {
-      "path": "weapons/heroes/natures-prophet.glb",
-      "url": "/assets/weapons/heroes/natures-prophet.glb",
-      "bytes": 11524,
-      "type": "model",
-      "group": "weapon",
-      "preloadGroup": "weapon",
-      "sourceSpec": null,
-      "source": "generated in-repo: generate_hero_weapons.mjs"
-    },
-    {
-      "path": "weapons/heroes/necrophos.glb",
-      "url": "/assets/weapons/heroes/necrophos.glb",
-      "bytes": 5036,
-      "type": "model",
-      "group": "weapon",
-      "preloadGroup": "weapon",
-      "sourceSpec": null,
-      "source": "generated in-repo: generate_hero_weapons.mjs"
-    },
-    {
       "path": "weapons/heroes/ogre-magi.glb",
       "url": "/assets/weapons/heroes/ogre-magi.glb",
       "bytes": 4956,
@@ -8572,16 +8265,6 @@
       "path": "weapons/heroes/omniknight.glb",
       "url": "/assets/weapons/heroes/omniknight.glb",
       "bytes": 4960,
-      "type": "model",
-      "group": "weapon",
-      "preloadGroup": "weapon",
-      "sourceSpec": null,
-      "source": "generated in-repo: generate_hero_weapons.mjs"
-    },
-    {
-      "path": "weapons/heroes/outworld-destroyer.glb",
-      "url": "/assets/weapons/heroes/outworld-destroyer.glb",
-      "bytes": 11412,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",
@@ -8619,16 +8302,6 @@
       "source": "generated in-repo: generate_hero_weapons.mjs"
     },
     {
-      "path": "weapons/heroes/pudge.glb",
-      "url": "/assets/weapons/heroes/pudge.glb",
-      "bytes": 6952,
-      "type": "model",
-      "group": "weapon",
-      "preloadGroup": "weapon",
-      "sourceSpec": null,
-      "source": "generated in-repo: generate_hero_weapons.mjs"
-    },
-    {
       "path": "weapons/heroes/pugna.glb",
       "url": "/assets/weapons/heroes/pugna.glb",
       "bytes": 8272,
@@ -8642,16 +8315,6 @@
       "path": "weapons/heroes/queen-of-pain.glb",
       "url": "/assets/weapons/heroes/queen-of-pain.glb",
       "bytes": 3520,
-      "type": "model",
-      "group": "weapon",
-      "preloadGroup": "weapon",
-      "sourceSpec": null,
-      "source": "generated in-repo: generate_hero_weapons.mjs"
-    },
-    {
-      "path": "weapons/heroes/razor.glb",
-      "url": "/assets/weapons/heroes/razor.glb",
-      "bytes": 8696,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",
@@ -8709,26 +8372,6 @@
       "source": "generated in-repo: generate_hero_weapons.mjs"
     },
     {
-      "path": "weapons/heroes/slardar.glb",
-      "url": "/assets/weapons/heroes/slardar.glb",
-      "bytes": 5592,
-      "type": "model",
-      "group": "weapon",
-      "preloadGroup": "weapon",
-      "sourceSpec": null,
-      "source": "generated in-repo: generate_hero_weapons.mjs"
-    },
-    {
-      "path": "weapons/heroes/slark.glb",
-      "url": "/assets/weapons/heroes/slark.glb",
-      "bytes": 3500,
-      "type": "model",
-      "group": "weapon",
-      "preloadGroup": "weapon",
-      "sourceSpec": null,
-      "source": "generated in-repo: generate_hero_weapons.mjs"
-    },
-    {
       "path": "weapons/heroes/sniper.glb",
       "url": "/assets/weapons/heroes/sniper.glb",
       "bytes": 7712,
@@ -8769,16 +8412,6 @@
       "source": "generated in-repo: generate_hero_weapons.mjs"
     },
     {
-      "path": "weapons/heroes/timbersaw.glb",
-      "url": "/assets/weapons/heroes/timbersaw.glb",
-      "bytes": 9356,
-      "type": "model",
-      "group": "weapon",
-      "preloadGroup": "weapon",
-      "sourceSpec": null,
-      "source": "generated in-repo: generate_hero_weapons.mjs"
-    },
-    {
       "path": "weapons/heroes/troll-warlord.glb",
       "url": "/assets/weapons/heroes/troll-warlord.glb",
       "bytes": 6376,
@@ -8792,16 +8425,6 @@
       "path": "weapons/heroes/underlord.glb",
       "url": "/assets/weapons/heroes/underlord.glb",
       "bytes": 6648,
-      "type": "model",
-      "group": "weapon",
-      "preloadGroup": "weapon",
-      "sourceSpec": null,
-      "source": "generated in-repo: generate_hero_weapons.mjs"
-    },
-    {
-      "path": "weapons/heroes/undying.glb",
-      "url": "/assets/weapons/heroes/undying.glb",
-      "bytes": 5008,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",
@@ -8881,7 +8504,7 @@
     {
       "path": "weapons/items/abyssal-blade.glb",
       "url": "/assets/weapons/items/abyssal-blade.glb",
-      "bytes": 9492,
+      "bytes": 11904,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",
@@ -8891,7 +8514,7 @@
     {
       "path": "weapons/items/battlefury.glb",
       "url": "/assets/weapons/items/battlefury.glb",
-      "bytes": 8888,
+      "bytes": 8968,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",
@@ -8901,7 +8524,7 @@
     {
       "path": "weapons/items/bloodthorn.glb",
       "url": "/assets/weapons/items/bloodthorn.glb",
-      "bytes": 16780,
+      "bytes": 16776,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",
@@ -8911,7 +8534,7 @@
     {
       "path": "weapons/items/butterfly.glb",
       "url": "/assets/weapons/items/butterfly.glb",
-      "bytes": 8628,
+      "bytes": 11480,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",
@@ -8921,7 +8544,7 @@
     {
       "path": "weapons/items/daedalus.glb",
       "url": "/assets/weapons/items/daedalus.glb",
-      "bytes": 9168,
+      "bytes": 10772,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",
@@ -8931,7 +8554,7 @@
     {
       "path": "weapons/items/desolator.glb",
       "url": "/assets/weapons/items/desolator.glb",
-      "bytes": 14568,
+      "bytes": 14584,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",
@@ -8941,7 +8564,7 @@
     {
       "path": "weapons/items/divine-rapier.glb",
       "url": "/assets/weapons/items/divine-rapier.glb",
-      "bytes": 13024,
+      "bytes": 14588,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",
@@ -8951,7 +8574,7 @@
     {
       "path": "weapons/items/eye-of-skadi.glb",
       "url": "/assets/weapons/items/eye-of-skadi.glb",
-      "bytes": 19004,
+      "bytes": 23516,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",
@@ -8961,7 +8584,7 @@
     {
       "path": "weapons/items/mjollnir.glb",
       "url": "/assets/weapons/items/mjollnir.glb",
-      "bytes": 9324,
+      "bytes": 14644,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",
@@ -8981,7 +8604,7 @@
     {
       "path": "weapons/items/radiance.glb",
       "url": "/assets/weapons/items/radiance.glb",
-      "bytes": 11580,
+      "bytes": 14864,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",
@@ -8991,7 +8614,7 @@
     {
       "path": "weapons/items/satanic.glb",
       "url": "/assets/weapons/items/satanic.glb",
-      "bytes": 9980,
+      "bytes": 9996,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",
@@ -9001,7 +8624,7 @@
     {
       "path": "weapons/items/scythe-of-vyse.glb",
       "url": "/assets/weapons/items/scythe-of-vyse.glb",
-      "bytes": 9592,
+      "bytes": 11224,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",

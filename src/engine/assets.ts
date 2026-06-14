@@ -29,19 +29,28 @@ export type HeroBaseId =
   | 'spider' | 'dragonevolved' | 'demon' | 'wolf' | 'giant' | 'golelingevolved'
   | 'goblin' | 'velociraptor' | 'bull' | 'fox' | 'yeti' | 'crab' | 'ghost'
   | 'bear' | 'treant' | 'flier' | 'serpent' | 'scorpion' | 'centaur'
+  | 'energy' | 'abomination' | 'fishman'
   | 'procedural';
 
 const HERO_COHORTS: Record<Exclude<HeroBaseId, 'procedural'>, string[]> = {
-  // §3.1 KayKit Knight base — armored melee (15). Phase 4 Tier B moved the two
-  // mech offenders (clockwerk, timbersaw) off this humanoid base to the goblin family.
-  knight: ['juggernaut', 'sven', 'abaddon', 'dragon-knight', 'chaos-knight', 'legion-commander', 'omniknight', 'dawnbreaker', 'kunkka', 'mars', 'wraith-king', 'chen', 'slardar', 'faceless-void', 'pangolier'],
-  // §3.2 KayKit Mage base — robed caster (28). Phase 4 Tier B moved death-prophet
-  // (a legless floating banshee) off this standing humanoid base to the ghost family.
-  mage: ['crystal-maiden', 'lich', 'lina', 'zeus', 'witch-doctor', 'invoker', 'lion', 'rubick', 'pugna', 'necrophos', 'disruptor', 'grimstroke', 'keeper-of-the-light', 'shadow-shaman', 'silencer', 'skywrath-mage', 'outworld-destroyer', 'warlock', 'dark-seer', 'dark-willow', 'enchantress', 'natures-prophet', 'queen-of-pain', 'storm-spirit', 'vengeful-spirit', 'dazzle', 'arc-warden', 'razor'],
-  // §3.3 KayKit Barbarian base — brute (15)
-  barbarian: ['pudge', 'earthshaker', 'lifestealer', 'undying', 'ogre-magi', 'bristleback', 'troll-warlord', 'axe', 'magnus', 'brewmaster', 'alchemist', 'huskar', 'beastmaster', 'slark', 'underlord'],
-  // §3.4 KayKit Rogue base — agile / ranged (18)
-  rogue: ['sniper', 'mirana', 'drow-ranger', 'windranger', 'phantom-assassin', 'riki', 'bounty-hunter', 'anti-mage', 'templar-assassin', 'clinkz', 'meepo', 'void-spirit', 'ember-spirit', 'marci', 'phantom-lancer', 'monkey-king', 'luna', 'bloodseeker'],
+  // §3.1 KayKit Knight base — armored melee (13). Phase 4 Tier B moved the two
+  // mech offenders (clockwerk, timbersaw) off this humanoid base to the goblin
+  // family; Phase 6 moved slardar (fish-man → fishman) and pangolier (swashbuckler
+  // → rogue) off too. faceless-void stays: a bipedal alien reads acceptably as
+  // armored-melee, and no shipped creature base is a closer silhouette.
+  knight: ['juggernaut', 'sven', 'abaddon', 'dragon-knight', 'chaos-knight', 'legion-commander', 'omniknight', 'dawnbreaker', 'kunkka', 'mars', 'wraith-king', 'chen', 'faceless-void'],
+  // §3.2 KayKit Mage base — robed caster (23). Phase 4/5 moved the clearest
+  // non-humanoid offenders onto animated creature/generated bases; Phase 6 moved
+  // necrophos (floating reaper → ghost) and natures-prophet (tree → treant) off.
+  mage: ['crystal-maiden', 'lich', 'lina', 'zeus', 'witch-doctor', 'invoker', 'lion', 'rubick', 'pugna', 'disruptor', 'grimstroke', 'keeper-of-the-light', 'shadow-shaman', 'silencer', 'skywrath-mage', 'warlock', 'dark-seer', 'dark-willow', 'enchantress', 'queen-of-pain', 'storm-spirit', 'vengeful-spirit', 'dazzle'],
+  // §3.3 KayKit Barbarian base — brute (12). Phase 6 moved alchemist (rides an ogre
+  // → abomination brute body) and slark (fish-man → fishman) off, and pulled
+  // bloodseeker over from rogue (a feral melee brute reads truer here than a ranger).
+  barbarian: ['earthshaker', 'lifestealer', 'ogre-magi', 'bristleback', 'troll-warlord', 'axe', 'magnus', 'brewmaster', 'huskar', 'beastmaster', 'underlord', 'bloodseeker'],
+  // §3.4 KayKit Rogue base — agile / ranged (17). Phase 6 moved meepo (small ratty
+  // geomancer → goblin) off and pulled pangolier over from knight (a rapier
+  // swashbuckler reads as a rogue, not an armored knight).
+  rogue: ['sniper', 'mirana', 'drow-ranger', 'windranger', 'phantom-assassin', 'riki', 'bounty-hunter', 'anti-mage', 'templar-assassin', 'clinkz', 'void-spirit', 'ember-spirit', 'marci', 'phantom-lancer', 'monkey-king', 'luna', 'pangolier'],
   // §3.5 Quaternius/generated creature bases (42)
   spider: ['broodmother', 'weaver', 'nyx-assassin'],
   // sand-king is a scorpion: the generated scorpion family (pincers + arched stinger)
@@ -55,12 +64,21 @@ const HERO_COHORTS: Record<Exclude<HeroBaseId, 'procedural'>, string[]> = {
   golelingevolved: ['tiny', 'elder-titan', 'earth-spirit'],
   // Keen tinkerers + mech suits. Phase 4 Tier B: clockwerk (goblin in a clockwork
   // mech) and timbersaw (sawblade mech) read truer here than on the knight body.
-  goblin: ['techies', 'gyrocopter', 'tinker', 'clockwerk', 'timbersaw'],
+  // Phase 6: meepo (a small ratty geomancer) joins the small-humanoid family.
+  goblin: ['techies', 'gyrocopter', 'tinker', 'clockwerk', 'timbersaw', 'meepo'],
   velociraptor: ['venomancer', 'snapfire'],
   bull: ['spirit-breaker'],
   // centaur-warrunner regains its humanoid horse-torso on the generated centaur family
   // (the `bull` quadruped dropped it); shared with the centaur creeps.
   centaur: ['centaur-warrunner'],
+  // Generated Phase 5 silhouette-variety bodies for the remaining obvious cohort misses.
+  energy: ['arc-warden', 'outworld-destroyer', 'razor'],
+  // Bloated brute body. Phase 6: alchemist's silhouette is really his hulking ogre
+  // mount, so the brute body reads truer than a lean barbarian humanoid.
+  abomination: ['pudge', 'undying', 'alchemist'],
+  // Generated bipedal fish-man family (Phase 6) for the two aquatic heroes the
+  // humanoid cohorts misread: slardar (slithereen guard) and slark (reef raider).
+  fishman: ['slardar', 'slark'],
   fox: ['hoodwink'],
   yeti: ['tusk'],
   crab: ['tidehunter'],
@@ -68,10 +86,13 @@ const HERO_COHORTS: Record<Exclude<HeroBaseId, 'procedural'>, string[]> = {
   bear: ['ursa', 'lone-druid'],
   flier: ['phoenix', 'batrider'],
   serpent: ['naga-siren', 'medusa'],
-  treant: ['treant-protector'],
+  // Walking trees. Phase 6: natures-prophet (a forest avatar that summons treants)
+  // shares the treant body instead of reading as a robed human mage.
+  treant: ['treant-protector', 'natures-prophet'],
   // Spectral, legless floaters. Phase 4 Tier B: death-prophet (a hovering banshee)
-  // reads truer on the wraith body than as a standing robed mage.
-  ghost: ['spectre', 'death-prophet']
+  // reads truer on the wraith body than as a standing robed mage. Phase 6:
+  // necrophos (a hovering plague reaper) joins the same floating-reaper read.
+  ghost: ['spectre', 'death-prophet', 'necrophos']
 };
 
 // §3.6 procedural-only holdouts: genuinely abstract forms where an existing
@@ -116,7 +137,8 @@ export const ENABLED_HERO_COHORTS: ReadonlySet<HeroBaseId> = new Set<HeroBaseId>
 const CREATURE_HERO_BASES: ReadonlySet<HeroBaseId> = new Set<HeroBaseId>([
   'spider', 'dragonevolved', 'demon', 'wolf', 'giant', 'golelingevolved',
   'goblin', 'velociraptor', 'bull', 'fox', 'yeti', 'crab', 'bear', 'treant',
-  'flier', 'serpent', 'ghost', 'scorpion', 'centaur'
+  'flier', 'serpent', 'ghost', 'scorpion', 'centaur', 'energy', 'abomination',
+  'fishman'
 ]);
 
 // A few creature bases reuse a vendored creep GLB whose filename differs from the
@@ -163,10 +185,9 @@ export const HOLDOUT_REPLACEMENT_ASSETS: HeroAssetManifestEntry[] = [...PROCEDUR
     fallback: 'procedural'
   }));
 
-/** ASSET_GAPS polish: downloaded GLBs for creature-base heroes whose shared
- * stand-in was readable but too generic. Static body downloads stay disabled
- * until an animated replacement exists; moving shared bases beat frozen bodies. */
-export const BESPOKE_HERO_MODEL_ASSETS: HeroAssetManifestEntry[] = ['snapfire']
+/** ASSET_MAPPING_AUDIT Phase 2/5: generated animated bespoke bodies for heroes whose
+ * previous static/downloaded or shared stand-ins missed the silhouette bar. */
+export const BESPOKE_HERO_MODEL_ASSETS: HeroAssetManifestEntry[] = ['gyrocopter', 'hoodwink', 'snapfire', 'tusk']
   .sort((a, b) => a.localeCompare(b))
   .map((heroId) => ({
     heroId,
@@ -259,10 +280,10 @@ const CREATURE_BY_ID: Record<string, string> = {
   // Harpies are fliers; the winged family (P1.3) reads airborne, not ground-bound.
   'harpy-stormcrafter': 'flier',
   'harpy-scout': 'flier',
-  // Wildkin/wildwing are owlbears — the bear family reads closer than a raptor.
-  wildwing: 'bear',
-  'wildwing-ripper': 'bear',
-  'enraged-wildkin': 'bear',
+  // Wildkin/wildwing are owlbears; the generated owlbear keeps bear mass and wings.
+  wildwing: 'owlbear',
+  'wildwing-ripper': 'owlbear',
+  'enraged-wildkin': 'owlbear',
   'ice-shaman': 'tribal',
   'ogre-frostmage': 'orcenemy',
   'prowler-shaman': 'demon',

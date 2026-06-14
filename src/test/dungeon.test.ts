@@ -300,7 +300,8 @@ function dungeonSave(): GameSave {
     facetIdx: 0,
     hpPct: 1,
     manaPct: 1,
-    abilityCooldowns: [0, 0, 0, 0]
+    abilityCooldowns: [0, 0, 0, 0],
+    tagGaugeReadyAt: 0
   }));
   return save;
 }
@@ -354,7 +355,8 @@ describe('dungeon session D1/D2', () => {
     expect(session.sim.bounds).toEqual({ w: template.size.x, h: template.size.y });
     expect(session.sim.obstacles.length).toBe((template.blockers ?? []).length + (template.walls ?? []).length + (template.doors ?? []).length);
     for (const obstacle of session.sim.obstacles) {
-      expect(obstacle.body.shape.kind).toBe('circle');
+      expect(['circle', 'capsule', 'rect']).toContain(obstacle.body.shape.kind);
+      expect(obstacle.radius).toBeGreaterThan(0);
       expect(obstacle.body.blocksMovement).toBe(true);
       expect(obstacle.body.blocksProjectiles).toBe(true);
     }

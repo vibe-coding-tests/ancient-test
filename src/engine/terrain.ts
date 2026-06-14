@@ -1,10 +1,23 @@
 import * as THREE from 'three';
 import { Rng, hashString } from '../core/rng';
-import { staticCircleObstacle } from '../core/collision';
+import { contactCircleObstacle, staticCircleObstacle } from '../core/collision';
 import type { CollisionObstacleInput, RegionDef } from '../core/types';
 import { WORLD_SCALE } from './scale';
 import { loadTex, loadModel, instancedFromModel } from './asset-loaders';
-import { TOWN_BUILDING_COLLISION, TOWN_BUILDING_SIZE, TOWN_LANDMARK_SIZE, DRESSING_PROP_SIZES, FOLIAGE_COLLISION, FOLIAGE_SIZES } from '../data/world/props';
+import {
+  CHEST_COLLISION,
+  DRESSING_PROP_COLLISION,
+  DRESSING_PROP_SIZES,
+  FOLIAGE_COLLISION,
+  FOLIAGE_SIZES,
+  REGION_TRIGGER_COLLISION,
+  SHRINE_COLLISION,
+  TOWN_BUILDING_COLLISION,
+  TOWN_BUILDING_SIZE,
+  TOWN_LANDMARK_COLLISION,
+  TOWN_LANDMARK_SIZE,
+  type WorldCollisionSpec
+} from '../data/world/props';
 
 // ------------------------------------------------------------------
 // Procedural low-poly terrain: vertex-jittered plane, painted height
@@ -26,6 +39,27 @@ interface TerrainBuildOptions {
   staticPropShadows?: boolean;
   /** 0..1 tuft-density multiplier from the quality preset; 0 (low tier) skips the grass layer entirely. */
   grassDensity?: number;
+}
+
+function pushWorldContactObstacle(
+  obstacles: CollisionObstacleInput[] | undefined,
+  args: { id: string; pos: { x: number; y: number }; radius?: number; source: string; spec: WorldCollisionSpec | Omit<WorldCollisionSpec, 'radius'> }
+): void {
+  if (!obstacles) return;
+  const radius = args.radius ?? ('radius' in args.spec ? args.spec.radius : 0);
+  if (radius <= 0) return;
+  obstacles.push(contactCircleObstacle({
+    pos: args.pos,
+    radius,
+    id: args.id,
+    source: args.source,
+    layer: args.spec.layer,
+    mode: args.spec.mode,
+    blocksProjectiles: args.spec.blocksProjectiles,
+    blocksVision: args.spec.mode === 'solid',
+    interactable: args.spec.mode !== 'decor',
+    feedbackLabel: args.spec.label
+  }));
 }
 
 function markStaticShadowCaster(obj: THREE.Object3D, enabled: boolean): void {
@@ -585,7 +619,8 @@ function buildTownDressing(
   region: RegionDef,
   heightAt: (x: number, y: number) => number,
   isLive: SceneLiveCheck,
-  staticPropShadows: boolean
+  staticPropShadows: boolean,
+  obstacles?: CollisionObstacleInput[]
 ): THREE.Group {
   const g = new THREE.Group();
   const t = region.town.pos;
@@ -661,6 +696,12 @@ function buildTownDressing(
   markStaticShadowCaster(marketFb, staticPropShadows);
   g.add(marketFb);
   placeAuthoredProp(g, DRESSING_PROPS.market.url, { ...marketPos, rotY: shopAng + Math.PI, height: DRESSING_PROPS.market.height }, marketFb, isLive, staticPropShadows);
+  pushWorldContactObstacle(obstacles, {
+    id: 'town-dressing:market',
+    pos: { x: marketPos.x * WORLD_SCALE, y: marketPos.z * WORLD_SCALE },
+    source: 'terrain:town-dressing',
+    spec: DRESSING_PROP_COLLISION.market
+  });
 
   const cartPos = at(shopAng + 0.42, townRadius * 0.42);
   const cartFb = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.8, 0.8), woodMat);
@@ -669,6 +710,12 @@ function buildTownDressing(
   markStaticShadowCaster(cartFb, staticPropShadows);
   g.add(cartFb);
   placeAuthoredProp(g, DRESSING_PROPS.cart.url, { ...cartPos, rotY: shopAng + 1.2, height: DRESSING_PROPS.cart.height }, cartFb, isLive, staticPropShadows);
+  pushWorldContactObstacle(obstacles, {
+    id: 'town-dressing:cart',
+    pos: { x: cartPos.x * WORLD_SCALE, y: cartPos.z * WORLD_SCALE },
+    source: 'terrain:town-dressing',
+    spec: DRESSING_PROP_COLLISION.cart
+  });
 
   // A couple of barrels by the cart.
   for (let i = 0; i < 2; i++) {
@@ -681,6 +728,12 @@ function buildTownDressing(
     markStaticShadowCaster(barrelFb, staticPropShadows);
     g.add(barrelFb);
     placeAuthoredProp(g, DRESSING_PROPS.barrel.url, { ...bp, rotY: rng.next() * Math.PI * 2, height: DRESSING_PROPS.barrel.height }, barrelFb, isLive, staticPropShadows);
+    pushWorldContactObstacle(obstacles, {
+      id: `town-dressing:barrel:${i}`,
+      pos: { x: bp.x * WORLD_SCALE, y: bp.z * WORLD_SCALE },
+      source: 'terrain:town-dressing',
+      spec: DRESSING_PROP_COLLISION.barrel
+    });
   }
 
   // Well, opposite the shop.
@@ -693,6 +746,12 @@ function buildTownDressing(
   markStaticShadowCaster(wellFb, staticPropShadows);
   g.add(wellFb);
   placeAuthoredProp(g, DRESSING_PROPS.well.url, { ...wellPos, rotY: rng.next() * Math.PI * 2, height: DRESSING_PROPS.well.height }, wellFb, isLive, staticPropShadows);
+  pushWorldContactObstacle(obstacles, {
+    id: 'town-dressing:well',
+    pos: { x: wellPos.x * WORLD_SCALE, y: wellPos.z * WORLD_SCALE },
+    source: 'terrain:town-dressing',
+    spec: DRESSING_PROP_COLLISION.well
+  });
 
   // Crate cluster near the market.
   const crateMat = new THREE.MeshStandardMaterial({ color: 0x7a5630, roughness: 0.88, metalness: 0.03, flatShading: true });
@@ -723,6 +782,77 @@ function buildTownDressing(
   });
 
   return g;
+}
+
+function pushRegionContactObstacles(region: RegionDef, obstacles: CollisionObstacleInput[]): void {
+  pushWorldContactObstacle(obstacles, {
+    id: 'shrine',
+    pos: region.shrine.pos,
+    source: 'region:shrine',
+    spec: SHRINE_COLLISION
+  });
+  for (const gate of region.gates ?? []) {
+    pushWorldContactObstacle(obstacles, {
+      id: `gate:${gate.id}`,
+      pos: gate.pos,
+      radius: gate.radius,
+      source: 'region:gate',
+      spec: REGION_TRIGGER_COLLISION.gate
+    });
+  }
+  for (const portal of region.dungeons ?? []) {
+    pushWorldContactObstacle(obstacles, {
+      id: `dungeon:${portal.id}`,
+      pos: portal.pos,
+      radius: portal.radius,
+      source: 'region:dungeon',
+      spec: REGION_TRIGGER_COLLISION.dungeon
+    });
+  }
+  for (const gym of region.gyms ?? []) {
+    pushWorldContactObstacle(obstacles, {
+      id: `gym:${gym.gymId}`,
+      pos: gym.pos,
+      radius: gym.radius,
+      source: 'region:gym',
+      spec: REGION_TRIGGER_COLLISION.gym
+    });
+  }
+  for (const chest of region.chests ?? []) {
+    pushWorldContactObstacle(obstacles, {
+      id: `chest:${chest.id}`,
+      pos: chest.pos,
+      source: 'region:chest',
+      spec: CHEST_COLLISION
+    });
+  }
+  for (const waypoint of region.waypoints ?? []) {
+    pushWorldContactObstacle(obstacles, {
+      id: `waypoint:${waypoint.id}`,
+      pos: waypoint.pos,
+      radius: waypoint.radius ?? 360,
+      source: 'region:waypoint',
+      spec: REGION_TRIGGER_COLLISION.waypoint
+    });
+  }
+  for (const discovery of region.discoveries ?? []) {
+    pushWorldContactObstacle(obstacles, {
+      id: `discovery:${discovery.id}`,
+      pos: discovery.pos,
+      radius: discovery.radius,
+      source: 'region:discovery',
+      spec: REGION_TRIGGER_COLLISION.discovery
+    });
+  }
+  for (const shard of region.shards ?? []) {
+    pushWorldContactObstacle(obstacles, {
+      id: `shard:${shard.id}`,
+      pos: shard.pos,
+      radius: 180,
+      source: 'region:shard',
+      spec: REGION_TRIGGER_COLLISION.shard
+    });
+  }
 }
 
 export function buildTerrain(region: RegionDef, isLive: SceneLiveCheck = () => true, opts: TerrainBuildOptions = {}): TerrainInfo {
@@ -991,6 +1121,7 @@ export function buildTerrain(region: RegionDef, isLive: SceneLiveCheck = () => t
 
   const dungeonPortals = buildDungeonPortals(region, heightAt, staticPropShadows);
   group.add(dungeonPortals);
+  pushRegionContactObstacles(region, obstacles);
 
   return {
     group,
@@ -1037,6 +1168,12 @@ function buildTown(
     if (m.isMesh) { markStaticShadowCaster(m, staticPropShadows); m.receiveShadow = true; }
   });
   g.add(monument);
+  pushWorldContactObstacle(obstacles, {
+    id: 'town-landmark',
+    pos: { ...t },
+    source: 'terrain:town',
+    spec: TOWN_LANDMARK_COLLISION
+  });
 
   // huts around the plaza (procedural fallback; swapped for authored buildings below)
   const hutMat = new THREE.MeshStandardMaterial({ color: 0x9a7a52, flatShading: true, roughness: 0.88, metalness: 0.03 });
@@ -1067,6 +1204,7 @@ function buildTown(
       source: 'terrain:town',
       layer: TOWN_BUILDING_COLLISION.layer,
       blocksProjectiles: TOWN_BUILDING_COLLISION.blocksProjectiles,
+      blocksVision: true,
       feedbackLabel: TOWN_BUILDING_COLLISION.label
     }));
     // Buildings face the plaza centre.
@@ -1154,9 +1292,15 @@ function buildTown(
     mesh.receiveShadow = true;
   }
   g.add(counter, awning, pole1, pole2, sign);
+  pushWorldContactObstacle(obstacles, {
+    id: 'town-market-stall',
+    pos: { x: shopX * WORLD_SCALE, y: shopZ * WORLD_SCALE },
+    source: 'terrain:town',
+    spec: DRESSING_PROP_COLLISION.market
+  });
 
   // Set dressing + ambient presence (ASSET_GAPS P2).
-  g.add(buildTownDressing(region, heightAt, isLive, staticPropShadows));
+  g.add(buildTownDressing(region, heightAt, isLive, staticPropShadows, obstacles));
 
   return g;
 }

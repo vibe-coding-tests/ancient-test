@@ -78,6 +78,9 @@ export interface StatMods {
   swapCdReductionPct: number;
   swapInDamagePct: number;
   swapInHealPct: number;
+  tagBoonAmpPct: number;
+  tagGaugeReductionPct: number;
+  tagChainWindowBonusSec: number;
   reactionAmpPct: number;
   elementalGaugeSec: number;
   staminaBonus: number;
@@ -220,6 +223,31 @@ export interface AttackModSpec {
   bonusDamagePct?: ValueRef;
   lifestealPct?: ValueRef;
   cleave?: { pct: ValueRef; radius: ValueRef };
+}
+
+export type TagArchetype =
+  | 'Onslaught'
+  | 'Vanguard'
+  | 'Bloodrush'
+  | 'Warcry'
+  | 'Mend'
+  | 'Cleanse'
+  | 'Lockdown'
+  | 'Gather'
+  | 'Strike'
+  | 'Soak'
+  | 'Drop'
+  | 'Imprint';
+
+export interface TagBoonDef {
+  id: string;
+  fire: 'tag-in' | 'tag-out' | 'both';
+  effects: EffectNode[];
+  outEffects?: EffectNode[];
+  gaugeSec: number;
+  archetype: TagArchetype;
+  element?: ActiveElement;
+  tooltip: string;
 }
 
 export type TriggerEvent =
@@ -587,7 +615,9 @@ export type ItemAppearancePart =
   | 'mana-orb'
   | 'hex-sigil'
   | 'cloak'
-  | 'halo';
+  | 'halo'
+  | 'shield'
+  | 'banner';
 
 export interface ItemAppearanceSpec {
   weapon?: { kind: ItemWeaponVisualKind; color?: string; emissive?: string };
@@ -653,6 +683,7 @@ export interface HeroDef {
   recruitmentQuestId?: string;
   animProfile?: AnimProfile;
   element?: ElementId;
+  tagBoon?: TagBoonDef;
 }
 
 // ---------- Creeps ----------
@@ -1480,7 +1511,11 @@ export type GambitCondition =
   // reactive reads (AI_OVERHAUL §2): answer what the enemy is doing right now
   | { k: 'enemy-cast-seen'; category: 'blink' | 'ult' | 'channel' | 'any' }
   | { k: 'self-disabled' }
-  | { k: 'incoming-disable' };
+  | { k: 'incoming-disable' }
+  // swap-combat reads (SWAP_COMBAT_OVERHAUL §3.5/§8.7): point the reactive grammar
+  // at the Tag Gauge and the live combo state so an ally routes the chain.
+  | { k: 'tag-in-ready' }
+  | { k: 'combo-setup-active' };
 
 export type GambitTargetMode =
   | 'lowest-hp-enemy'
@@ -1559,7 +1594,11 @@ export type SimEvent =
   | { t: 'status-expire'; uid: number; status: StatusId }
   | { t: 'element-apply'; uid: number; from: number; element: Exclude<ElementId, 'neutral'>; gauge: number }
   | { t: 'reaction'; uid: number; from: number; reaction: string; elements: [Exclude<ElementId, 'neutral'>, Exclude<ElementId, 'neutral'>] }
+  | { t: 'tag-boon'; uid: number; heroId: string; when: 'tag-in' | 'tag-out'; chain: number; ampPct: number }
+  | { t: 'tag-chain'; uid: number; count: number; expiresAt: number; ampPct: number }
+  | { t: 'off-field'; uid: number; heroId: string; until: number }
   | { t: 'immune-block'; uid: number }   // BKB visible spell rejection
+  | { t: 'invalid-target'; uid: number; pos: Vec2; reason: 'no-target' | 'invalid-target' | 'wrong-target' | 'untargetable' | 'not-visible' | 'immune' | 'out-of-range' | 'no-line' | 'cannot-cast' }
   | { t: 'miss'; uid: number; target: number }
   | { t: 'movement-blocked'; uid: number; pos: Vec2; reason: 'blocked' | 'no-path' | 'out-of-range'; obstacleId?: string; feedback?: CollisionFeedbackHint }
   | { t: 'blink'; uid: number; from: Vec2; to: Vec2 }
@@ -1600,6 +1639,7 @@ export interface GroundItemDrop {
   uid: number;
   item: ItemSave;
   pos: Vec2;
+  body?: CollisionBody;
   source?: DropSource | 'chest' | 'inventory' | 'dungeon';
   context?: 'overworld' | 'dungeon';
   createdAt?: number;
@@ -1638,6 +1678,8 @@ export interface HeroSave {
   hpPct: number;
   manaPct: number;
   abilityCooldowns: number[];   // seconds remaining
+  /** Seconds remaining until this hero's Tag Gauge is ready; legacy saves default to ready. */
+  tagGaugeReadyAt?: number;
   fleshStacks?: Record<string, number>;
 }
 export interface CreepInstanceSave {
