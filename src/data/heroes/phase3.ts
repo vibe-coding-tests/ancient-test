@@ -1,5 +1,6 @@
 import type { AbilityDef, HeroBaseStats, HeroDef, StatModMap } from '../../core/types';
 import { AUTHORED_PHASE3_KITS } from './phase3-kits';
+import { buildSeedAghanim } from './seed-aghanim';
 
 type HeroSeed = {
   id: string;
@@ -14,12 +15,6 @@ type HeroSeed = {
   summon?: boolean;
   exotic?: string;
 };
-
-const AGHS_IMPLEMENTED = new Set([
-  'legion-commander', 'vengeful-spirit', 'shadow-fiend', 'lion', 'sand-king', 'kunkka', 'tidehunter',
-  'doom', 'invoker', 'skywrath-mage', 'magnus', 'tiny', 'medusa', 'wraith-king', 'tinker',
-  'elder-titan', 'faceless-void', 'phoenix', 'terrorblade'
-]);
 
 function baseStats(attribute: HeroDef['attribute'], ranged: boolean): HeroBaseStats {
   const primary = attribute === 'uni' ? 'agi' : attribute;
@@ -193,32 +188,7 @@ function hero(seed: HeroSeed): HeroDef {
       { id: `${seed.id}-facet-tempo`, name: 'Tempo', description: 'A Phase 3 facet that sharpens the hero identity.', mods: seed.attribute === 'str' ? { str: 6 } : seed.attribute === 'agi' ? { agi: 6 } : { int: 6 } },
       { id: `${seed.id}-facet-reach`, name: 'Reach', description: 'Adds cast range for macro and raid control.', mods: { castRange: 80 } }
     ],
-    aghanim: {
-      name: `${seed.name}'s Scepter`,
-      description: AGHS_IMPLEMENTED.has(seed.id) ? `Improves ${seed.abilities[3]} and adds a shard tune-up to ${seed.abilities[0]}.` : 'A future Scepter variant is logged but not implemented.',
-      implemented: AGHS_IMPLEMENTED.has(seed.id),
-      scepter: AGHS_IMPLEMENTED.has(seed.id)
-        ? {
-            abilityValueOverrides: [
-              { abilityId: `${seed.id}-ult`, valueKey: 'damage', mode: 'add', amount: 140 },
-              { abilityId: `${seed.id}-ult`, valueKey: 'radius', mode: 'add', amount: 120 },
-              { abilityId: `${seed.id}-ult`, valueKey: 'disable', mode: 'add', amount: 0.4 }
-            ],
-            cooldownAdds: [{ abilityId: `${seed.id}-ult`, amount: -18 }]
-          }
-        : undefined,
-      shard: AGHS_IMPLEMENTED.has(seed.id)
-        ? {
-            mods: seed.attribute === 'str'
-              ? { damageTakenReductionPct: 4 }
-              : seed.attribute === 'agi'
-                ? { attackSpeed: 18 }
-                : { spellAmpPct: 6 },
-            abilityValueOverrides: [{ abilityId: `${seed.id}-strike`, valueKey: 'damage', mode: 'add', amount: 45 }],
-            cooldownAdds: [{ abilityId: `${seed.id}-strike`, amount: -2 }]
-          }
-        : undefined
-    },
+    aghanim: buildSeedAghanim(seed.name, abilities),
     silhouette: {
       build: seed.roles.includes('durable') ? 'brute' : seed.summon ? 'biped' : 'biped',
       scale: seed.roles.includes('durable') ? 1.12 : 1,

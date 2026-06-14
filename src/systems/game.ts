@@ -1,7 +1,7 @@
 import { TUNING } from '../data/tuning';
 import { DEFAULT_CREEP_DROP_TABLES, qualityOddsByTier } from '../data/creep-drops';
-import { GRADE_UP_COSTS, IMPRINT_COSTS, MASTERWORK_COSTS, REFORGE_COSTS, REROLL_AFFIX_COSTS, addSocket, disenchant, gradeUp, imprintAffix, masterwork, reforge, refreshResolvedMods, rerollAffix, socketAddCost } from '../data/forge';
-import { rollAffixesFor } from '../data/affixes';
+import { GRADE_UP_COSTS, IMPRINT_COSTS, MASTERWORK_COSTS, REFORGE_COSTS, REROLL_AFFIX_COSTS, addSocket, disenchant, gradeUp, imprintAffix, masterwork, reforge, refreshResolvedMods, socketAddCost } from '../data/forge';
+import { affixDef, rollAffixForKind, rollAffixesFor } from '../data/affixes';
 import { fuseGems, gemDef, isGemId, socketsForDrop } from '../data/gems';
 import { setBonusEffects } from '../data/sets';
 import { ITEM_GRADES, levelReq, percentileForGrade, rollGrade, statMultiplier, type GradeFloorSource } from '../data/grade';
@@ -52,7 +52,7 @@ import { ELITE_DRAFT } from '../data/drafts';
 import { resonanceMods } from '../core/resonance';
 import { levelFromXp, xpForLevel } from '../core/stats';
 import { dist, fromAngle, norm, sub } from '../core/math2d';
-import type { ActiveElement, ArmoryLoadouts, BossDef, CreepTier, CreepInstanceSave, CutsceneDef, DifficultyTier, DraftDef, DropSource, DungeonDef, DungeonModifierDef, DungeonProgressSave, DungeonRoom, EchoProgress, GambitRule, GameSave, GraphicsSettings, HeroAugments, HeroLoadoutSlots, HeroSave, ItemDef, ItemDropTable, ItemGrade, ItemQuality, ItemRarity, ItemSave, ItemTier, LootBand, LoreEntryDef, MacroHeroSetup, NeutralItemDef, NeutralStashEntry, Order, QuestProgress, RaidDef, RegionDef, RoomTemplate, RoomType, SeasonalEventDef, SimEvent, StingerId, StatModMap, Vec2 } from '../core/types';
+import type { ActiveElement, ArmoryLoadouts, BossDef, CreepTier, CreepInstanceSave, CutsceneDef, DifficultyTier, DraftDef, DropSource, DungeonDef, DungeonModifierDef, DungeonProgressSave, DungeonRoom, EchoProgress, GambitRule, GameSave, GraphicsSettings, HeroAugments, HeroLoadoutSlots, HeroSave, ItemDef, ItemDropTable, ItemGrade, ItemQuality, ItemRarity, ItemSave, ItemTier, LootBand, LoreEntryDef, MacroHeroSetup, NeutralItemDef, NeutralStashEntry, Order, QuestProgress, RaidDef, RegionDef, RolledAffix, RoomTemplate, RoomType, SeasonalEventDef, SimEvent, StingerId, StatModMap, Vec2 } from '../core/types';
 import { ProceduralAudio, type CinematicMixMode } from '../engine/audio';
 import { CinematicDirector, type CinematicView, type CutsceneContext } from '../engine/cinematic';
 import { StoryDetector, type StoryObserveCtx, type StoryTrigger } from '../engine/story-detectors';
@@ -290,6 +290,10 @@ function neutralGradeMods(def: NeutralItemDef, grade: ItemGrade, gradeRoll: numb
   return mods;
 }
 
+function hasSignatureAffix(item: ItemSave): boolean {
+  return (item.affixes ?? []).some((affix) => affixDef(affix.affixId).kind === 'signature');
+}
+
 function augmentMods(augments: HeroAugments | undefined): Record<string, number> {
   const mods: Record<string, number> = {};
   const add = (m: StatModMap) => {
@@ -451,6 +455,8 @@ export class Game {
   /** binding-duel sim uid -> heroId */
   private bindingHeroes = new Map<number, string>();
   private heroDropVictims = new Set<number>();
+  /** Pending Reroll Affix preview at the Forge (ITEM_REHAUL §12.2): paid-for candidate the player can keep or reroll again. */
+  private rerollPreview: { stashIdx: number; affixIdx: number; itemId: string; baseAffixId: string; candidate: RolledAffix } | null = null;
   badges = new Set<string>();
   questProgress: Record<string, QuestProgress> = {};
   defeatedGyms = new Set<string>();
@@ -497,6 +503,9 @@ export class Game {
   private eliteCreepUids = new Set<number>();
   private echoes = new Map<string, EchoState>();
   private accumulator = 0;
+  /** Unscaled real-time clock, used for the loot slow-motion micro-pause window (ITEM_REHAUL §13.2). */
+  private realClock = 0;
+  private lootSlowmoUntil = 0;
   private autosaveAt = TUNING.autosaveSec;
   private wasInTown = false;
   private faintTickAt = 0;
@@ -1378,20 +1387,15 @@ export class Game {
       const rarity = this.itemRarity(it.id);
       return gradeRank >= ITEM_GRADES.indexOf('refined') ||
         RARITY_RANK[rarity] >= RARITY_RANK.immortal ||
-        (it.affixes ?? []).length > 0 && (it.affixes ?? []).some((affix) =>
-          affix.affixId === 'stormcallers' ||
-          affix.affixId === 'glassbreaker' ||
-          affix.affixId === 'vampiric-surge' ||
-          affix.affixId === 'ancient-mind'
-        );
+        hasSignatureAffix(it);
     });
     if (!loud) return;
-    const signature = items.some((it) => (it.affixes ?? []).some((affix) =>
-      affix.affixId === 'stormcallers' ||
-      affix.affixId === 'glassbreaker' ||
-      affix.affixId === 'vampiric-surge' ||
-      affix.affixId === 'ancient-mind'
-    ));
+    const signature = items.some((it) => hasSignatureAffix(it));
+    // The biggest drops (a signature or a Pristine copy) get a brief slow-motion
+    // micro-pause, the Diablo-unique / Borderlands-legendary beat (ITEM_REHAUL §13.2).
+    if (signature || items.some((it) => it.grade === 'pristine')) {
+      this.lootSlowmoUntil = this.realClock + TUNING.loot.signatureSlowmoSec;
+    }
     this.playPresentationStinger('loot');
     this.emitPresentationEvent({
       t: 'loot-drop',
@@ -3832,10 +3836,16 @@ export class Game {
     };
   }
 
+  /**
+   * Roll a *preview* candidate for one affix (ITEM_REHAUL §12.2). Charges gold/essence
+   * per attempt but does not touch the item: the player keeps it with `keepRerolledAffix`
+   * or rolls again. No operation can ever make the item worse — the original stays until kept.
+   */
   rerollArmoryAffix(stashIdx: number, affixIdx: number): boolean {
     const quote = this.rerollArmoryAffixQuote(stashIdx, affixIdx);
     const target = this.forgeableArmoryItem(stashIdx);
-    if (!quote || !target) {
+    const affix = target?.item.affixes?.[affixIdx];
+    if (!quote || !target || !affix) {
       this.msg('Choose an affix to reroll', 'bad');
       return false;
     }
@@ -3854,9 +3864,53 @@ export class Game {
     this.gold -= quote.gold;
     this.essence -= quote.essence;
     this.goldSinks.gambleRolls += 1;
+    const kind = affixDef(affix.affixId).kind;
+    const exclude = (target.item.affixes ?? []).map((a, i) => (i === affixIdx ? '' : a.affixId)).filter(Boolean);
     const seed = stableContentSeed(`forge:reroll-affix:${target.item.id}:${affixIdx}:${this.goldSinks.gambleRolls}`, Math.round(this.playtime));
-    this.inventoryStash[stashIdx] = rerollAffix(target.item, target.def, affixIdx, new Rng(seed), creepCombatTier(this.region.id));
-    this.msg(`Rerolled ${target.def.name}'s affix`, 'good');
+    const candidate = rollAffixForKind(target.def, kind, target.item.grade ?? 'standard', creepCombatTier(this.region.id), new Rng(seed), exclude);
+    if (!candidate) {
+      this.msg('No alternative affix could be rolled', 'bad');
+      return false;
+    }
+    this.rerollPreview = { stashIdx, affixIdx, itemId: target.item.id, baseAffixId: affix.affixId, candidate };
+    this.msg(`${target.def.name}: previewing ${affixDef(candidate.affixId).name} — keep it or reroll again`, 'info');
+    return true;
+  }
+
+  /** The pending reroll preview for a specific affix slot, or null if none/stale. */
+  rerollPreviewFor(stashIdx: number, affixIdx: number): { candidate: RolledAffix; currentAffixId: string } | null {
+    const p = this.rerollPreview;
+    if (!p || p.stashIdx !== stashIdx || p.affixIdx !== affixIdx) return null;
+    const item = this.inventoryStash[stashIdx];
+    const current = item?.affixes?.[affixIdx];
+    if (!item || item.id !== p.itemId || !current || current.affixId !== p.baseAffixId) {
+      this.rerollPreview = null;
+      return null;
+    }
+    return { candidate: p.candidate, currentAffixId: current.affixId };
+  }
+
+  /** Commit the previewed affix onto the item. Already paid for; this is free. */
+  keepRerolledAffix(stashIdx: number, affixIdx: number): boolean {
+    const preview = this.rerollPreviewFor(stashIdx, affixIdx);
+    const target = this.forgeableArmoryItem(stashIdx);
+    if (!preview || !target) {
+      this.msg('Nothing to keep', 'bad');
+      return false;
+    }
+    const affixes = [...(target.item.affixes ?? [])];
+    affixes[affixIdx] = preview.candidate;
+    this.inventoryStash[stashIdx] = refreshResolvedMods({ ...target.item, affixes }, target.def);
+    this.rerollPreview = null;
+    this.msg(`${target.def.name} now carries ${affixDef(preview.candidate.affixId).name}`, 'good');
+    return true;
+  }
+
+  /** Drop the pending preview without applying it; the original affix stays (gold already spent). */
+  discardRerolledAffix(): boolean {
+    if (!this.rerollPreview) return false;
+    this.rerollPreview = null;
+    this.msg('Kept the original affix', 'info');
     return true;
   }
 
@@ -5637,6 +5691,7 @@ export class Game {
   // ---------- main update ----------
 
   update(realDt: number): void {
+    this.realClock += realDt;
     this.cinematic.update(Math.min(realDt, 0.1));
     this.runPendingAfterCinematic();
     if (this.liveGym) {
@@ -5655,7 +5710,8 @@ export class Game {
       this.scene.update(this.sim, this.activeUnit(), 0, this.dayTime, this.cinematicPresentationView());
       return;
     }
-    const dt = Math.min(realDt, 0.1);
+    const slowmo = this.realClock < this.lootSlowmoUntil ? TUNING.loot.signatureSlowmoScale : 1;
+    const dt = Math.min(realDt, 0.1) * slowmo;
     this.playtime += dt;
     this.regenResinToPlaytime();
     this.dayTime = (this.dayTime + dt / TUNING.dayLengthSec) % 1;

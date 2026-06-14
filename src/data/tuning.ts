@@ -190,7 +190,11 @@ export const TUNING = {
     qualityDropChance: { normal: 0.08, nightmare: 0.18, hell: 0.3 },
     bandMarkQuota: { early: 24, mid: 18, late: 12 },
     affixTiersByDifficulty: { normal: 2, nightmare: 3, hell: 4 },
-    lootFilterDefaults: { minGrade: 'broken', minRarity: 'common' }
+    lootFilterDefaults: { minGrade: 'broken', minRarity: 'common' },
+    // Slow-motion micro-pause on a Pristine/signature drop (ITEM_REHAUL §13.2):
+    // simulate at this fraction of real speed for this many real seconds.
+    signatureSlowmoScale: 0.35,
+    signatureSlowmoSec: 0.45
   },
   overworldEgSlotPct: {
     largeCreep: { normal: 0.15, nightmare: 0.25, hell: 0.35 },

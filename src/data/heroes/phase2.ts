@@ -1,5 +1,6 @@
 import type { AbilityDef, HeroBaseStats, HeroDef, StatModMap } from '../../core/types';
 import { gestureForAbility, soundForAbility } from '../../core/gestures';
+import { buildSeedAghanim } from './seed-aghanim';
 
 type HeroSeed = {
   id: string;
@@ -54,6 +55,8 @@ function talents(id: string, abilityA: string, valueA: string, abilityB: string,
 
 function hero(seed: HeroSeed, talentA: [string, string], talentB: [string, string]): HeroDef {
   const ranged = seed.baseStats.attackRange > 350;
+  // Default the closed-vocabulary anim/sound from each ability's own data (§3.11).
+  const abilities = seed.abilities.map((a) => ({ ...a, anim: a.anim ?? gestureForAbility(a), sound: a.sound ?? soundForAbility(a) }));
   return {
     id: seed.id,
     name: seed.name,
@@ -64,8 +67,7 @@ function hero(seed: HeroSeed, talentA: [string, string], talentB: [string, strin
     lore: seed.lore,
     baseStats: seed.baseStats,
     skillOrder: [0, 1, 2],
-    // Default the closed-vocabulary anim/sound from each ability's own data (§3.11).
-    abilities: seed.abilities.map((a) => ({ ...a, anim: a.anim ?? gestureForAbility(a), sound: a.sound ?? soundForAbility(a) })),
+    abilities,
     talents: talents(seed.id, talentA[0], talentA[1], talentB[0], talentB[1]),
     facets: [
       {
@@ -81,7 +83,7 @@ function hero(seed: HeroSeed, talentA: [string, string], talentB: [string, strin
         mods: { castRange: 75 }
       }
     ],
-    aghanim: { name: `${seed.name}'s Scepter`, description: 'A later shard of the kit waits beyond Phase 2.', implemented: false },
+    aghanim: buildSeedAghanim(seed.name, abilities),
     silhouette: { build: 'biped', scale: 1, bodyShape: seed.bodyShape ?? 'slim', head: seed.head ?? 'bare', weapon: seed.weapon, extras: seed.extras ?? [] },
     palette: seed.palette,
     barks: [

@@ -1608,9 +1608,22 @@ export class Hud {
                   const imprint = g.imprintArmoryAffixQuote(i, affixIdx);
                   const mods = statLines(affix.resolved, 4).join(', ');
                   const lock = it.imprintedAffixId === affix.affixId ? ' locked' : '';
+                  const preview = aQuote && !aQuote.locked ? g.rerollPreviewFor(i, affixIdx) : null;
+                  const canReroll = aQuote && !aQuote.locked && g.gold >= aQuote.gold && g.essence >= aQuote.essence;
+                  let controls: string;
+                  if (preview) {
+                    const candDef = affixDef(preview.candidate.affixId);
+                    const candMods = statLines(preview.candidate.resolved, 4).join(', ');
+                    controls = `<span class="affix-preview ${candDef.kind}">→ ${esc(candDef.name)}${candMods ? ` <em>${esc(candMods)}</em>` : ''}</span>
+                    <button class="btn tiny on" data-arm-reroll-keep="${i}:${affixIdx}">Keep</button>
+                    <button class="btn tiny" data-arm-reroll-affix="${i}:${affixIdx}" ${canReroll ? '' : 'disabled'}>Reroll again ${aQuote!.gold}g</button>
+                    <button class="btn tiny" data-arm-reroll-cancel="1">Cancel</button>`;
+                  } else {
+                    controls = aQuote ? `<button class="btn tiny" data-arm-reroll-affix="${i}:${affixIdx}" ${canReroll ? '' : 'disabled'}>Reroll ${aQuote.gold}g</button>` : '';
+                  }
                   return `<div class="affix-line ${aDef.kind}${lock}">
                     <span>${aDef.kind === 'signature' ? 'Signature: ' : ''}${esc(aDef.name)}${mods ? ` <em>${esc(mods)}</em>` : ''}${lock ? ' <b>IMPRINTED</b>' : ''}</span>
-                    ${aQuote ? `<button class="btn tiny" data-arm-reroll-affix="${i}:${affixIdx}" ${aQuote.locked || g.gold < aQuote.gold || g.essence < aQuote.essence ? 'disabled' : ''}>Reroll ${aQuote.gold}g</button>` : ''}
+                    ${controls}
                     ${imprint ? `<button class="btn tiny ${imprint.active ? 'on' : ''}" data-arm-imprint-affix="${i}:${affixIdx}" ${imprint.active || g.gold < imprint.gold || g.essence < imprint.essence ? 'disabled' : ''}>Imprint ${imprint.essence}e</button>` : ''}
                   </div>`;
                 }).join('')}</div>`
@@ -1887,6 +1900,12 @@ export class Hud {
       g.rerollArmoryAffix(Number(idxRaw), Number(affixRaw));
       rerender();
     }));
+    this.modal.querySelectorAll<HTMLElement>('[data-arm-reroll-keep]').forEach((el) => el.addEventListener('click', () => {
+      const [idxRaw, affixRaw] = el.dataset.armRerollKeep!.split(':');
+      g.keepRerolledAffix(Number(idxRaw), Number(affixRaw));
+      rerender();
+    }));
+    this.modal.querySelector<HTMLElement>('[data-arm-reroll-cancel]')?.addEventListener('click', () => { g.discardRerolledAffix(); rerender(); });
     this.modal.querySelectorAll<HTMLElement>('[data-arm-imprint-affix]').forEach((el) => el.addEventListener('click', () => {
       const [idxRaw, affixRaw] = el.dataset.armImprintAffix!.split(':');
       g.imprintArmoryAffix(Number(idxRaw), Number(affixRaw));
