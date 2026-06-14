@@ -152,6 +152,50 @@ describe('raid-aware considerations', () => {
     if (order?.kind === 'move') expect(order.point).toEqual(lich.pos);
   });
 
+  it('wounded allies prefer a nearby friendly field aura', () => {
+    const sim = setupRaidSim({
+      seed: 63,
+      party: [
+        { heroId: 'lich', level: 22, items: ['vladmirs-offering'] },
+        { heroId: 'sven', level: 22 }
+      ],
+      boss: { heroId: 'sven', level: 26, hpScale: 4, damageScale: 1 },
+      maxSec: 60
+    });
+    const boss = sim.unitsArr.find((u) => u.team === 1 && u.ctrl.kind === 'boss')!;
+    const lich = sim.unitsArr.find((u) => u.team === 0 && u.heroId === 'lich')!;
+    const sven = sim.unitsArr.find((u) => u.team === 0 && u.heroId === 'sven')!;
+    sven.abilities.forEach((a) => (a.level = 0));
+    lich.pos = { x: 2000, y: 2000 };
+    sven.pos = { x: 700, y: 2000 };
+    boss.pos = { x: 3600, y: 2000 };
+    sven.hp = sven.stats.maxHp * 0.55;
+    sim.rebuildSpatial();
+
+    const order = chooseUtilityOrder(sim, sven, boss);
+    expect(order?.kind).toBe('move');
+    if (order?.kind === 'move') expect(order.point).toEqual(lich.pos);
+  });
+
+  it('field carriers close to keep hostile aura pressure on the focus', () => {
+    const sim = setupRaidSim({
+      seed: 64,
+      party: [{ heroId: 'sven', level: 22, items: ['radiance'] }],
+      boss: { heroId: 'lich', level: 26, hpScale: 4, damageScale: 1 },
+      maxSec: 60
+    });
+    const sven = sim.unitsArr.find((u) => u.team === 0 && u.heroId === 'sven')!;
+    const boss = sim.unitsArr.find((u) => u.team === 1 && u.ctrl.kind === 'boss')!;
+    sven.abilities.forEach((a) => (a.level = 0));
+    sven.pos = { x: 2000, y: 2000 };
+    boss.pos = { x: 3000, y: 2000 };
+    sim.rebuildSpatial();
+
+    const order = chooseUtilityOrder(sim, sven, boss);
+    expect(order?.kind).toBe('move');
+    if (order?.kind === 'move') expect(order.point.x).toBeGreaterThan(sven.pos.x);
+  });
+
   it('scatters from a raid signature-sized zone before tunneling the boss', () => {
     const { sim, boss, get } = raid(['sniper', 'crystal-maiden']);
     const sniper = get('sniper');

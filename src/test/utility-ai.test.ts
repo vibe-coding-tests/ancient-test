@@ -220,6 +220,50 @@ describe('utility scorer picks actions by value, not slot order', () => {
     const cluster = chooseUtilityOrder(sim, hero, enemies[0]);
     expect(cluster).toMatchObject({ kind: 'cast', slot: 1 });
   });
+
+  it('uses a nuker playbook to lead with amplify before burst items', () => {
+    const sim = setupMacroSim({
+      seed: 2026,
+      teamA: [{ heroId: 'zeus', level: 18, items: ['veil-of-discord', 'dagon'] }],
+      teamB: [{ heroId: 'sven', level: 18 }],
+      maxSec: 30
+    });
+    const zeus = sim.unitsArr.find((u) => u.team === 0 && u.heroId === 'zeus')!;
+    const enemy = sim.unitsArr.find((u) => u.team === 1)!;
+    installAbilities(zeus, []);
+    zeus.pos = { x: 2000, y: 2000 };
+    enemy.pos = { x: 2450, y: 2000 };
+    sim.rebuildSpatial();
+
+    expect(chooseUtilityOrder(sim, zeus, enemy)).toMatchObject({ kind: 'item', invSlot: 0 });
+
+    zeus.items[0]!.cooldownUntil = sim.time + 10;
+    expect(chooseUtilityOrder(sim, zeus, enemy)).toMatchObject({ kind: 'item', invSlot: 1 });
+  });
+
+  it('uses a support playbook to save before group sustain', () => {
+    const sim = setupMacroSim({
+      seed: 2027,
+      teamA: [
+        { heroId: 'crystal-maiden', level: 18, items: ['glimmer-cape', 'pipe-of-insight'] },
+        { heroId: 'sven', level: 18 }
+      ],
+      teamB: [{ heroId: 'axe', level: 18 }],
+      maxSec: 30
+    });
+    const support = sim.unitsArr.find((u) => u.team === 0 && u.heroId === 'crystal-maiden')!;
+    const ally = sim.unitsArr.find((u) => u.team === 0 && u.heroId === 'sven')!;
+    const enemy = sim.unitsArr.find((u) => u.team === 1)!;
+    installAbilities(support, []);
+    support.pos = { x: 2000, y: 2000 };
+    ally.pos = { x: 2120, y: 2000 };
+    enemy.pos = { x: 2240, y: 2000 };
+    ally.hp = ally.stats.maxHp * 0.35;
+    ally.lastEnemyDamageAt = sim.time;
+    sim.rebuildSpatial();
+
+    expect(chooseUtilityOrder(sim, support, enemy)).toMatchObject({ kind: 'item', invSlot: 0, uid: ally.uid });
+  });
 });
 
 describe('pickUtilityFocus is threat- and value-aware', () => {

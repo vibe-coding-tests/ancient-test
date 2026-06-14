@@ -1,9 +1,10 @@
 import { test, expect } from '@playwright/test';
 import { boot, clearCinematics, state } from './helpers';
 
-// Save format moved to v7 (board quests) in this batch of work. Round-trip the
-// whole thing through real localStorage + a page reload — the path a player
-// actually exercises — not just an in-memory buildSave/migrate unit test.
+// Save format is at v8 (board quests landed at v7, the tag-gauge migration bumped
+// it to v8). Round-trip the whole thing through real localStorage + a page reload
+// — the path a player actually exercises — not just an in-memory buildSave/migrate
+// unit test.
 test.describe('save & load', () => {
   test('a manual slot save survives a page reload', async ({ page }) => {
     await boot(page, { hero: 'sniper', seed: 41, region: 'icewrack' });
@@ -29,7 +30,7 @@ test.describe('save & load', () => {
     });
 
     expect(saved.ok).toBe(true);
-    expect(saved.version).toBe(7);
+    expect(saved.version).toBe(8);
     expect(saved.gold).toBeGreaterThanOrEqual(7777);
 
     // Hard reload: the auto-boot starts a *fresh* game, proving the restore comes

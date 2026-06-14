@@ -248,6 +248,22 @@ export interface TagBoonDef {
   archetype: TagArchetype;
   element?: ActiveElement;
   tooltip: string;
+  /** SWAP_COMBAT_OVERHAUL §3.3: a skillshot-style tag-in that resolves at an
+   *  aimed point instead of the arriving hero's position. The swap prompt opens
+   *  a brief aim cursor; positioning still aims the rest. */
+  aim?: boolean;
+}
+
+/** SWAP_COMBAT_OVERHAUL §7: an item-granted tag-in/out line. Item effects ride
+ *  the hero's Tag Gauge — they resolve only when the hero's boon fires (gauge
+ *  ready, in combat) and are amplified by the same tagBoonAmp/chain. `effects`
+ *  always apply; `onArchetype` applies only when the hero boon's archetype
+ *  matches (e.g. Echo Conduit augments a Soak tag with a lingering field). */
+export interface ItemTagBoon {
+  fire?: 'tag-in' | 'tag-out' | 'both';
+  effects?: EffectNode[];
+  onArchetype?: Partial<Record<TagArchetype, EffectNode[]>>;
+  tooltip?: string;
 }
 
 export type TriggerEvent =
@@ -808,6 +824,7 @@ export interface ItemDef {
   consumesAllCharges?: boolean; // Magic Wand: active spends every charge
   triggers?: TriggerSpec[];
   damageLockoutSec?: number;   // Blink Dagger: unusable after taking enemy damage
+  tagBoon?: ItemTagBoon;       // SWAP_COMBAT_OVERHAUL §7: a tag-in/out line on the gear
   lore: string;
   /** Authored "what it does" summary. Overrides the auto-generated description (src/core/describe.ts). */
   description?: string;
@@ -1599,6 +1616,7 @@ export type SimEvent =
   | { t: 'element-apply'; uid: number; from: number; element: Exclude<ElementId, 'neutral'>; gauge: number }
   | { t: 'reaction'; uid: number; from: number; reaction: string; elements: [Exclude<ElementId, 'neutral'>, Exclude<ElementId, 'neutral'>] }
   | { t: 'tag-boon'; uid: number; heroId: string; when: 'tag-in' | 'tag-out'; chain: number; ampPct: number }
+  | { t: 'swap-flat'; uid: number }   // a swap that paid no boon (gauge down): the dull arrival beat (§9)
   | { t: 'tag-chain'; uid: number; count: number; expiresAt: number; ampPct: number }
   | { t: 'off-field'; uid: number; heroId: string; until: number }
   | { t: 'immune-block'; uid: number }   // BKB visible spell rejection
@@ -1784,7 +1802,7 @@ export interface GameSave {
   regionVisits?: Record<string, number>;
   resin?: number;
   resinUpdatedAt?: number;
-  settings: { quickcast: boolean; resonance?: boolean; minimap?: boolean; keyBindings?: KeyBindings; audio: AudioSettings; graphics?: GraphicsSettings; cutscene?: CutsceneSettings; interface?: InterfaceSettings };
+  settings: { quickcast: boolean; resonance?: boolean; swapCharges?: boolean; minimap?: boolean; keyBindings?: KeyBindings; audio: AudioSettings; graphics?: GraphicsSettings; cutscene?: CutsceneSettings; interface?: InterfaceSettings };
 }
 
 // ---------- Sim interface available to effect interpreters ----------

@@ -1,11 +1,13 @@
 import { TUNING } from '../data/tuning';
 import { add, dist, dist2, norm, pointSegDist, scale, sub, v2 } from './math2d';
 import { combatProfile, type CombatProfile } from './combat-profile';
+import { itemArchetypes, type ItemArchetype } from './item-archetype';
+import { comboStepMatchesOrder, orderForComboStep, planTeamCombos, planUnitCombo, type ComboPlan, type ComboStep } from './combo-planner';
 import { abilityVal } from './values';
 import { itemReady } from './items';
 import { isDisabled } from './status';
 import { REG } from './registry';
-import type { AbilityDef, EffectNode, Order, StatusId, TargetSel, Team, ValueRef, Vec2 } from './types';
+import type { AbilityDef, EffectNode, ItemDef, Order, StatusId, TargetSel, Team, ValueRef, Vec2 } from './types';
 import type { Sim, TeamMind } from './sim';
 import type { Unit } from './unit';
 
@@ -604,6 +606,59 @@ function comboAdjustedScore(u: Unit, def: AbilityDef, now: number, score: number
   return score * mult;
 }
 
+function itemArchetypeBias(profile: CombatProfile, def: ItemDef): number {
+  const archetypes = itemArchetypes(def);
+  if (archetypes.size === 0) return 1;
+
+  const roleWeights = (TUNING.ai.archetypeWeight[profile.role] ?? TUNING.ai.archetypeWeight.generalist) as Partial<Record<ItemArchetype, number>>;
+  let roleMult = 1;
+  for (const archetype of archetypes) roleMult = Math.max(roleMult, roleWeights[archetype] ?? 1);
+
+  let playbookMult = 1;
+  profile.playbook.reach.forEach((archetype, idx) => {
+    if (!archetypes.has(archetype)) return;
+    playbookMult = Math.max(playbookMult, 1.08 - Math.min(idx, 4) * 0.015);
+  });
+
+  return Math.min(1.6, roleMult * playbookMult);
+}
+
+function stepBelongsToUnit(step: ComboStep, u: Unit): boolean {
+  return step.unitUid === undefined || step.unitUid === u.uid;
+}
+
+function planContainsUnitOrder(plan: ComboPlan, u: Unit, order: Order): boolean {
+  return plan.steps.some((step) => stepBelongsToUnit(step, u) && comboStepMatchesOrder(step, order));
+}
+
+function plannedComboScore(u: Unit, cand: Scored, plan: ComboPlan | null): Scored {
+  if (!plan) return cand;
+  if (stepBelongsToUnit(plan.nextStep, u) && comboStepMatchesOrder(plan.nextStep, cand.order)) {
+    return { ...cand, score: cand.score * TUNING.ai.combo.nextStepBonus };
+  }
+  if (planContainsUnitOrder(plan, u, cand.order)) {
+    return { ...cand, score: Math.min(cand.score * TUNING.ai.combo.holdPayoffPenalty, TUNING.ai.castScoreFloor * 0.8) };
+  }
+  return cand;
+}
+
+function teamComboPlanForUnit(tm: TeamMind, u: Unit, focus: Unit | null): ComboPlan | null {
+  const plan = tm.chains.find((chain) => chain.steps.some((step) => step.unitUid === u.uid));
+  if (!plan) return null;
+  if (!focus) return plan;
+  const payoff = plan.steps.find((step) => step.unitUid === u.uid && step.role === 'payoff');
+  if (payoff && comboSetupActiveForPlan(focus)) {
+    return { ...plan, nextStep: payoff };
+  }
+  return plan;
+}
+
+function comboSetupActiveForPlan(focus: Unit): boolean {
+  const s = focus.summary;
+  if (s.stunned || s.rooted || s.silenced || s.hexed || s.disarmed || s.frozen || s.sleeping || s.cycloned || s.feared !== null || s.taunted !== null) return true;
+  return (s.mods.magicResistPct ?? 0) < 0 || (s.mods.damageTakenReductionPct ?? 0) < 0 || (s.mods.armor ?? 0) < 0;
+}
+
 function scoreAbility(sim: Sim, u: Unit, slot: number, focus: Unit | null, profile: CombatProfile): Scored | null {
   const a = u.abilities[slot];
   if (!a || a.level <= 0) return null;
@@ -697,14 +752,20 @@ function scoreAbility(sim: Sim, u: Unit, slot: number, focus: Unit | null, profi
 function scoreItemByIntent(sim: Sim, u: Unit, slot: number, focus: Unit | null, profile: CombatProfile, bossBias = 1): Scored | null {
   if (!TUNING.ai.itemIntentFallback) return null;
   const def = REG.items.get(u.items[slot]?.defId ?? '');
-  const active = def?.active;
-  if (!active) return null;
+  if (!def?.active) return null;
+  const active = def.active;
+  const archetypes = itemArchetypes(def);
   const intent = intentOf(active, 1);
   const t = active.targeting;
   const w = profile.weights;
   const ITEM = 1000 + slot;
   const range = castRangeOf(active, u, 1) * 1.1;
   const manaCost = active.manaCost?.[0] ?? 0;
+  const finish = (score: number, order: Order, clusterCount = Infinity, isUlt = false): Scored => ({
+    score: finalAbilityScore(u, bossBias * score * itemArchetypeBias(profile, def), intent, order, focus, manaCost, clusterCount, isUlt),
+    order,
+    slot: ITEM
+  });
 
   if (intent.escape) {
     const pressured = u.hp / Math.max(1, u.stats.maxHp) < profile.retreatHpPct || enemiesNear(sim, u, 420) > 0;
@@ -713,7 +774,7 @@ function scoreItemByIntent(sim: Sim, u: Unit, slot: number, focus: Unit | null, 
     const dir = norm(sub(u.pos, awayFrom));
     const point = t === 'point-target' ? add(u.pos, scale(dir.x === 0 && dir.y === 0 ? v2(1, 0) : dir, 650)) : undefined;
     const order: Order = t === 'point-target' ? { kind: 'item', invSlot: slot, point } : { kind: 'item', invSlot: slot, uid: u.uid };
-    return { score: finalAbilityScore(u, bossBias * TUNING.ai.itemScore.intentEscape * Math.max(0.8, w.survival), intent, order, focus, manaCost), order, slot: ITEM };
+    return finish(TUNING.ai.itemScore.intentEscape * Math.max(0.8, w.survival), order);
   }
 
   if (intent.affectsAlly && (intent.heal || intent.buff)) {
@@ -721,46 +782,49 @@ function scoreItemByIntent(sim: Sim, u: Unit, slot: number, focus: Unit | null, 
     if (!ally) return null;
     const need = 1 - ally.hp / Math.max(1, ally.stats.maxHp);
     const order: Order = t === 'no-target' ? { kind: 'item', invSlot: slot } : { kind: 'item', invSlot: slot, uid: ally.uid };
-    return { score: finalAbilityScore(u, bossBias * w.saveAllies * (0.55 + need), intent, order, focus, manaCost), order, slot: ITEM };
+    return finish(w.saveAllies * (0.55 + need), order);
   }
 
   if (t === 'no-target' && intent.buff && !intent.offensive) {
     if (enemiesNear(sim, u, u.stats.attackRange + 320) === 0) return null;
     const order: Order = { kind: 'item', invSlot: slot };
-    return { score: finalAbilityScore(u, bossBias * 0.7 * w.aggression, intent, order, focus, manaCost), order, slot: ITEM };
+    return finish(0.7 * w.aggression, order);
   }
 
-  if (!intent.offensive && !intent.hardControl && !intent.softControl) return null;
-  const controlW = intent.hardControl ? w.control : intent.softControl ? w.control * 0.6 : 0;
+  const archetypeOffense = archetypes.has('nuke') || archetypes.has('amplify');
+  const archetypeControl = archetypes.has('lockdown');
+  if (!intent.offensive && !intent.hardControl && !intent.softControl && !archetypeOffense && !archetypeControl) return null;
+  const controlW = intent.hardControl ? w.control : (intent.softControl || archetypeControl) ? w.control * 0.6 : 0;
+  const amplifyW = archetypes.has('amplify') ? Math.max(w.burst, w.control * 0.6) : 0;
 
   if (intent.aoe || t === 'ground-aoe') {
     if (t === 'no-target') {
       const count = enemiesNear(sim, u, intent.radius || 300);
       if (count === 0) return null;
       const order: Order = { kind: 'item', invSlot: slot };
-      const s = bossBias * ((w.aoe * (0.35 + count)) + controlW * 0.35 * count);
-      return { score: finalAbilityScore(u, s, intent, order, focus, manaCost, count, !!active.ult), order, slot: ITEM };
+      const s = (w.aoe * (0.35 + count)) + controlW * 0.35 * count + amplifyW * (0.35 + count * 0.2);
+      return finish(s, order, count, !!active.ult);
     }
     const cluster = bestCluster(sim, u, range, intent.radius || 300);
     if (!cluster || cluster.count === 0) return null;
-    const s = bossBias * ((w.aoe * (0.35 + cluster.count)) + controlW * 0.35 * cluster.count);
+    const s = (w.aoe * (0.35 + cluster.count)) + controlW * 0.35 * cluster.count + amplifyW * (0.35 + cluster.count * 0.2);
     if (t === 'unit-target') {
       const target = bestOffensiveTarget(sim, u, focus, range);
       if (!target) return null;
       const order: Order = { kind: 'item', invSlot: slot, uid: target.uid };
-      return { score: finalAbilityScore(u, s, intent, order, focus, manaCost, cluster.count, !!active.ult), order, slot: ITEM };
+      return finish(s, order, cluster.count, !!active.ult);
     }
     const order: Order = { kind: 'item', invSlot: slot, point: cluster.point };
-    return { score: finalAbilityScore(u, s, intent, order, focus, manaCost, cluster.count, !!active.ult), order, slot: ITEM };
+    return finish(s, order, cluster.count, !!active.ult);
   }
 
   const target = bestOffensiveTarget(sim, u, focus, range);
   if (!target) return null;
   const value = targetValue(target);
-  let s = bossBias * ((intent.offensive ? w.burst * value : 0) + controlW * (0.6 + dangerNorm(target)));
+  let s = ((intent.offensive || archetypes.has('nuke')) ? w.burst * value : 0) + controlW * (0.6 + dangerNorm(target)) + amplifyW * (0.7 + dangerNorm(target));
   if ((intent.hardControl || active.piercesImmunity) && (target.castingUntil > sim.time || (target.channel && target.channel.until > sim.time))) s += TUNING.ai.itemScore.interruptBonus;
   const order: Order = t === 'unit-target' ? { kind: 'item', invSlot: slot, uid: target.uid } : { kind: 'item', invSlot: slot, point: { ...target.pos } };
-  return { score: finalAbilityScore(u, s, intent, order, focus, manaCost), order, slot: ITEM };
+  return finish(s, order);
 }
 
 function scoreItemActive(sim: Sim, u: Unit, slot: number, focus: Unit | null, profile: CombatProfile): Scored | null {
@@ -774,6 +838,11 @@ function scoreItemActive(sim: Sim, u: Unit, slot: number, focus: Unit | null, pr
 
   const is = TUNING.ai.itemScore;
   const ir = TUNING.ai.itemRange;
+  const finish = (score: number, order: Order): Scored => ({
+    score: score * itemArchetypeBias(profile, def),
+    order,
+    slot: ITEM
+  });
   switch (it.defId) {
     case 'black-king-bar': {
       // pop magic immunity when a hard disable is landing or an enemy ult/channel is up nearby
@@ -781,25 +850,25 @@ function scoreItemActive(sim: Sim, u: Unit, slot: number, focus: Unit | null, pr
       if (!fighting) return null;
       const threatened = incomingDisable(sim, u, 1000) || enemyCastSeen(sim, u, 'ult', 1100) || enemyCastSeen(sim, u, 'channel', 1100);
       if (!threatened) return null;
-      return { score: is.bkb * Math.max(0.9, w.survival), order: { kind: 'item', invSlot: slot }, slot: ITEM };
+      return finish(is.bkb * Math.max(0.9, w.survival), { kind: 'item', invSlot: slot });
     }
     case 'force-staff': {
       // self-peel out of a melee crush when low
       if (u.hp / Math.max(1, u.stats.maxHp) > profile.retreatHpPct) return null;
       if (enemiesNear(sim, u, ir.forceFight) === 0) return null;
-      return { score: is.force * Math.max(0.9, w.survival), order: { kind: 'item', invSlot: slot, uid: u.uid }, slot: ITEM };
+      return finish(is.force * Math.max(0.9, w.survival), { kind: 'item', invSlot: slot, uid: u.uid });
     }
     case 'glimmer-cape': {
       const ally = lowestWoundedAlly(sim, u, ir.glimmerAlly + u.stats.castRangeBonus, TUNING.ai.saveAllyHpPct);
       if (!ally) return null;
       const need = 1 - ally.hp / Math.max(1, ally.stats.maxHp);
       const underFire = sim.time - ally.lastEnemyDamageAt < 1.5 ? is.glimmerUnderFire : 0;
-      return { score: w.saveAllies * (is.glimmer + need) + underFire, order: { kind: 'item', invSlot: slot, uid: ally.uid }, slot: ITEM };
+      return finish(w.saveAllies * (is.glimmer + need) + underFire, { kind: 'item', invSlot: slot, uid: ally.uid });
     }
     case 'mekansm': {
       const wounded = woundedAlliesNear(sim, u, ir.mekWounded, ir.mekWoundedPct);
       if (wounded < ir.mekMinWounded) return null;
-      return { score: w.saveAllies * (is.mekBase + wounded * is.mekPer), order: { kind: 'item', invSlot: slot }, slot: ITEM };
+      return finish(w.saveAllies * (is.mekBase + wounded * is.mekPer), { kind: 'item', invSlot: slot });
     }
     case 'euls-scepter': {
       const range = ir.euls + u.stats.castRangeBonus;
@@ -808,7 +877,7 @@ function scoreItemActive(sim: Sim, u: Unit, slot: number, focus: Unit | null, pr
       if (!target) return null;
       let s = w.control * (is.eulsBase + dangerNorm(target));
       if (channeling) s += is.interruptBonus; // interrupt
-      return { score: s, order: { kind: 'item', invSlot: slot, uid: target.uid }, slot: ITEM };
+      return finish(s, { kind: 'item', invSlot: slot, uid: target.uid });
     }
   }
   return scoreItemByIntent(sim, u, slot, focus, profile);
@@ -859,14 +928,21 @@ function scoreBossItemActive(sim: Sim, u: Unit, slot: number, focus: Unit | null
  */
 export function chooseUtilityOrder(sim: Sim, u: Unit, focus: Unit | null): Order | null {
   const profile = combatProfile(u);
+  let teamPlan: ComboPlan | null = null;
+  let teamMind: TeamMind | null = null;
 
   if (u.ctrl.kind === 'gambit') {
     const tm = sim.teamMind(u.team);
+    teamMind = tm;
+    teamPlan = teamComboPlanForUnit(tm, u, focus);
     const scatter = raidSignatureScatterOrder(sim, u);
     if (scatter) return scatter;
 
     const spread = tm.spread ? spreadSpacingOrder(sim, u) : null;
     if (spread) return spread;
+
+    const friendlyField = raidFriendlyFieldOrder(sim, u);
+    if (friendlyField) return friendlyField;
 
     const stack = raidStackForHealOrder(sim, u);
     if (stack) return stack;
@@ -880,26 +956,40 @@ export function chooseUtilityOrder(sim: Sim, u: Unit, focus: Unit | null): Order
     if (peel) focus = peel;
   }
 
+  const comboPlan = teamPlan ?? (focus && (u.ctrl.kind === 'gambit' || u.ctrl.kind === 'boss') ? planUnitCombo(sim, u, focus) : null);
   let best: Scored | null = null;
+  let plannedStepCovered = false;
   for (let slot = 0; slot < u.abilities.length; slot++) {
-    const cand = scoreAbility(sim, u, slot, focus, profile);
+    const raw = scoreAbility(sim, u, slot, focus, profile);
+    const cand = raw ? plannedComboScore(u, raw, comboPlan) : null;
     if (!cand) continue;
+    if (comboPlan && comboStepMatchesOrder(comboPlan.nextStep, cand.order)) plannedStepCovered = true;
     if (!best || cand.score > best.score) best = cand; // lower slot wins ties (scanned first)
   }
   // item actives: gambit heroes use party/autobattler considers; raid bosses use
   // a narrower boss-brain subset for survivals and interrupts. Creeps carry none.
   if (u.ctrl.kind === 'gambit' || u.ctrl.kind === 'boss') {
     for (let slot = 0; slot < u.items.length; slot++) {
-      const cand = u.ctrl.kind === 'boss'
+      const raw = u.ctrl.kind === 'boss'
         ? scoreBossItemActive(sim, u, slot, focus, profile)
         : scoreItemActive(sim, u, slot, focus, profile);
+      if (raw && teamMind && teamMind.saveHolderUid !== null && teamMind.saveHolderUid !== u.uid && itemOrderUsesAssignedSave(u, raw.order)) continue;
+      const cand = raw ? plannedComboScore(u, raw, comboPlan) : null;
       if (!cand) continue;
+      if (comboPlan && comboStepMatchesOrder(comboPlan.nextStep, cand.order)) plannedStepCovered = true;
       if (!best || cand.score > best.score) best = cand;
     }
+  }
+  if (comboPlan && stepBelongsToUnit(comboPlan.nextStep, u) && !plannedStepCovered) {
+    const order = orderForComboStep(sim, u, comboPlan);
+    if (order && (!best || comboPlan.score > best.score) && comboPlan.score >= TUNING.ai.castScoreFloor) return order;
   }
   if (best && best.score >= TUNING.ai.castScoreFloor) return best.order;
 
   if (!focus) return null;
+
+  const hostileField = raidHostileFieldOrder(sim, u, focus, profile);
+  if (hostileField) return hostileField;
 
   // ranged kiters keep spacing when an enemy crowds them, but still trade — except
   // when the boss is enraged, when the party burns instead of giving ground (§6).
@@ -912,6 +1002,78 @@ export function chooseUtilityOrder(sim: Sim, u: Unit, focus: Unit | null): Order
     }
   }
   return { kind: 'attack-unit', uid: focus.uid };
+}
+
+function itemOrderUsesAssignedSave(u: Unit, order: Order): boolean {
+  if (order.kind !== 'item') return false;
+  const def = REG.items.get(u.items[order.invSlot]?.defId ?? '');
+  if (!def) return false;
+  const arch = itemArchetypes(def);
+  return arch.has('save') || arch.has('sustain') || arch.has('cleanse');
+}
+
+function raidFriendlyFieldOrder(sim: Sim, u: Unit): Order | null {
+  if (!bossPresent(sim, u)) return null;
+  const hpPct = u.hp / Math.max(1, u.stats.maxHp);
+  const depthBonus = aiDepthBonus(u);
+  const stackHpPct = TUNING.ai.raid.stackHpPct + depthBonus * TUNING.ai.raid.stackHpPctPerDepth;
+  if (hpPct >= stackHpPct) return null;
+
+  let best: Unit | null = null;
+  let bestD = Infinity;
+  let bestRadius = 0;
+  for (const ally of sim.unitsArr) {
+    if (!ally.alive || ally.team !== u.team || ally.kind !== 'hero') continue;
+    const radius = friendlyFieldRadius(ally);
+    if (radius <= 0) continue;
+    const d = dist2(u.pos, ally.pos);
+    if (d <= radius * radius) return null;
+    const reach = TUNING.ai.raid.stackRange + depthBonus * TUNING.ai.raid.stackRangePerDepth;
+    if (d > reach * reach) continue;
+    if (d < bestD || (d === bestD && (best === null || ally.uid < best.uid))) {
+      best = ally;
+      bestD = d;
+      bestRadius = radius;
+    }
+  }
+  if (!best) return null;
+  void bestRadius;
+  return { kind: 'move', point: { ...best.pos } };
+}
+
+function raidHostileFieldOrder(sim: Sim, u: Unit, focus: Unit, profile: CombatProfile): Order | null {
+  if (!bossPresent(sim, u) || profile.posture === 'backline') return null;
+  const radius = hostileFieldRadius(u);
+  if (radius <= 0) return null;
+  const d = dist(u.pos, focus.pos);
+  if (d <= radius * 0.85 || d > radius + 520) return null;
+  const dir = norm(sub(focus.pos, u.pos));
+  const point = add(u.pos, scale(dir.x === 0 && dir.y === 0 ? v2(1, 0) : dir, Math.min(320, d - radius * 0.75)));
+  return { kind: 'move', point };
+}
+
+function friendlyFieldRadius(u: Unit): number {
+  let radius = 0;
+  for (const it of u.items) {
+    if (!it) continue;
+    const def = REG.items.get(it.defId);
+    if (!def?.aura || def.aura.affects !== 'allies') continue;
+    if (!itemArchetypes(def).has('field')) continue;
+    if (typeof def.aura.radius === 'number') radius = Math.max(radius, def.aura.radius);
+  }
+  return radius;
+}
+
+function hostileFieldRadius(u: Unit): number {
+  let radius = 0;
+  for (const it of u.items) {
+    if (!it) continue;
+    const def = REG.items.get(it.defId);
+    if (!def?.aura || def.aura.affects !== 'enemies') continue;
+    if (!itemArchetypes(def).has('field')) continue;
+    if (typeof def.aura.radius === 'number') radius = Math.max(radius, def.aura.radius);
+  }
+  return radius;
 }
 
 /**
@@ -1067,11 +1229,16 @@ export function computeTeamMind(sim: Sim, team: Team, prev: TeamMind | null): Te
     }
   }
 
+  const teamCombo = planTeamCombos(sim, team, best);
   return {
     focusUid: best ? best.uid : null,
     focusScore: best ? bestScore : -Infinity,
     engaged,
     spread: enemyAoeOnTeam(sim, team, allies),
+    saveHolderUid: teamCombo.saveHolderUid,
+    initiatorUid: teamCombo.initiatorUid,
+    lockdownUid: teamCombo.lockdownUid,
+    chains: teamCombo.chains,
     computedTick: sim.tickCount
   };
 }

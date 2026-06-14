@@ -1,7 +1,7 @@
 {
   "version": 1,
   "hash": "04461c64db94",
-  "generatedAt": "2026-06-14T20:00:02.273Z",
+  "generatedAt": "2026-06-14T20:09:01.037Z",
   "assetRoot": "/assets/",
   "totalBytes": 119341650,
   "groups": {
@@ -7413,7 +7413,7 @@
       "group": "ui",
       "preloadGroup": "ui",
       "sourceSpec": null,
-      "source": null
+      "source": "game-icons.net curated status icons — CC BY 3.0"
     },
     {
       "path": "ui/status/blind.svg",
@@ -7423,7 +7423,7 @@
       "group": "ui",
       "preloadGroup": "ui",
       "sourceSpec": null,
-      "source": null
+      "source": "game-icons.net curated status icons — CC BY 3.0"
     },
     {
       "path": "ui/status/break.svg",
@@ -7433,7 +7433,7 @@
       "group": "ui",
       "preloadGroup": "ui",
       "sourceSpec": null,
-      "source": null
+      "source": "game-icons.net curated status icons — CC BY 3.0"
     },
     {
       "path": "ui/status/buff.svg",
@@ -7443,7 +7443,7 @@
       "group": "ui",
       "preloadGroup": "ui",
       "sourceSpec": null,
-      "source": null
+      "source": "game-icons.net curated status icons — CC BY 3.0"
     },
     {
       "path": "ui/status/cyclone.svg",
@@ -7453,7 +7453,7 @@
       "group": "ui",
       "preloadGroup": "ui",
       "sourceSpec": null,
-      "source": null
+      "source": "game-icons.net curated status icons — CC BY 3.0"
     },
     {
       "path": "ui/status/debuff.svg",
@@ -7463,7 +7463,7 @@
       "group": "ui",
       "preloadGroup": "ui",
       "sourceSpec": null,
-      "source": null
+      "source": "game-icons.net curated status icons — CC BY 3.0"
     },
     {
       "path": "ui/status/disarm.svg",
@@ -7473,7 +7473,7 @@
       "group": "ui",
       "preloadGroup": "ui",
       "sourceSpec": null,
-      "source": null
+      "source": "game-icons.net curated status icons — CC BY 3.0"
     },
     {
       "path": "ui/status/dot.svg",
@@ -7483,7 +7483,7 @@
       "group": "ui",
       "preloadGroup": "ui",
       "sourceSpec": null,
-      "source": null
+      "source": "game-icons.net curated status icons — CC BY 3.0"
     },
     {
       "path": "ui/status/fear.svg",
@@ -7493,7 +7493,7 @@
       "group": "ui",
       "preloadGroup": "ui",
       "sourceSpec": null,
-      "source": null
+      "source": "game-icons.net curated status icons — CC BY 3.0"
     },
     {
       "path": "ui/status/frozen.svg",
@@ -7503,7 +7503,7 @@
       "group": "ui",
       "preloadGroup": "ui",
       "sourceSpec": null,
-      "source": null
+      "source": "game-icons.net curated status icons — CC BY 3.0"
     },
     {
       "path": "ui/status/haste.svg",
@@ -7513,7 +7513,7 @@
       "group": "ui",
       "preloadGroup": "ui",
       "sourceSpec": null,
-      "source": null
+      "source": "game-icons.net curated status icons — CC BY 3.0"
     },
     {
       "path": "ui/status/hex.svg",
@@ -7523,7 +7523,7 @@
       "group": "ui",
       "preloadGroup": "ui",
       "sourceSpec": null,
-      "source": null
+      "source": "game-icons.net curated status icons — CC BY 3.0"
     },
     {
       "path": "ui/status/invis.svg",
@@ -7533,7 +7533,7 @@
       "group": "ui",
       "preloadGroup": "ui",
       "sourceSpec": null,
-      "source": null
+      "source": "game-icons.net curated status icons — CC BY 3.0"
     },
     {
       "path": "ui/status/magic-immune.svg",
@@ -7543,7 +7543,7 @@
       "group": "ui",
       "preloadGroup": "ui",
       "sourceSpec": null,
-      "source": null
+      "source": "game-icons.net curated status icons — CC BY 3.0"
     },
     {
       "path": "ui/status/power.svg",
@@ -7553,7 +7553,7 @@
       "group": "ui",
       "preloadGroup": "ui",
       "sourceSpec": null,
-      "source": null
+      "source": "game-icons.net curated status icons — CC BY 3.0"
     },
     {
       "path": "ui/status/regen.svg",
@@ -7563,7 +7563,7 @@
       "group": "ui",
       "preloadGroup": "ui",
       "sourceSpec": null,
-      "source": null
+      "source": "game-icons.net curated status icons — CC BY 3.0"
     },
     {
       "path": "ui/status/root.svg",
@@ -7573,7 +7573,7 @@
       "group": "ui",
       "preloadGroup": "ui",
       "sourceSpec": null,
-      "source": null
+      "source": "game-icons.net curated status icons — CC BY 3.0"
     },
     {
       "path": "ui/status/shield.svg",
@@ -7583,7 +7583,7 @@
       "group": "ui",
       "preloadGroup": "ui",
       "sourceSpec": null,
-      "source": null
+      "source": "game-icons.net curated status icons — CC BY 3.0"
     },
     {
       "path": "ui/status/silence.svg",
@@ -7593,7 +7593,7 @@
       "group": "ui",
       "preloadGroup": "ui",
       "sourceSpec": null,
-      "source": null
+      "source": "game-icons.net curated status icons — CC BY 3.0"
     },
     {
       "path": "ui/status/sleep.svg",
@@ -7603,7 +7603,7 @@
       "group": "ui",
       "preloadGroup": "ui",
       "sourceSpec": null,
-      "source": null
+      "source": "game-icons.net curated status icons — CC BY 3.0"
     },
     {
       "path": "ui/status/slow.svg",
@@ -7613,7 +7613,7 @@
       "group": "ui",
       "preloadGroup": "ui",
       "sourceSpec": null,
-      "source": null
+      "source": "game-icons.net curated status icons — CC BY 3.0"
     },
     {
       "path": "ui/status/stun.svg",
@@ -7623,7 +7623,7 @@
       "group": "ui",
       "preloadGroup": "ui",
       "sourceSpec": null,
-      "source": null
+      "source": "game-icons.net curated status icons — CC BY 3.0"
     },
     {
       "path": "ui/status/taunt.svg",
@@ -7633,7 +7633,7 @@
       "group": "ui",
       "preloadGroup": "ui",
       "sourceSpec": null,
-      "source": null
+      "source": "game-icons.net curated status icons — CC BY 3.0"
     },
     {
       "path": "vfx/beam_ramp.webp",

@@ -4,7 +4,7 @@ import { GRADE_UP_COSTS, IMPRINT_COSTS, MASTERWORK_COSTS, REFORGE_COSTS, REROLL_
 import { affixDef, affixPoolForItem, rollAffixForKind, rollAffixesFor } from '../data/affixes';
 import { fuseGems, gemDef, isGemId, socketsForDrop } from '../data/gems';
 import { setBonusEffects } from '../data/sets';
-import { tagBoonVfx } from '../data/tag-boons';
+import { tagBoonVfx, tagBoonTeamValue } from '../data/tag-boons';
 import { ITEM_GRADES, levelReq, percentileForGrade, rollGrade, statMultiplier, type GradeFloorSource } from '../data/grade';
 import { QUALITY_GRADES, nextQuality, rarityColor, setColorblindPalette } from '../data/quality';
 import { applyLootFilter, DEFAULT_LOOT_FILTER, type LootFilterRule } from './loot-filter';
@@ -57,7 +57,7 @@ import { levelFromXp, xpForLevel } from '../core/stats';
 import { abilityMaxLevel, abilityRankRequiredHeroLevel, autoAbilityLevels, canLearnAbilityRank, normalizeAbilityLevels } from '../core/values';
 import { dist, fromAngle, norm, sub } from '../core/math2d';
 import { circleBody, nearestPointOutsideCollisionBody, obstacleBlocksMovement } from '../core/collision';
-import type { ActiveElement, ArmoryLoadouts, BossDef, CollisionObstacleInput, CreepTier, CreepInstanceSave, CutsceneDef, DifficultyTier, DishDef, DomainDef, DraftDef, DropSource, DungeonDef, DungeonModifierDef, DungeonProgressSave, DungeonRoom, EchoProgress, EchoSpawnDef, EffectNode, GambitRule, GameSave, GraphicsSettings, GroundItemDrop, HeroAugments, HeroLoadoutSlots, HeroSave, ItemDef, ItemDropTable, ItemGrade, ItemQuality, ItemRarity, ItemSave, ItemTier, LootBand, LoreEntryDef, MacroHeroSetup, NeutralItemDef, NeutralStashEntry, Order, QuestDef, QuestGiverDef, QuestKind, QuestProgress, QuestReward, QuestSave, QuestStatus, RaidDef, RegionDef, RolledAffix, RoomTemplate, RoomType, SeasonalEventDef, SimEvent, StingerId, StatModMap, StatusParams, ValueRef, Vec2, ZoneSpec } from '../core/types';
+import type { ActiveElement, ArmoryLoadouts, BossDef, CollisionObstacleInput, CreepTier, CreepInstanceSave, CutsceneDef, DifficultyTier, DishDef, DomainDef, DraftDef, DropSource, DungeonDef, DungeonModifierDef, DungeonProgressSave, DungeonRoom, EchoProgress, EchoSpawnDef, EffectNode, GambitRule, GameSave, GraphicsSettings, GroundItemDrop, HeroAugments, HeroLoadoutSlots, HeroSave, ItemDef, ItemDropTable, ItemGrade, ItemQuality, ItemRarity, ItemSave, ItemTier, LootBand, LoreEntryDef, MacroHeroSetup, NeutralItemDef, NeutralStashEntry, Order, QuestDef, QuestGiverDef, QuestKind, QuestProgress, QuestReward, QuestSave, QuestStatus, RaidDef, RegionDef, RolledAffix, RoomTemplate, RoomType, SeasonalEventDef, SimEvent, StingerId, StatModMap, StatusParams, TagArchetype, ValueRef, Vec2, ZoneSpec } from '../core/types';
 import { advance as questAdvance, chosenBranch as questChosenBranch, claim as questClaim, normalizeQuestSave, questGiverPos, refreshAvailability, type QuestContext, type QuestEvent } from '../core/quests';
 import { migratePhase7Save } from '../core/phase7';
 import { GROUND_LOOT_COLLISION } from '../data/world/props';
@@ -327,6 +327,11 @@ export interface CombatReadout {
   ultReady: { uid: number; name: string }[];
   tagChain: { count: number; pct: number; ampPct: number } | null;
   offField: { count: number; names: string[] };
+  /** SWAP_COMBAT_OVERHAUL §9: the benched hero whose ready tag would best pay off
+   *  the current state — the "tag X next" hint that makes the chain legible. */
+  nextLink: { slot: number; heroId: string; name: string; archetype: TagArchetype } | null;
+  /** SWAP_COMBAT_OVERHAUL §2.3: the swap charge meter, when the opt-in mode is on. */
+  swapCharges: { current: number; max: number } | null;
 }
 
 interface CampState {
@@ -459,7 +464,7 @@ export function newGameSave(starterHeroId: string): GameSave {
     explorationPct: { [region.id]: 0 },
     regionVisits: { [region.id]: 1 },
     discovered: ['tv-waypoint-dawnshade'],
-    settings: { quickcast: true, resonance: true, minimap: true, keyBindings: normalizeKeyBindings(undefined), audio: defaultAudioSettings(), graphics: defaultGraphicsSettings(), cutscene: defaultCutsceneSettings(), interface: defaultInterfaceSettings() }
+    settings: { quickcast: true, resonance: true, swapCharges: false, minimap: true, keyBindings: normalizeKeyBindings(undefined), audio: defaultAudioSettings(), graphics: defaultGraphicsSettings(), cutscene: defaultCutsceneSettings(), interface: defaultInterfaceSettings() }
   };
 }
 
@@ -969,6 +974,7 @@ export class Game {
     this.settings = {
       quickcast: save.settings.quickcast,
       resonance: save.settings.resonance ?? false,
+      swapCharges: save.settings.swapCharges ?? false,
       minimap: save.settings.minimap ?? true,
       keyBindings: normalizeKeyBindings(save.settings.keyBindings),
       audio: { ...defaultAudioSettings(), ...save.settings.audio },
@@ -977,6 +983,8 @@ export class Game {
       interface: { ...defaultInterfaceSettings(), ...save.settings.interface }
     };
     this.sim.resonanceEnabled = this.settings.resonance ?? false;
+    this.swapCharges = TUNING.swapChargeMax;       // §2.3: charges are a live resource, full on load
+    this.swapChargesAt = this.sim.time;
     this.audio.setSettings(this.settings);
     this.audio.enableSampledAudio?.(resolveQuality(this.settings.graphics?.quality) !== 'low');
     this.refreshResonanceMods(true);
@@ -991,7 +999,11 @@ export class Game {
     this.advanceQuests({ kind: 'reach-region', amount: 1, regionId: this.region.id, targetId: this.region.id });
   }
 
-  settings: GameSave['settings'] = { quickcast: true, resonance: true, minimap: true, keyBindings: normalizeKeyBindings(undefined), audio: defaultAudioSettings(), graphics: defaultGraphicsSettings(), cutscene: defaultCutsceneSettings(), interface: defaultInterfaceSettings() };
+  settings: GameSave['settings'] = { quickcast: true, resonance: true, swapCharges: false, minimap: true, keyBindings: normalizeKeyBindings(undefined), audio: defaultAudioSettings(), graphics: defaultGraphicsSettings(), cutscene: defaultCutsceneSettings(), interface: defaultInterfaceSettings() };
+
+  // §2.3 charge-meter (opt-in): a live 2-charge swap resource, accrued lazily from sim time.
+  swapCharges = TUNING.swapChargeMax;
+  swapChargesAt = 0;
 
   // ---------- helpers ----------
 
@@ -1108,6 +1120,26 @@ export class Game {
       .filter((u) => u.alive && u.team === playerTeam && u.kind === 'hero' && (u.offFieldUntil ?? 0) > now)
       .map((u) => u.name);
 
+    // §9 next-link hint: among benched, gauge-ready party members, suggest the one
+    // whose tag delivers the most team value (so pure-self carries are never the
+    // hint — you don't need to be told to press a selfish burst).
+    let nextLink: CombatReadout['nextLink'] = null;
+    if (this.partyRecentlyInCombat()) {
+      let bestValue = 0;
+      for (let i = 0; i < this.party.length; i++) {
+        if (i === this.activeIdx) continue;
+        const rec = this.party[i];
+        if (!rec || rec.respawnAt > now || rec.tagGaugeReadyAt > now) continue;
+        const boon = REG.hero(rec.heroId).tagBoon;
+        if (!boon) continue;
+        const value = tagBoonTeamValue(boon);
+        if (value > bestValue) {
+          bestValue = value;
+          nextLink = { slot: i, heroId: rec.heroId, name: REG.hero(rec.heroId).name, archetype: boon.archetype };
+        }
+      }
+    }
+
     return {
       active: !!(this.liveRaid || this.liveGym || this.liveDungeon) || this.inCombat(),
       live: !!(this.liveRaid || this.liveGym),
@@ -1116,7 +1148,9 @@ export class Game {
       sharedFocus,
       ultReady,
       tagChain,
-      offField: { count: offFieldNames.length, names: offFieldNames }
+      offField: { count: offFieldNames.length, names: offFieldNames },
+      nextLink,
+      swapCharges: this.swapChargeState()
     };
   }
 
@@ -2088,6 +2122,32 @@ export class Game {
       u.markStatsDirty();
       u.refresh(this.sim.time);
     }
+  }
+
+  // §2.3 charge-meter: how long a spent swap charge takes to refill, shaved by the
+  // active hero's swap-cd reduction the same way the floor is.
+  private swapChargeRefillSec(): number {
+    const base = this.settings.resonance ? TUNING.resonanceSwapChargeRefillSec : TUNING.swapChargeRefillSec;
+    const u = this.activeUnit();
+    const reduction = u ? Math.min(0.8, Math.max(0, u.stats.swapCdReductionPct) / 100) : 0;
+    return base * (1 - reduction);
+  }
+
+  /** Current swap charges (fractional), or null when the charge meter is off. Pure read. */
+  swapChargeState(): { current: number; max: number } | null {
+    if (!this.settings.swapCharges) return null;
+    const refillSec = this.swapChargeRefillSec();
+    const elapsed = Math.max(0, this.sim.time - this.swapChargesAt);
+    const current = refillSec <= 0
+      ? TUNING.swapChargeMax
+      : Math.min(TUNING.swapChargeMax, this.swapCharges + elapsed / refillSec);
+    return { current, max: TUNING.swapChargeMax };
+  }
+
+  setSwapChargesEnabled(enabled: boolean): void {
+    this.settings.swapCharges = enabled;
+    this.swapCharges = TUNING.swapChargeMax; // re-arm the meter when the mode is toggled
+    this.swapChargesAt = this.sim.time;
   }
 
   setResonanceEnabled(enabled: boolean): void {
@@ -5748,17 +5808,39 @@ export class Game {
     return { count, ampPct, expiresAt };
   }
 
-  private fireTagBoon(rec: RosterEntry, u: Unit, when: 'tag-in' | 'tag-out', combatEligible: boolean): boolean {
+  // SWAP_COMBAT_OVERHAUL §7: item-granted tag lines ride the hero's Tag Gauge —
+  // they only join in when the hero boon fires, and are amplified by the same
+  // tagBoonAmp/chain. `effects` always apply; `onArchetype` applies only when the
+  // hero boon's archetype matches (Echo Conduit augments a Soak tag with a field).
+  private itemTagEffects(u: Unit, when: 'tag-in' | 'tag-out', archetype: TagArchetype): EffectNode[] {
+    const out: EffectNode[] = [];
+    for (const it of u.items) {
+      if (!it) continue;
+      const tb = REG.items.get(it.defId)?.tagBoon;
+      if (!tb) continue;
+      const fire = tb.fire ?? 'tag-in';
+      if (fire !== when && fire !== 'both') continue;
+      if (tb.effects) out.push(...tb.effects);
+      const arch = tb.onArchetype?.[archetype];
+      if (arch) out.push(...arch);
+    }
+    return out;
+  }
+
+  private fireTagBoon(rec: RosterEntry, u: Unit, when: 'tag-in' | 'tag-out', combatEligible: boolean, aimPoint?: Vec2): boolean {
     const boon = REG.hero(rec.heroId).tagBoon;
     if (!boon || (boon.fire !== when && boon.fire !== 'both')) return false;
     if (!combatEligible) return false;
     if (this.sim.time < rec.tagGaugeReadyAt) return false;
-    const effects = this.activeTagEffects(when === 'tag-out' ? (boon.outEffects ?? boon.effects) : boon.effects, u);
+    const heroEffects = this.activeTagEffects(when === 'tag-out' ? (boon.outEffects ?? boon.effects) : boon.effects, u);
+    const effects = [...heroEffects, ...this.itemTagEffects(u, when, boon.archetype)];
     if (effects.length === 0) return false;
 
     const chain = when === 'tag-in' ? this.advanceTagChain(u) : { count: this.tagChainCount, ampPct: 0, expiresAt: this.tagChainExpiresAt };
     const ampPct = Math.max(0, u.stats.tagBoonAmpPct) + chain.ampPct;
     const amp = 1 + ampPct / 100;
+    // §3.3: an aim boon resolves at the chosen point; everything else lands where you arrived.
+    const point = when === 'tag-in' && boon.aim && aimPoint ? { ...aimPoint } : { ...u.pos };
     execEffects(this.sim, u, {
       defId: boon.id,
       values: {
@@ -5769,7 +5851,7 @@ export class Game {
       level: 1,
       element: boon.element,
       vfx: tagBoonVfx(REG.hero(rec.heroId))
-    }, scaleTagEffects(effects, amp), { point: { ...u.pos } });
+    }, scaleTagEffects(effects, amp), { point });
 
     const reductionPct = Math.min(80, Math.max(0, u.stats.swapCdReductionPct) + Math.max(0, u.stats.tagGaugeReductionPct));
     rec.tagGaugeReadyAt = this.sim.time + boon.gaugeSec * (1 - reductionPct / 100);
@@ -5869,7 +5951,19 @@ export class Game {
     if (idx !== this.activeIdx) this.trySwap(idx);
   }
 
-  trySwap(idx: number): boolean {
+  /** Whether the party slot's tag-in would fire an aim boon right now (gauge
+   *  ready + in combat). The input layer opens a brief aim cursor when true. */
+  swapNeedsAim(idx: number): boolean {
+    if (this.liveGym || this.liveRaid || this.liveDungeon) return false;
+    if (idx === this.activeIdx) return false;
+    const rec = this.party[idx];
+    if (!rec || rec.respawnAt > this.sim.time) return false;
+    const boon = REG.hero(rec.heroId).tagBoon;
+    if (!boon?.aim || this.sim.time < rec.tagGaugeReadyAt) return false;
+    return this.partyRecentlyInCombat();
+  }
+
+  trySwap(idx: number, opts?: { aimPoint?: Vec2 }): boolean {
     if (this.liveGym) return this.selectLiveGymHero(idx);
     if (this.liveRaid) return this.selectLiveRaidHero(idx);
     if (this.liveDungeon) return this.selectLiveDungeonHero(idx);
@@ -5888,7 +5982,20 @@ export class Game {
       this.pendingSwapAt = this.sim.time;
       return true;
     }
-    if (this.sim.time < this.swapReadyAt) {
+    if (this.settings.swapCharges) {
+      // §2.3 charge-meter: accrue, then require a whole charge to spend.
+      const refillSec = this.swapChargeRefillSec();
+      const elapsed = Math.max(0, this.sim.time - this.swapChargesAt);
+      this.swapCharges = refillSec <= 0
+        ? TUNING.swapChargeMax
+        : Math.min(TUNING.swapChargeMax, this.swapCharges + elapsed / refillSec);
+      this.swapChargesAt = this.sim.time;
+      if (this.swapCharges < 1) {
+        const wait = (1 - this.swapCharges) * refillSec;
+        this.msg(`Swap charging (${wait.toFixed(1)}s)`, 'bad');
+        return false;
+      }
+    } else if (this.sim.time < this.swapReadyAt) {
       this.msg(`Swap on cooldown (${(this.swapReadyAt - this.sim.time).toFixed(1)}s)`, 'bad');
       return false;
     }
@@ -5931,7 +6038,11 @@ export class Game {
     const baseSwapCd = this.settings.resonance ? TUNING.resonanceSwapFloorSec : TUNING.swapFloorSec;
     const swapCdReduction = Math.min(0.8, Math.max(0, u.stats.swapCdReductionPct) / 100);
     this.swapReadyAt = this.sim.time + baseSwapCd * (1 - swapCdReduction);
-    this.fireTagBoon(rec, u, 'tag-in', combatEligible);
+    if (this.settings.swapCharges) this.swapCharges = Math.max(0, this.swapCharges - 1); // §2.3: spend a charge
+    const fired = this.fireTagBoon(rec, u, 'tag-in', combatEligible, opts?.aimPoint);
+    // §9: a swap that paid no boon (gauge down) gets the dull arrival beat, so the
+    // player learns the difference between a timed tag and a bare reposition.
+    if (!fired && combatEligible) this.sim.events.emit({ t: 'swap-flat', uid: u.uid });
     this.sim.playerActiveUid = u.uid;
     this.scene.selectedUid = u.uid;
     this.retargetEntourage();
@@ -7023,6 +7134,7 @@ export class Game {
     if (typeof v.activeIdx !== 'number' || v.activeIdx < 0 || v.activeIdx >= v.party.length) return false;
     if (!v.settings || typeof v.settings.quickcast !== 'boolean') return false;
     if (v.settings.resonance !== undefined && typeof v.settings.resonance !== 'boolean') return false;
+    if (v.settings.swapCharges !== undefined && typeof v.settings.swapCharges !== 'boolean') return false;
     if (v.settings.minimap !== undefined && typeof v.settings.minimap !== 'boolean') return false;
     if (!isValidKeyBindings(v.settings.keyBindings)) return false;
     const audio = v.settings.audio;

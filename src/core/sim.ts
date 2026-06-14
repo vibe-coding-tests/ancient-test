@@ -34,6 +34,7 @@ import type {
   VfxSpec,
   ZoneSpec
 } from './types';
+import type { ComboPlan } from './combo-planner';
 
 // ============================================================
 // The renderer-independent combat simulation (SPEC §1.1).
@@ -116,6 +117,10 @@ export interface TeamMind {
   focusScore: number;
   engaged: boolean;         // an ally is in the fight; safe to commit / burst
   spread: boolean;          // enemy area damage is on allies; hold spacing
+  saveHolderUid: number | null;
+  initiatorUid: number | null;
+  lockdownUid: number | null;
+  chains: ComboPlan[];
   computedTick: number;
 }
 

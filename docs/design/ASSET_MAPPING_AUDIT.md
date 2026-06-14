@@ -68,14 +68,13 @@ runtime; the build must boot with `public/assets/` empty.
 
 ## 1. Provenance legend (which GLBs are "custom")
 
-The manifest's `source` field is **not** a reliable "custom vs downloaded" signal —
-the vendored Quaternius creeps and our generated families both record `source: null`.
-Provenance below is read from the `ASSETS.md` ledger, which is authoritative.
+The manifest's `source` field now records broad machine-readable provenance for every
+shipped file. `ASSETS.md` remains the detailed human ledger for license and attribution.
 
 | Class | What it means | Files |
 |---|---|---|
-| **CUSTOM-GEN** | Generated in-repo by our scripts. Lowest fidelity, first to upgrade. | `creeps/{flier,bear,treant,scorpion,centaur,gnoll,owlbear,energy,abomination}.glb`; `heroes/{gyrocopter,hoodwink,snapfire,tusk}.glb`; 8 `holdouts/**` for the 4 abstract holdouts; 71 `weapons/heroes/*`; 13 `weapons/items/*`; the procedural icon/portrait glyphs in `icons.ts` |
-| **RETEX** | CC0 KayKit base, our tri-tone palette retexture. Faithful in archetype, generic in silhouette. | 71 `heroes/*.glb` (remaining knight/mage/barbarian/rogue cohorts) |
+| **CUSTOM-GEN** | Generated in-repo by our scripts. Lowest fidelity, first to upgrade. | `creeps/{flier,bear,treant,scorpion,centaur,gnoll,owlbear,energy,abomination,fishman}.glb`; `heroes/{gyrocopter,hoodwink,snapfire,tusk}.glb`; 8 `holdouts/**` for the 4 abstract holdouts; 65 `weapons/heroes/*`; 13 `weapons/items/*`; the procedural icon/portrait glyphs in `icons.ts` |
+| **RETEX** | CC0 KayKit base, our tri-tone palette retexture. Faithful in archetype, generic in silhouette. | 65 `heroes/*.glb` (remaining knight/mage/barbarian/rogue cohorts) |
 | **DL-CC0** | Downloaded CC0, processed in-repo. | 20 vendored Quaternius `creeps/*`; `creeps/{serpent,skeleton}.glb`; all `props/**` |
 | **DL-CCBY** | Downloaded CC-BY, attributed in `CREDITS.md`. | 191 `ui/items/<id>.svg`, 56 `ui/items/tokens/*.svg`, and 23 `ui/status/*.svg` (game-icons.net) |
 
@@ -92,14 +91,14 @@ of every body GLB family:
 
 | GLB family | Clips | Status |
 |---|---|---|
-| `heroes/*` (71 KayKit RETEX) | idle/run/attack/cast(/channel)/death | ✓ animated |
+| `heroes/*` (65 KayKit RETEX) | idle/run/attack/cast(/channel)/death | ✓ animated |
 | Quaternius `creeps/*` (20 DL-CC0) | per-pack walk/idle/attack | ✓ animated |
-| `creeps/{flier,bear,treant,scorpion,centaur,gnoll,owlbear,energy,abomination}` (CUSTOM-GEN) | idle/run/attack/cast/death | ✓ animated |
+| `creeps/{flier,bear,treant,scorpion,centaur,gnoll,owlbear,energy,abomination,fishman}` (CUSTOM-GEN) | idle/run/attack/cast/death | ✓ animated |
 | `creeps/{serpent,skeleton}` (DL-CC0) | idle/run/attack(/death) | ✓ animated |
 | `heroes/{gyrocopter,hoodwink,snapfire,tusk}` (CUSTOM-GEN bespoke bodies) | idle/run/attack/cast/death | ✓ animated |
 | `holdouts/replacements/*` (4 CUSTOM-GEN) | idle/run/attack/cast/channel/death | ✓ animated |
 | `holdouts/*` signature kits (4 CUSTOM-GEN) | additive, no body locomotion | △ fallback only |
-| `weapons/**` (84 CUSTOM-GEN) | n/a (held props) | ✓ acceptable static |
+| `weapons/**` (78 CUSTOM-GEN: 65 hero defaults + 13 item signatures) | n/a (held props) | ✓ acceptable static |
 
 The old static `tusk`/`hoodwink`/`gyrocopter` downloads are retired. Generated animated
 bespoke bodies now satisfy the body-animation gate.
@@ -163,7 +162,7 @@ These reuse vendored Quaternius creeps (DL-CC0) as shared bodies via `heroBaseUr
 | `dragonevolved` | jakiro, viper, puck | dragon | all ✓ |
 | `demon` | doom, shadow-demon, shadow-fiend, night-stalker, terrorblade, visage | demon/winged-fiend | all ✓ (visage = gargoyle, close) |
 | `wolf` | lycan | werewolf | ✓ |
-| `giant` | primal-beast | huge brute beast | ✓ — **but the code comment above this line ("Sea leviathan reads more aquatic on the crab base…") is stale/misplaced**; it describes tidehunter, not primal-beast. Fix the comment. |
+| `giant` | primal-beast | huge brute beast | ✓ (the old stale "Sea leviathan / crab base" comment above this mapping was removed — Phase 0) |
 | `golelingevolved` | tiny, elder-titan, earth-spirit | rock/earth elemental | all ✓ |
 | `goblin` | techies, gyrocopter fallback, tinker, clockwerk, timbersaw | goblin/keen tinkerer/mech | ✓; gyrocopter now has a generated bespoke body |
 | `velociraptor` | venomancer, snapfire fallback | reptile/lizard | venomancer ✓; snapfire now has a generated lizard-mount + rider body |
@@ -230,7 +229,7 @@ catches **summoned minions** (build `biped` → `goblin`) and any future unmappe
 | vhoul-assassin | `skeleton` | undead | ✓ downloaded CC0 skeleton |
 | gnoll-assassin | `gnoll` | hyena-folk | ✓ generated gnoll |
 | satyr-banisher, satyr-mindstealer | `demon` | horned fiend | ✓ |
-| prowler-shaman, prowler-acolyte | `tribal` | shaman | ✗ **prowlers are satyrs** — should match the satyrs above (3.2-A) |
+| prowler-shaman, prowler-acolyte | `demon` | horned fiend | ✓ landed — matches the satyr family (3.2-A) |
 | hellbear | `bear` | bear | ✓ |
 | wildwing, wildwing-ripper, enraged-wildkin | `owlbear` | owlbear | ✓ generated winged bear |
 | polar-furbolg | `bear` | bear-folk | ✓ |
@@ -251,16 +250,15 @@ catches **summoned minions** (build `biped` → `goblin`) and any future unmappe
 
 ### 3.2 Family-consistency flags
 
-**A. Satyr family is split.** `satyr-banisher` + `satyr-mindstealer` → `demon`, but
-`prowler-shaman` + `prowler-acolyte` → `tribal`. Prowlers *are* satyrs in WC3/Dota.
-Pick one family for all four. Recommend `demon` for all (the banisher/mindstealer read
-is the stronger one), or split by role only if intentional.
+**A. Satyr family is unified — landed.** All four satyrs share `demon`:
+`satyr-banisher`, `satyr-mindstealer`, and (since the fix) `prowler-shaman` +
+`prowler-acolyte`, which were on `tribal`. Prowlers *are* satyrs in WC3/Dota, so they
+now read as the same horned-fiend family.
 
-**B. Ogre family is split three ways.** `ogre-bruiser` → `orcenemy`,
-`ogre-magi-large` → `orc`, `ogre-frostmage` → `tribal`. The orc/orcenemy split is the
-intended "not all identical orc" choice and is fine. The `ogre-frostmage` → `tribal`
-is the outlier; it's defensible as a caster read but breaks the ogre silhouette. Note
-or move to an orc-family body with a caster palette.
+**B. Ogre family settled on orc variants — landed.** `ogre-bruiser` → `orcenemy`,
+`ogre-magi-large` → `orc`, and `ogre-frostmage` → `orcenemy` (moved off the outlier
+`tribal`). The orc/orcenemy split is the intended "not all identical orc" choice; all
+three now read as the ogre/orc family rather than splitting a caster off to `tribal`.
 
 **C. Troll family is unified.** `hill-troll`, `dark-troll`, and `dark-troll-summoner`
 all resolve to `tribal`.
@@ -272,12 +270,12 @@ family with granite/rock/mud.
 
 ### 3.3 Summon minions all read as goblins
 
-Summon abilities (`dark-troll-summoner`, `prowler-shaman`, and the generic `creep()`
-summon path) spawn minions with `silhouette.build: 'biped'` and an id like
-`<id>-minion` that isn't in `CREATURE_BY_ID`, so they fall through to
-`CREATURE_BY_BUILD.biped → goblin`. Every summoned add renders as a goblin regardless
-of summoner. Acceptable for now; if it reads wrong, add per-summon `CREATURE_BY_ID`
-rows (e.g. dark-troll skeletons → `ghost`/undead, prowler → `demon`).
+The two named summoners now have explicit family rows — landed:
+`dark-troll-summoner-minion` → `tribal` and `prowler-shaman-minion` → `demon`, so their
+adds read as the summoner's family rather than a generic goblin. Only the generic
+`creep()` summon path (minions with `silhouette.build: 'biped'` and an id not in
+`CREATURE_BY_ID`) still falls through to `CREATURE_BY_BUILD.biped → goblin`, which is
+the intended small-humanoid floor for unnamed summons.
 
 ### 3.4 Faithfulness flags (creeps)
 
@@ -359,7 +357,7 @@ above is a note for *if* the tier ever expands, not pending work.
 floor that keeps the HUD readable with `public/assets/` empty. They are custom but
 intentionally crude — the boot floor, not a shipping target. Leave as-is.
 
-### 5.4 Hero default weapons (71, CUSTOM-GEN)
+### 5.4 Hero default weapons (65, CUSTOM-GEN)
 
 `weapons/heroes/*.glb` — generated default hand weapons for the remaining humanoid
 KayKit cohorts, one per hero. Motion-correct (ride the hero rig). They remain the main
@@ -403,11 +401,11 @@ genuinely abstract.
 4. `ogre-frostmage`: `tribal` → `orcenemy`.
 5. `wildwing`/wildkin: `bear` → `owlbear`.
 
-### C. Fix the stale code comment
+### C. Fix the stale code comment — landed
 
-`src/engine/assets.ts` line above `giant: ['primal-beast']` references a "Sea
-leviathan" / crab base — that describes `tidehunter`, not `primal-beast`. Correct or
-remove it.
+The `src/engine/assets.ts` comment above `giant: ['primal-beast']` used to reference a
+"Sea leviathan" / crab base (which describes `tidehunter`, not `primal-beast`). It was
+removed in Phase 0; the line now reads "giant is the closest shipped base."
 
 ### D. Download targets (any CC / permissive, incl. NC/SA) for the worst faithfulness gaps
 
@@ -444,14 +442,15 @@ heroes, so the upgrade propagates widely.
 
 ---
 
-## 7. Tooling note: manifest can't tell custom from downloaded
+## 7. Tooling note: manifest now records machine-readable provenance — landed
 
-`public/assets/manifest.json` records `source: null` for **both** the vendored
-Quaternius creeps and our generated families, so it can't answer "which GLBs are
-custom?" on its own. `ASSETS.md` is the source of truth. Consider populating `source`
-for the generated families (e.g. `"generated in-repo"`) and the vendored creeps (e.g.
-`"Quaternius CC0"`) in `build_assets.mjs` so this audit can be regenerated from the
-manifest instead of by hand.
+`public/assets/manifest.json` populates a `source` for **every** file via
+`build_assets.mjs` (`inferredSource`), so the manifest can now answer "which GLBs are
+custom?" on its own — no entry is `null`. Generated families read `"generated in-repo:
+<generator>"`, vendored creeps `"Quaternius creature pack — CC0"`, the KayKit cohorts
+`"KayKit Adventurers … retexture by us — CC0"`, and the game-icons item/status sprites
+`"game-icons.net … — CC BY 3.0"`. `ASSETS.md` remains the human-readable ledger, but
+this audit (DoD #5) can now be regenerated from the manifest instead of by hand.
 
 ---
 

@@ -133,6 +133,7 @@ function inferredSource(rel) {
   if (rel.startsWith('weapons/heroes/')) return 'generated in-repo: generate_hero_weapons.mjs';
   if (rel.startsWith('weapons/items/')) return 'generated in-repo: generate_item_weapons.mjs';
   if (rel.startsWith('ui/items/')) return 'game-icons.net curated item silhouettes — CC BY 3.0';
+  if (rel.startsWith('ui/status/')) return 'game-icons.net curated status icons — CC BY 3.0';
   if (rel.startsWith('ui/frames/')) return 'generated in-repo: generate_ui_assets.mjs';
   if (rel.startsWith('ui/fonts/')) return 'Cinzel font — OFL 1.1';
   if (rel.startsWith('vfx/')) return 'generated in-repo: vfx asset generators';

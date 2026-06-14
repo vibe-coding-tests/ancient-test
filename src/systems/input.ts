@@ -22,7 +22,8 @@ const CURSORS = {
 export type TargetingState =
   | { kind: 'none' }
   | { kind: 'ability'; slot: number }
-  | { kind: 'item'; slot: number };
+  | { kind: 'item'; slot: number }
+  | { kind: 'tag-swap'; slot: number };  // SWAP_COMBAT_OVERHAUL §3.3: aiming an aim-boon tag-in
 
 export class InputController {
   /** current mouse position (client px) */
@@ -215,6 +216,10 @@ export class InputController {
     const g = this.game;
     const u = g.controlledUnit();
     if (!u || t.kind === 'none') return;
+    if (t.kind === 'tag-swap') {
+      g.trySwap(t.slot, { aimPoint: this.hoverGround ?? { ...u.pos } });
+      return;
+    }
     const opts = {
       uid: this.hoverUid >= 0 ? this.hoverUid : undefined,
       point: this.hoverGround ?? { ...u.pos }
@@ -316,7 +321,18 @@ export class InputController {
 
     // hero swap
     if (action?.startsWith('swap-')) {
-      g.trySwap(Number(action.split('-')[1]) - 1);
+      const idx = Number(action.split('-')[1]) - 1;
+      if (g.swapNeedsAim(idx)) {
+        // §3.3: an aim boon opens a brief cursor; the click resolves the tag.
+        if (g.settings.quickcast) {
+          g.trySwap(idx, { aimPoint: this.hoverGround ?? undefined });
+        } else {
+          this.targeting = { kind: 'tag-swap', slot: idx };
+          g.msg('Aim tag-in: click a target point', 'info');
+        }
+      } else {
+        g.trySwap(idx);
+      }
       return;
     }
 

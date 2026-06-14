@@ -1,4 +1,4 @@
-import type { ActiveElement, EffectNode, HeroDef, StatusId, StatusParams, TagArchetype, TagBoonDef, VfxSpec } from '../core/types';
+import type { ActiveElement, EffectNode, HeroDef, SilhouetteSpec, SummonSpec, SummonStats, StatusId, StatusParams, TagArchetype, TagBoonDef, VfxSpec } from '../core/types';
 
 // SWAP_COMBAT_OVERHAUL §6 — every hero carries a *signature* combo tag, authored
 // here as a list of plain EffectNodes the existing resolver interprets (§3). The
@@ -147,11 +147,12 @@ function boon(
   gaugeSec: number,
   text: string,
   effects: EffectNode[],
-  opts: { fire?: TagBoonDef['fire']; outEffects?: EffectNode[] } = {}
+  opts: { fire?: TagBoonDef['fire']; outEffects?: EffectNode[]; aim?: boolean } = {}
 ): TagBoonDef {
   const element = isActiveElement(hero.element) ? hero.element : undefined;
   const prefix = opts.fire === 'tag-out' ? 'TAG-OUT' : opts.fire === 'both' ? 'TAG' : 'TAG-IN';
   const elementText = element ? ` + ${element}` : '';
+  const aimText = opts.aim ? ' (aim)' : '';
   return {
     id: `${hero.id}-tag-boon`,
     fire: opts.fire ?? 'tag-in',
@@ -160,7 +161,8 @@ function boon(
     gaugeSec,
     archetype,
     element,
-    tooltip: `${prefix}: ${text}${elementText} · ${gaugeSec}s`
+    aim: opts.aim,
+    tooltip: `${prefix}: ${text}${aimText}${elementText} · ${gaugeSec}s`
   };
 }
 
@@ -168,17 +170,86 @@ function roleSet(hero: HeroDef): Set<string> {
   return new Set(hero.roles.map((r) => r.toLowerCase()));
 }
 
-// An off-field hero: the tag-in pays a small crumb, the tag-out leaves a field
-// that keeps ticking while the hero is benched (§5). Element rides the field tick.
+// An off-field hero: the tag-in pays a small crumb, the tag-out leaves a legacy
+// that keeps fighting while the hero is benched (§5) — a real summon body for
+// summoners (below), or a lingering field for the field-flavored Drop heroes.
+// Element rides the field tick where a field is used.
 function offField(
   hero: HeroDef,
   gaugeSec: number,
   text: string,
   inEffects: EffectNode[],
-  outField: EffectNode[]
+  outLegacy: EffectNode[]
 ): TagBoonDef {
-  return boon(hero, 'Drop', gaugeSec, text, inEffects, { fire: 'both', outEffects: outField });
+  return boon(hero, 'Drop', gaugeSec, text, inEffects, { fire: 'both', outEffects: outLegacy });
 }
+
+// ---------- off-field summon bodies (§5, §6 Off-field) ----------
+// Real `summon` spawns the off-field summoners leave behind on tag-out (and a few
+// on tag-in), replacing the lingering-zone stand-ins S5 shipped. A summon is an
+// independent unit with its own lifetime, so the body keeps fighting around the
+// benched hero through the off-field window and persists on its own clock. Specs
+// are modest swap-legacy bodies (well under each hero's ult army), keyed by their
+// own ids so the procedural silhouette renderer draws them like every other
+// inline summon. The `summon` EffectNode scores the same as the `zone` it
+// replaces in the §4 budget, so the inverse-power law stays exactly as tuned.
+
+function mob(opts: {
+  id: string;
+  name: string;
+  build: SilhouetteSpec['build'];
+  scale: number;
+  bodyShape?: SilhouetteSpec['bodyShape'];
+  head?: SilhouetteSpec['head'];
+  weapon?: SilhouetteSpec['weapon'];
+  palette: [string, string, string];
+  hp: number;
+  dmg: number;
+  armor?: number;
+  moveSpeed?: number;
+  attackRange?: number;
+  baseAttackTime?: number;
+  lifetime?: number;
+}): SummonSpec {
+  const stats: SummonStats = {
+    maxHp: opts.hp,
+    damage: opts.dmg,
+    armor: opts.armor ?? 0,
+    moveSpeed: opts.moveSpeed ?? 320,
+    attackRange: opts.attackRange ?? 150,
+    baseAttackTime: opts.baseAttackTime ?? 1.5
+  };
+  return {
+    id: opts.id,
+    name: opts.name,
+    lifetime: opts.lifetime ?? 8,
+    stats,
+    silhouette: { build: opts.build, scale: opts.scale, bodyShape: opts.bodyShape, head: opts.head, weapon: opts.weapon },
+    palette: opts.palette
+  };
+}
+
+function summonNode(spec: SummonSpec, count = 1): EffectNode {
+  return { kind: 'summon', summon: spec, count, at: 'self' };
+}
+
+const SUMMON_BODIES = {
+  eidolon: mob({ id: 'enigma-tag-eidolon', name: 'Eidolon', build: 'blob', scale: 0.62, head: 'bare', weapon: 'none', palette: ['#2b1c7a', '#050510', '#b8a8ff'], hp: 240, dmg: 22, moveSpeed: 310, attackRange: 300 }),
+  spiderling: mob({ id: 'broodmother-tag-spiderling', name: 'Spiderling', build: 'blob', scale: 0.5, head: 'bare', weapon: 'none', palette: ['#6a3f8a', '#180e22', '#d8b8ff'], hp: 160, dmg: 16, moveSpeed: 340 }),
+  familiar: mob({ id: 'visage-tag-familiar', name: 'Stone Familiar', build: 'bird', scale: 0.7, head: 'bare', weapon: 'none', palette: ['#7a8a6a', '#1a201a', '#d8e0c8'], hp: 200, dmg: 22, moveSpeed: 400, attackRange: 150 }),
+  spiritBear: mob({ id: 'lone-druid-tag-bear', name: 'Spirit Bear', build: 'quad', scale: 1.05, bodyShape: 'bulky', head: 'bare', weapon: 'none', palette: ['#8ac06a', '#3a2a18', '#f0d0a0'], hp: 700, dmg: 45, armor: 3, moveSpeed: 330, baseAttackTime: 1.6, lifetime: 10 }),
+  wolf: mob({ id: 'lycan-tag-wolf', name: 'Wolf', build: 'quad', scale: 0.7, head: 'bare', weapon: 'none', palette: ['#9aa0a8', '#22262c', '#e0e4ea'], hp: 220, dmg: 24, moveSpeed: 380 }),
+  hawk: mob({ id: 'beastmaster-tag-hawk', name: 'Hawk', build: 'bird', scale: 0.5, head: 'bare', weapon: 'none', palette: ['#b87a3a', '#241608', '#f0d8a0'], hp: 120, dmg: 14, moveSpeed: 450, attackRange: 200 }),
+  boar: mob({ id: 'beastmaster-tag-boar', name: 'Boar', build: 'quad', scale: 0.75, bodyShape: 'bulky', head: 'bare', weapon: 'none', palette: ['#8a6a4a', '#241a10', '#d8c0a0'], hp: 240, dmg: 18, moveSpeed: 300 }),
+  zombie: mob({ id: 'undying-tag-zombie', name: 'Zombie', build: 'biped', scale: 0.85, bodyShape: 'bulky', head: 'skull', weapon: 'none', palette: ['#7a8a5a', '#1c2014', '#c8d0a8'], hp: 200, dmg: 20, moveSpeed: 280 }),
+  treant: mob({ id: 'natures-prophet-tag-treant', name: 'Treant', build: 'brute', scale: 0.95, bodyShape: 'bulky', head: 'bare', weapon: 'none', palette: ['#5a8a4a', '#1a2614', '#c0d8a0'], hp: 360, dmg: 28, armor: 2, moveSpeed: 300, baseAttackTime: 1.6 }),
+  exorcismSpirit: mob({ id: 'death-prophet-tag-spirit', name: 'Exorcism Spirit', build: 'blob', scale: 0.6, head: 'bare', weapon: 'none', palette: ['#3a8a6a', '#0c1a16', '#a8f0d8'], hp: 140, dmg: 22, moveSpeed: 380, attackRange: 400 }),
+  tempestDouble: mob({ id: 'arc-warden-tag-double', name: 'Tempest Double', build: 'blob', scale: 0.75, head: 'bare', weapon: 'staff', palette: ['#65d8ff', '#0a1a24', '#f6f0a8'], hp: 240, dmg: 26, moveSpeed: 320, attackRange: 350 }),
+  tbReflection: mob({ id: 'terrorblade-tag-reflection', name: 'Reflection', build: 'biped', scale: 0.85, bodyShape: 'slim', head: 'horned', weapon: 'sword', palette: ['#9a5cff', '#1a0e2c', '#d8c0ff'], hp: 200, dmg: 20, moveSpeed: 320 }),
+  nagaImage: mob({ id: 'naga-siren-tag-image', name: 'Mirror Image', build: 'biped', scale: 0.85, bodyShape: 'slim', head: 'bare', weapon: 'sword', palette: ['#4fc3f7', '#0c2430', '#d8f4ff'], hp: 180, dmg: 18, moveSpeed: 320 }),
+  lancerImage: mob({ id: 'phantom-lancer-tag-image', name: 'Lancer Image', build: 'biped', scale: 0.85, bodyShape: 'slim', head: 'bare', weapon: 'sword', palette: ['#4a8cff', '#101c3a', '#d8e8ff'], hp: 180, dmg: 18, moveSpeed: 320 }),
+  plagueWard: mob({ id: 'venomancer-tag-ward', name: 'Plague Ward', build: 'ward', scale: 0.55, weapon: 'none', palette: ['#75d84a', '#243a16', '#d8ff7a'], hp: 180, dmg: 18, moveSpeed: 0, attackRange: 550, baseAttackTime: 1.4, lifetime: 9 })
+} as const;
 
 // ---------- the §6 signature table ----------
 // Keyed by hero id. Magnitudes are bounded by the §4 budget bands (see the
@@ -318,9 +389,9 @@ const AUTHORED: Record<string, (h: HeroDef) => TagBoonDef> = {
   'troll-warlord': (h) => boon(h, 'Onslaught', 6, 'self +attack speed dump, slow a foe', [
     selfMod({ attackSpeed: 40 }), ccOne('slow', 1, { moveSlowPct: 20 })
   ]),
-  terrorblade: (h) => offField(h, 6, 'self +8% damage; tag-out leaves a reflection field', [
+  terrorblade: (h) => offField(h, 6, 'self +8% damage; tag-out leaves reflections', [
     selfMod({ damagePct: 8 })
-  ], [field({ dps: 12, slowPct: 0, duration: 5 })]),
+  ], [summonNode(SUMMON_BODIES.tbReflection, 2)]),
   ursa: (h) => boon(h, 'Onslaught', 6, 'self +14% damage (fury-stacks) & mini-bash nearest', [
     selfMod({ damagePct: 14 }), ccOne('stun', 0.5)
   ]),
@@ -348,9 +419,9 @@ const AUTHORED: Record<string, (h: HeroDef) => TagBoonDef> = {
   'bounty-hunter': (h) => boon(h, 'Lockdown', 7, 'track-mark nearest foe (-6 armor), self +move', [
     enemyMod({ armor: -6 }, 4, NEAR), selfMod({ moveSpeedPct: 10 })
   ]),
-  'naga-siren': (h) => offField(h, 9, 'self +6% damage; tag-out leaves a wet mirror field', [
+  'naga-siren': (h) => offField(h, 9, 'self +6% damage; tag-out leaves mirror images', [
     selfMod({ damagePct: 6 })
-  ], [field({ dps: 6, slowPct: 18 })]),
+  ], [summonNode(SUMMON_BODIES.nagaImage, 2)]),
   bloodseeker: (h) => boon(h, 'Bloodrush', 6, 'self heal & move (blood-fueled), slow a foe', [
     selfHeal(6), selfMod({ moveSpeedPct: 12 }), ccOne('slow', 1, { moveSlowPct: 20 })
   ]),
@@ -360,21 +431,21 @@ const AUTHORED: Record<string, (h: HeroDef) => TagBoonDef> = {
   'ember-spirit': (h) => boon(h, 'Strike', 7, 'flame nova nearby + self spell amp', [
     strike(40), selfMod({ spellAmpPct: 14 })
   ]),
-  'arc-warden': (h) => offField(h, 7, 'self +8% damage; tag-out leaves a sparking field', [
+  'arc-warden': (h) => offField(h, 7, 'self +8% damage; tag-out leaves a tempest double', [
     selfMod({ damagePct: 8 })
-  ], [field({ dps: 12, slowPct: 0 })]),
+  ], [summonNode(SUMMON_BODIES.tempestDouble, 1)]),
   meepo: (h) => boon(h, 'Gather', 6, 'net-pull the nearest foe in, self +6% damage', [
     pullOne(950), selfMod({ damagePct: 6 })
   ]),
   'monkey-king': (h) => boon(h, 'Onslaught', 7, 'leap-in: self +12% damage & 0.6s stun nearest', [
     selfMod({ damagePct: 12 }), ccOne('stun', 0.6)
   ]),
-  'phantom-lancer': (h) => offField(h, 6, 'self +move & damage; tag-out leaves illusion pressure', [
+  'phantom-lancer': (h) => offField(h, 6, 'self +move & damage; tag-out leaves lancer images', [
     selfMod({ moveSpeedPct: 8, damagePct: 6 })
-  ], [field({ dps: 10, slowPct: 0 })]),
-  broodmother: (h) => offField(h, 6, 'self +6% damage; tag-out leaves a spiderling web', [
+  ], [summonNode(SUMMON_BODIES.lancerImage, 2)]),
+  broodmother: (h) => offField(h, 6, 'self +6% damage; tag-out leaves spiderlings', [
     selfMod({ damagePct: 6 })
-  ], [field({ dps: 10, slowPct: 22 })]),
+  ], [summonNode(SUMMON_BODIES.spiderling, 3)]),
   'nyx-assassin': (h) => boon(h, 'Lockdown', 8, 'impale-stun nearest 0.8s + mana-burn', [
     ccOne('stun', 0.8), manaBurnOne(120)
   ]),
@@ -430,16 +501,16 @@ const AUTHORED: Record<string, (h: HeroDef) => TagBoonDef> = {
   ]),
   'death-prophet': (h) => offField(h, 10, 'self +spell amp; tag-out unleashes exorcism spirits', [
     selfMod({ spellAmpPct: 10 })
-  ], [field({ dps: 12, slowPct: 0 })]),
+  ], [summonNode(SUMMON_BODIES.exorcismSpirit, 2)]),
   lion: (h) => boon(h, 'Lockdown', 10, 'hex the nearest foe 1.5s + mana-burn', [
     ccOne('hex', 1.5), manaBurnOne(150)
   ]),
   'winter-wyvern': (h) => boon(h, 'Mend', 12, 'cold embrace: big heal lowest ally + frost nearby', [
     lowHeal(20), slowAoe(2, 25)
   ]),
-  invoker: (h) => boon(h, 'Strike', 9, 'sunstrike nearby + self spell amp', [
+  invoker: (h) => boon(h, 'Strike', 9, 'aimed sunstrike + self spell amp', [
     strike(50), selfMod({ spellAmpPct: 14 })
-  ]),
+  ], { aim: true }),
   silencer: (h) => boon(h, 'Cleanse', 12, 'cleanse allies + status resist; silence crumb', [
     purgeAllies(), teamMod({ statusResistPct: 20 }), ccOne('silence', 1)
   ]),
@@ -458,9 +529,9 @@ const AUTHORED: Record<string, (h: HeroDef) => TagBoonDef> = {
   chen: (h) => boon(h, 'Mend', 12, 'heal nearby allies 10% (+ holy persuasion)', [
     teamHeal(10), healField({ hps: 18 })
   ]),
-  'natures-prophet': (h) => offField(h, 10, 'sprout-root field; tag-out leaves treant pressure', [
+  'natures-prophet': (h) => offField(h, 10, 'sprout-root field; tag-out leaves treants in a sprout', [
     field({ dps: 8, slowPct: 18 })
-  ], [field({ dps: 10, slowPct: 18, duration: 5 })]),
+  ], [summonNode(SUMMON_BODIES.treant, 2), field({ dps: 10, slowPct: 18, duration: 5 })]),
   warlock: (h) => boon(h, 'Imprint', 11, 'heal allies; tag-out leaves a Fatal Bond field 5s', [
     teamHeal(9)
   ], {
@@ -479,7 +550,7 @@ const AUTHORED: Record<string, (h: HeroDef) => TagBoonDef> = {
   }),
   visage: (h) => offField(h, 11, 'allies +spell amp & armor; tag-out sends familiars', [
     teamMod({ spellAmpPct: 8, armor: 4 })
-  ], [field({ dps: 12, slowPct: 0 })]),
+  ], [summonNode(SUMMON_BODIES.familiar, 2)]),
   dazzle: (h) => offField(h, 10, 'heal nearby allies 8%; tag-out leaves a Shadow Wave field', [
     teamHeal(8)
   ], [healField({ hps: 24 })]),
@@ -530,15 +601,15 @@ const AUTHORED: Record<string, (h: HeroDef) => TagBoonDef> = {
   'dark-seer': (h) => boon(h, 'Gather', 10, 'vacuum nearby foes, allies +ion-shield (DR)', [
     pullAoe(900), teamMod({ damageTakenReductionPct: 10 })
   ]),
-  enigma: (h) => offField(h, 10, 'self +spell amp; tag-out summons an eidolon swarm', [
+  enigma: (h) => offField(h, 10, 'self +spell amp; tag-out summons eidolons', [
     selfMod({ spellAmpPct: 8 })
-  ], [field({ dps: 12, slowPct: 0 })]),
-  beastmaster: (h) => offField(h, 10, 'self +10% damage; tag-out leaves hawk & boar', [
+  ], [summonNode(SUMMON_BODIES.eidolon, 2)]),
+  beastmaster: (h) => offField(h, 10, 'self +10% damage; tag-out leaves a hawk & boar', [
     selfMod({ damagePct: 10 })
-  ], [field({ dps: 8, slowPct: 18 })]),
-  undying: (h) => offField(h, 11, 'heal allies 6%; tag-out raises a Tombstone field', [
+  ], [summonNode(SUMMON_BODIES.hawk, 1), summonNode(SUMMON_BODIES.boar, 1)]),
+  undying: (h) => offField(h, 11, 'heal allies 6%; tag-out raises a horde of zombies', [
     teamHeal(6)
-  ], [field({ dps: 10, slowPct: 18 })]),
+  ], [summonNode(SUMMON_BODIES.zombie, 2)]),
   clockwerk: (h) => boon(h, 'Gather', 10, 'hook the nearest foe in + 0.6s stun', [
     pullOne(1100), ccOne('stun', 0.6)
   ]),
@@ -550,10 +621,10 @@ const AUTHORED: Record<string, (h: HeroDef) => TagBoonDef> = {
   ]),
   'lone-druid': (h) => offField(h, 6, 'self +8% damage; tag-out leaves the Spirit Bear', [
     selfMod({ damagePct: 8 })
-  ], [field({ dps: 12, slowPct: 0 })]),
+  ], [summonNode(SUMMON_BODIES.spiritBear, 1)]),
   lycan: (h) => offField(h, 6, 'self +move & damage; tag-out leaves the wolves', [
     selfMod({ moveSpeedPct: 12, damagePct: 6 })
-  ], [field({ dps: 10, slowPct: 14 })]),
+  ], [summonNode(SUMMON_BODIES.wolf, 2)]),
   pangolier: (h) => boon(h, 'Gather', 9, 'roll-knockback nearby foes, self +DR', [
     knockAoe(260), selfMod({ damageTakenReductionPct: 12 })
   ]),
@@ -566,9 +637,9 @@ const AUTHORED: Record<string, (h: HeroDef) => TagBoonDef> = {
   techies: (h) => offField(h, 9, 'self +spell amp; tag-out arms a mine field', [
     selfMod({ spellAmpPct: 8 })
   ], [field({ dps: 16, slowPct: 0 })]),
-  venomancer: (h) => offField(h, 10, 'plague-ward field (poison) + allies +spell amp', [
-    field({ dps: 10, slowPct: 18 }), teamMod({ spellAmpPct: 8 })
-  ], [field({ dps: 10, slowPct: 18 })]),
+  venomancer: (h) => offField(h, 10, 'a plague ward + allies +spell amp; tag-out leaves more wards', [
+    summonNode(SUMMON_BODIES.plagueWard, 1), teamMod({ spellAmpPct: 8 })
+  ], [summonNode(SUMMON_BODIES.plagueWard, 2)]),
   hoodwink: (h) => boon(h, 'Lockdown', 8, 'bushwhack-root the nearest foe 1.2s, self +move', [
     ccOne('root', 1.2), selfMod({ moveSpeedPct: 8 })
   ])

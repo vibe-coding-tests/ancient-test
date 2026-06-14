@@ -349,6 +349,11 @@ export class ProceduralAudio {
         this.sweep(ev.when === 'tag-in' ? 360 : 520, ev.when === 'tag-in' ? 980 : 260, 0.14, 'triangle', 0.09, 'sfx');
         if (ev.chain > 1) this.tone(740 + ev.chain * 120, 0.08, 'sine', 0.06, 'sfx');
         break;
+      case 'swap-flat':
+        // §9: a swap that paid no boon (gauge down) — a dull, low thud so the
+        // player feels the difference from a bright timed tag-in.
+        this.tone(190, 0.1, 'sine', 0.05, 'sfx');
+        break;
       case 'tag-chain':
         if (ev.count > 1) this.tone(880 + ev.count * 140, 0.045, 'sine', 0.045, 'ui');
         break;

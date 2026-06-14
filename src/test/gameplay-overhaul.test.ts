@@ -10,7 +10,7 @@ import { resolveCastPreview } from '../core/cast-preview';
 import { Game, newGameSave } from '../systems/game';
 import { tagBoonTeamValue } from '../data/tag-boons';
 import type { Unit } from '../core/unit';
-import type { ItemSave, Vec2 } from '../core/types';
+import type { GameSave, ItemSave, Vec2 } from '../core/types';
 
 beforeAll(() => registerAllContent());
 
@@ -253,6 +253,30 @@ describe('gameplay overhaul: locomotion and discovery', () => {
     expect(enemy.hp).toBeLessThan(hp);
     advance(game, TUNING.resonanceOffFieldPersistenceSec);
     expect(game.party[0].unit).toBeNull();
+  });
+
+  it('off-field summoners leave real summon bodies that fight while benched (§5/§6)', () => {
+    const save = newGameSave('enigma');
+    const jugSave = newGameSave('juggernaut').roster[0];
+    save.recruited.push('juggernaut');
+    save.party.push('juggernaut');
+    save.roster.push(jugSave);
+    const game = Game.headless(save);
+    const enigma = game.activeUnit()!;
+    enigma.lastEnemyDamageAt = game.sim.time;
+    const enemy = game.sim.spawnCreep(REG.creep('kobold'), { team: 1, pos: { x: enigma.pos.x + 140, y: enigma.pos.y } });
+
+    expect(game.sim.unitsArr.some((u) => u.creepId === 'enigma-tag-eidolon')).toBe(false);
+
+    expect(game.trySwap(1)).toBe(true); // bench Enigma → tag-out spawns real eidolon bodies
+    game.update(0);
+    const eidolons = game.sim.unitsArr.filter((u) => u.alive && u.creepId === 'enigma-tag-eidolon');
+    expect(eidolons.length).toBeGreaterThanOrEqual(2);
+    expect(game.party[0].unit?.offFieldUntil).toBeGreaterThan(game.sim.time);
+
+    const hp = enemy.hp;
+    advance(game, 2.0); // the benched hero's eidolons keep attacking on their own
+    expect(enemy.hp).toBeLessThan(hp);
   });
 
   it('an offField-flagged channel keeps ticking while its caster is benched (§8.2)', () => {
@@ -515,5 +539,223 @@ describe('gameplay overhaul: locomotion and discovery', () => {
     game.sim.resonanceEnabled = true;
     applyDamage(game.sim, hero, shielded, 40, 'magical', { element: 'cryo' });
     expect(shielded.elementalShield!.hp).toBeLessThan(shieldBefore - 36);
+  });
+});
+
+// ============================================================
+// SWAP_COMBAT_OVERHAUL S4 item tag lines, §3.3 aim cursor, §9 next-link + dull
+// beat, and the under-tested acceptance corners (Resonance-off remove-on-swap,
+// bench-time gauge rearm, WD's off-field Death Ward channel).
+// ============================================================
+
+interface PartyEntry { id: string; items?: string[]; hpPct?: number }
+
+function partySave(entries: PartyEntry[]): GameSave {
+  const [first, ...rest] = entries;
+  const save = newGameSave(first.id);
+  const equip = (roster: GameSave['roster'][number], items?: string[]) =>
+    items?.forEach((id, i) => { roster.items[i] = { id }; });
+  equip(save.roster[0], first.items);
+  if (first.hpPct !== undefined) save.roster[0].hpPct = first.hpPct;
+  for (const e of rest) {
+    const r = newGameSave(e.id).roster[0];
+    equip(r, e.items);
+    if (e.hpPct !== undefined) r.hpPct = e.hpPct;
+    save.recruited.push(e.id);
+    save.party.push(e.id);
+    save.roster.push(r);
+  }
+  return save;
+}
+
+function enemyAt(game: Game, x: number, y: number): Unit {
+  const e = game.sim.spawnCreep(REG.creep('kobold'), { team: 1, pos: { x, y } });
+  e.ctrl = { kind: 'none' };
+  return e;
+}
+
+describe('swap overhaul S4: item-granted tag lines', () => {
+  it('Mekansm adds a tag-in team heal to a boon that has none (Earthshaker)', () => {
+    const game = Game.headless(partySave([{ id: 'juggernaut' }, { id: 'earthshaker', items: ['mekansm'], hpPct: 0.5 }]));
+    game.activeUnit()!.lastEnemyDamageAt = game.sim.time;
+    enemyAt(game, game.activeUnit()!.pos.x + 120, game.activeUnit()!.pos.y);
+
+    expect(game.trySwap(1)).toBe(true);
+    const es = game.activeUnit()!;
+    expect(es.hp / es.stats.maxHp).toBeGreaterThan(0.5); // the item heal fired; Earthshaker's own boon heals nothing
+  });
+
+  it('Force Staff grants a Gather crumb (shoves the nearest foe) on tag-in', () => {
+    const game = Game.headless(partySave([{ id: 'juggernaut' }, { id: 'sniper', items: ['force-staff'] }]));
+    const active = game.activeUnit()!;
+    active.lastEnemyDamageAt = game.sim.time;
+    const enemy = enemyAt(game, active.pos.x + 120, active.pos.y);
+
+    expect(game.trySwap(1)).toBe(true);
+    expect(enemy.forced.length).toBeGreaterThan(0); // Sniper's Onslaught never displaces — the staff did
+  });
+
+  it('Echo Conduit leaves an extra lingering field on a Soak tag', () => {
+    const zonesAfterSwap = (items: string[]): number => {
+      const game = Game.headless(partySave([{ id: 'juggernaut' }, { id: 'morphling', items }]));
+      const active = game.activeUnit()!;
+      active.lastEnemyDamageAt = game.sim.time;
+      enemyAt(game, active.pos.x + 120, active.pos.y);
+      game.setResonanceEnabled(true);
+      expect(game.trySwap(1)).toBe(true);
+      return game.sim.zones.length;
+    };
+    expect(zonesAfterSwap(['echo-conduit'])).toBeGreaterThan(zonesAfterSwap([]));
+  });
+
+  it('Vanguard Sigil grants a Bulwark tag-in (self DR) only when the boon fires', () => {
+    const drFromSwap = (inCombat: boolean): number => {
+      const game = Game.headless(partySave([{ id: 'juggernaut' }, { id: 'earthshaker', items: ['vanguard-sigil'] }]));
+      if (inCombat) game.activeUnit()!.lastEnemyDamageAt = game.sim.time;
+      expect(game.trySwap(1)).toBe(true);
+      return game.activeUnit()!.stats.damageTakenReductionPct;
+    };
+    // out of combat the boon does not fire (only the passive +6 DR applies); in combat the
+    // Bulwark tag-in stacks its +14 on top.
+    expect(drFromSwap(true)).toBeGreaterThan(drFromSwap(false));
+  });
+});
+
+describe('swap overhaul §3.3: aim-cursor tag-ins', () => {
+  it('an aim boon (Invoker sunstrike) resolves at the aimed point, not the arrival', () => {
+    const game = Game.headless(partySave([{ id: 'juggernaut' }, { id: 'invoker' }]));
+    const active = game.activeUnit()!;
+    active.lastEnemyDamageAt = game.sim.time;
+    const near = enemyAt(game, active.pos.x + 120, active.pos.y);     // by the arrival point
+    const far = enemyAt(game, active.pos.x + 800, active.pos.y);       // by the aimed point
+
+    expect(game.swapNeedsAim(1)).toBe(true);
+    expect(game.trySwap(1, { aimPoint: { x: far.pos.x, y: far.pos.y } })).toBe(true);
+
+    expect(far.hp).toBeLessThan(far.stats.maxHp);  // the sunstrike landed where it was aimed
+    expect(near.hp).toBe(near.stats.maxHp);        // and not back at the arrival point
+  });
+
+  it('swapNeedsAim is false for a non-aim boon and when the gauge is down', () => {
+    const game = Game.headless(partySave([{ id: 'juggernaut' }, { id: 'earthshaker' }, { id: 'invoker' }]));
+    game.activeUnit()!.lastEnemyDamageAt = game.sim.time;
+    expect(game.swapNeedsAim(1)).toBe(false);        // Earthshaker has no aim flag
+    expect(game.swapNeedsAim(2)).toBe(true);         // Invoker does
+    game.party[2].tagGaugeReadyAt = game.sim.time + 5;
+    expect(game.swapNeedsAim(2)).toBe(false);        // gauge down → aiming is pointless, just swap
+  });
+});
+
+describe('swap overhaul §9: next-link hint and the dull beat', () => {
+  it('the readout suggests the highest team-value ready benched hero', () => {
+    const game = Game.headless(partySave([{ id: 'juggernaut' }, { id: 'sniper' }, { id: 'omniknight' }]));
+    game.activeUnit()!.lastEnemyDamageAt = game.sim.time;
+    const link = game.combatReadout().nextLink;
+    expect(link?.heroId).toBe('omniknight'); // a team heal out-values Sniper's selfish crumb
+  });
+
+  it('a gauge-down swap in combat emits the dull swap-flat beat; a ready swap does not', () => {
+    const game = Game.headless(partySave([{ id: 'juggernaut' }, { id: 'earthshaker' }]));
+    game.sim.events.captureAll = true;
+    const active = game.activeUnit()!;
+    active.lastEnemyDamageAt = game.sim.time;
+    enemyAt(game, active.pos.x + 120, active.pos.y);
+    game.party[1].tagGaugeReadyAt = game.sim.time + 30; // gauge down
+
+    expect(game.trySwap(1)).toBe(true);
+    expect(game.sim.events.history.some((e) => e.t === 'swap-flat')).toBe(true);
+    expect(game.sim.events.history.some((e) => e.t === 'tag-boon')).toBe(false);
+  });
+});
+
+describe('swap overhaul acceptance corners', () => {
+  it('with Resonance OFF, a mid-combat swap removes the benched hero (no off-field)', () => {
+    const game = Game.headless(partySave([{ id: 'natures-prophet' }, { id: 'juggernaut' }]));
+    game.setResonanceEnabled(false);
+    const active = game.activeUnit()!;
+    active.lastEnemyDamageAt = game.sim.time;
+    enemyAt(game, active.pos.x + 120, active.pos.y);
+
+    expect(game.trySwap(1)).toBe(true);
+    expect(game.party[0].unit).toBeNull();               // removed, not benched
+  });
+
+  it('a benched hero re-arms its Tag Gauge in real time while you play another', () => {
+    const game = Game.headless(partySave([{ id: 'juggernaut' }, { id: 'earthshaker' }]));
+    const active = game.activeUnit()!;
+    active.lastEnemyDamageAt = game.sim.time;
+    enemyAt(game, active.pos.x + 120, active.pos.y);
+
+    expect(game.trySwap(1)).toBe(true);                  // Earthshaker tags in, gauge goes on cooldown
+    expect(game.party[1].tagGaugeReadyAt).toBeGreaterThan(game.sim.time);
+
+    advance(game, TUNING.resonanceSwapFloorSec + 0.1);
+    expect(game.trySwap(0)).toBe(true);                  // back to Juggernaut; Earthshaker is benched
+
+    advance(game, REG.hero('earthshaker').tagBoon!.gaugeSec + 0.5);
+    expect(game.party[1].tagGaugeReadyAt).toBeLessThanOrEqual(game.sim.time); // re-armed on the bench
+  });
+
+  it("Witch Doctor's Death Ward keeps channelling off-field after a swap-out (§8.2)", () => {
+    const game = Game.headless(partySave([{ id: 'witch-doctor' }, { id: 'juggernaut' }]));
+    const wd = game.activeUnit()!;
+    wd.lastEnemyDamageAt = game.sim.time;
+    wd.mana = wd.stats.maxMana;
+    const slot = wd.abilities.findIndex((a) => a.def.id === 'wd-death-ward');
+    wd.abilities[slot].level = 1;
+    const enemy = enemyAt(game, wd.pos.x + 200, wd.pos.y);
+
+    game.sim.order(wd.uid, { kind: 'cast', slot, uid: enemy.uid });
+    advance(game, 0.4); // through the cast point — the ward is channelling
+    expect(wd.channel).not.toBeNull();
+    const hpAtSwap = enemy.hp;
+
+    expect(game.trySwap(1)).toBe(true);
+    game.update(0);
+    const benched = game.party[0].unit!;
+    expect(benched.offFieldUntil).toBeGreaterThan(game.sim.time);
+    expect(benched.channel).not.toBeNull();              // the ward survived the swap-out
+
+    advance(game, 1.0);
+    expect(enemy.hp).toBeLessThan(hpAtSwap);             // it keeps damaging while WD is benched
+  });
+});
+
+describe('swap overhaul §2.3: the opt-in charge meter', () => {
+  it('is off by default and reports no charge state', () => {
+    const game = Game.headless(newGameSave('juggernaut'));
+    expect(game.settings.swapCharges ?? false).toBe(false);
+    expect(game.swapChargeState()).toBeNull();
+  });
+
+  it('lets you swap twice with no floor, then blocks until a charge refills', () => {
+    const game = Game.headless(partySave([{ id: 'juggernaut' }, { id: 'earthshaker' }, { id: 'sven' }]));
+    game.setSwapChargesEnabled(true);
+    expect(game.swapChargeState()?.current).toBeCloseTo(2);
+
+    expect(game.trySwap(1)).toBe(true);                  // 2 -> 1
+    expect(game.trySwap(2)).toBe(true);                  // 1 -> 0, no floor wait between them
+    expect(Math.floor(game.swapChargeState()!.current)).toBe(0);
+    expect(game.trySwap(0)).toBe(false);                 // out of charges
+
+    advance(game, TUNING.resonanceSwapChargeRefillSec + 0.2); // a charge refills (Resonance default)
+    expect(game.swapChargeState()!.current).toBeGreaterThanOrEqual(1);
+    expect(game.trySwap(0)).toBe(true);                  // re-armed
+  });
+
+  it('with the meter off, the swap floor still blocks a second immediate swap', () => {
+    const game = Game.headless(partySave([{ id: 'juggernaut' }, { id: 'earthshaker' }, { id: 'sven' }]));
+    expect(game.settings.swapCharges ?? false).toBe(false);
+    expect(game.trySwap(1)).toBe(true);
+    expect(game.trySwap(2)).toBe(false);                 // floored — this is the default behaviour
+  });
+
+  it('persists the setting through a save round-trip', () => {
+    const game = Game.headless(newGameSave('juggernaut'));
+    game.setSwapChargesEnabled(true);
+    const save = game.buildSave();
+    expect(save.settings.swapCharges).toBe(true);
+    expect(Game.validateSave(save)).toBe(true);
+    expect(Game.headless(save).settings.swapCharges).toBe(true);
   });
 });

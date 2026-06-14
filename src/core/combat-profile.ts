@@ -1,5 +1,6 @@
 import { TUNING } from '../data/tuning';
 import { REG } from './registry';
+import type { ItemArchetype } from './item-archetype';
 import type { Attribute } from './types';
 import type { Unit } from './unit';
 
@@ -34,12 +35,18 @@ export interface ProfileWeights {
   focusFollow: number;  // how strongly it converges on the team focus
 }
 
+export interface ItemPlaybook {
+  reach: ItemArchetype[];
+  aimAt?: CombatRole;
+}
+
 export interface CombatProfile {
   role: CombatRole;
   posture: Posture;
   ranged: boolean;
   attribute: Attribute;
   weights: ProfileWeights;
+  playbook: ItemPlaybook;
   kiteDistance: number; // 0 means it does not kite
   retreatHpPct: number; // hp fraction below which survival actions are preferred
 }
@@ -143,9 +150,21 @@ function derive(u: Unit): CombatProfile {
     ranged,
     attribute: u.attribute,
     weights: w,
+    playbook: deriveItemPlaybook(role, u.attribute),
     kiteDistance,
     retreatHpPct
   };
+}
+
+function deriveItemPlaybook(role: CombatRole, attribute: Attribute): ItemPlaybook {
+  const base = ROLE_ITEM_PLAYBOOK[role] ?? ROLE_ITEM_PLAYBOOK.generalist;
+  const reach = [...base.reach];
+
+  if (attribute === 'str') include(reach, 'field', 'sustain');
+  else if (attribute === 'agi') include(reach, 'escape', 'immunity');
+  else if (attribute === 'int') include(reach, 'amplify', 'nuke');
+
+  return { reach, aimAt: base.aimAt };
 }
 
 /** Dominant combat role from a hero's tags (most behavior-defining wins). Exported so
@@ -167,6 +186,24 @@ function pickPosture(roles: string[], ranged: boolean, longRanged: boolean, attr
   if (!ranged) return 'frontline';                              // melee fights in front
   if (longRanged || roles.includes('nuker') || attribute === 'int') return 'backline';
   return 'midline';                                             // ranged agi carries hold the midline
+}
+
+const ROLE_ITEM_PLAYBOOK: Record<CombatRole, ItemPlaybook> = {
+  initiator: { reach: ['initiation', 'lockdown', 'immunity'], aimAt: 'carry' },
+  nuker: { reach: ['amplify', 'nuke', 'lockdown'], aimAt: 'carry' },
+  disabler: { reach: ['lockdown', 'amplify'], aimAt: 'carry' },
+  carry: { reach: ['immunity', 'sustain', 'escape'], aimAt: 'support' },
+  support: { reach: ['save', 'sustain', 'cleanse', 'lockdown'], aimAt: 'carry' },
+  durable: { reach: ['field', 'sustain', 'immunity', 'lockdown'], aimAt: 'nuker' },
+  pusher: { reach: ['nuke', 'field'], aimAt: 'support' },
+  escape: { reach: ['escape', 'lockdown', 'save'], aimAt: 'carry' },
+  generalist: { reach: ['lockdown', 'nuke', 'save', 'sustain'] }
+};
+
+function include(reach: ItemArchetype[], ...items: ItemArchetype[]): void {
+  for (const item of items) {
+    if (!reach.includes(item)) reach.push(item);
+  }
 }
 
 function clamp(v: number, lo: number, hi: number): number {

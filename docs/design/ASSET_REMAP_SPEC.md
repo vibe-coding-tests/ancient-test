@@ -45,7 +45,7 @@ download because a generated mesh tends to read more abstract than authored art.
 | `creeps/{flier,bear,treant,scorpion,centaur,gnoll,owlbear,energy,abomination,fishman}.glb` | 10 | `generate_creature_families.mjs` | Animated creature/body families for missing species and cohort fixes (`fishman` added Phase 6 for `slardar`/`slark`); still candidates for authored downloads later |
 | `heroes/{gyrocopter,hoodwink,snapfire,tusk}.glb` | 4 | `generate_creature_families.mjs` | Animated generated bespoke bodies that replaced static/generic stand-ins |
 | `holdouts/{...}.glb` + `holdouts/replacements/{...}.glb` | 8 | `generate_holdout_signatures.mjs` | The four truly abstract heroes (`io`, `enigma`, `morphling`, `ancient-apparition`) keep generated signature + replacement GLBs |
-| `weapons/heroes/<id>.glb` | 71 | `generate_hero_weapons.mjs` | One generated weapon per remaining humanoid KayKit hero; fine as a floor |
+| `weapons/heroes/<id>.glb` | 65 | `generate_hero_weapons.mjs` | One generated weapon per remaining humanoid KayKit hero; fine as a floor |
 | `weapons/items/<id>.glb` | 13 | `generate_item_weapons.mjs` | Marquee artifact weapons; Phase 5 silhouette polish landed, see §5 |
 
 Everything else (heroes, creeps, towns, ambient) is CC0/CC-BY art, not custom.
@@ -57,10 +57,10 @@ Everything else (heroes, creeps, towns, ambient) is CC0/CC-BY art, not custom.
 Recruit NPCs are not a separate art set: they render the hero they become through
 `Unit.renderHeroId`, so every NPC verdict equals its hero verdict.
 
-### 2.1 Humanoid cohorts (71) — KayKit, retexture-only
+### 2.1 Humanoid cohorts (65) — KayKit, retexture-only
 
-Four base bodies serve the remaining 71 humanoid-cohort heroes: Knight (15), Mage
-(25), Barbarian (13), Rogue (18). The clearest non-humanoid misses have moved to
+Four base bodies serve the remaining 65 humanoid-cohort heroes: Knight (13), Mage
+(23), Barbarian (12), Rogue (17). The clearest non-humanoid misses have moved to
 animated creature/generated bases.
 Within a cohort, differentiation is palette + the generated hand weapon **+ a per-hero
 additive silhouette kit** (`heroSilhouetteKit` + `applyAuthoredSilhouette` in
@@ -85,29 +85,36 @@ table below records the members whose *base* fought their cohort and were remapp
 > proportions gives each hero its own read without shipping 65 crude generated bodies.
 > Strongly non-humanoid heroes still remap onto animated creature/generated bases.
 
-### 2.2 Creature-base heroes (31) — shared Quaternius creep GLBs
+### 2.2 Creature-base heroes (53 base assignments) — shared creep GLBs
 
-These reuse a vendored creep GLB as the hero body (`heroBaseUrl` → `/assets/creeps/`).
+These reuse a vendored, downloaded, or generated creep GLB as the hero body
+(`heroBaseUrl` → `/assets/creeps/`). Bespoke heroes still keep these rows as animated
+fallbacks behind their generated full-body overrides.
 
 | Base GLB | Heroes | Verdict |
 |---|---|---|
-| `spider` | broodmother, weaver, nyx-assassin, sand-king | ✅ broodmother. ◑ weaver/nyx (insectoid), sand-king (scorpion read as spider) |
-| `dragonevolved` | jakiro, viper, puck | ◑ jakiro loses its twin head; viper good; puck should read smaller/whimsical |
-| `demon` | doom, shadow-demon, shadow-fiend, night-stalker, terrorblade, visage | ✅ doom/shadow-fiend/terrorblade. ◑ night-stalker, visage (gargoyle) |
+| `spider` | broodmother, weaver, nyx-assassin | ✅ broodmother. ◑ weaver/nyx as insectoid stand-ins |
+| `scorpion` | sand-king | ✅ generated scorpion restores pincers + arched stinger |
+| `dragonevolved` | jakiro, viper, puck, winter-wyvern | ◑ jakiro loses its twin head; viper and winter-wyvern read well; puck stays stylized |
+| `demon` | doom, shadow-demon, shadow-fiend, night-stalker, terrorblade, visage, bane, leshrac | ✅ horned/fiendish family; visage remains a gargoyle-like stretch |
 | `wolf` | lycan | ✅ werewolf |
 | `giant` | primal-beast | ◑ humanoid giant for an ape-beast; acceptable |
 | `golelingevolved` | tiny, elder-titan, earth-spirit | ✅ tiny. ◑ elder-titan, earth-spirit |
-| `goblin` | techies, tinker, clockwerk, timbersaw, gyrocopter fallback | ✅ techies/tinker (keen inventors); clockwerk/timbersaw read closer as mech goblins than knights; gyrocopter has a live generated bespoke body |
-| `velociraptor` | venomancer | ◑ raptor-as-reptile, acceptable |
-| `bull` | spirit-breaker, centaur-warrunner | ✅ spirit-breaker. ⚠ centaur-warrunner (bull ≠ horse-torso; wants a real centaur) |
+| `goblin` | techies, gyrocopter fallback, tinker, clockwerk, timbersaw, meepo | ✅ small tinkerer/ratty humanoid family; gyrocopter has a live generated bespoke body |
+| `velociraptor` | venomancer, snapfire fallback | ◑ raptor-as-reptile, acceptable; snapfire has a generated mount+rider body |
+| `bull` | spirit-breaker | ✅ horned charger |
+| `centaur` | centaur-warrunner | ✅ generated horse-torso centaur body |
+| `energy` | arc-warden, outworld-destroyer, razor | ✅ generated animated energy construct |
+| `abomination` | pudge, undying, alchemist | ✅ generated bloated/brute body; alchemist reads through his ogre mount |
+| `fishman` | slardar, slark | ✅ generated bipedal fish-man family |
 | `crab` (`crabenemy.glb`) | tidehunter | ◑ aquatic read for a kraken/leviathan |
-| `bear` | ursa | ✅ |
-| `treant` | treant-protector | ✅ |
-| `ghost` | spectre | ✅ |
+| `bear` | ursa, lone-druid | ✅ bear family |
+| `flier` | phoenix, batrider | ✅ animated winged body |
+| `serpent` | naga-siren, medusa | ✅ animated snake/serpent body |
+| `treant` | treant-protector, natures-prophet | ✅ walking tree / forest-avatar family |
+| `ghost` | spectre, death-prophet, necrophos | ✅ spectral and floating reaper family |
 | `fox` | hoodwink fallback | ✅ animated fallback if the generated bespoke squirrel fails; `fox.glb` also backs ambient life |
 | `yeti` | tusk fallback | ✅ animated fallback if the generated bespoke walrus fails |
-| `energy` | arc-warden, outworld-destroyer, razor | ✅ generated animated energy construct for the strongest elemental/cohort misses |
-| `abomination` | pudge, undying | ✅ generated animated bloated undead/brute body |
 
 ### 2.3 Bespoke generated/downloaded bodies — override the shared base
 
@@ -135,7 +142,9 @@ source forms are genuinely abstract. Former holdouts now ride better animated ba
 ## 3. Creeps & summons
 
 Resolved by `creepCreatureUrl(creepId, build)`: specific id wins, else the
-silhouette `build` picks an archetype. All 24 creep GLBs are referenced.
+silhouette `build` picks an archetype. The current manifest ships 32 creep GLBs;
+combat mappings use the families below, while ambient and fallback files stay
+available for scenery or hero fallback.
 
 ### 3.1 Explicit id mappings (`CREATURE_BY_ID`)
 
@@ -173,7 +182,7 @@ silhouette `build` picks an archetype. All 24 creep GLBs are referenced.
 | `brute` | `orc` | ✅ |
 | `golem` | `golelingevolved` | ✅ |
 | `quad` | `wolf` | ✅ |
-| `bird` | `velociraptor` | ⚠ grounded raptor for "bird"; `flier.glb` reads airborne and may fit better |
+| `bird` | `flier` | ✅ airborne fallback |
 | `blob` | `glubevolved` | ✅ |
 
 ---

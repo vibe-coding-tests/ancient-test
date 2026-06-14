@@ -1,5 +1,31 @@
-import type { DropSource, ItemDef, ItemRarity, ItemTier } from '../../core/types';
+import type { DropSource, EffectNode, ItemDef, ItemRarity, ItemTier } from '../../core/types';
 import { GEM_DEFS, type GemGrade } from '../gems';
+
+// SWAP_COMBAT_OVERHAUL §7 — item tag-in lines, in the same EffectNode vocabulary
+// the hero boons use. Support gear hands power to the team on arrival; carry gear
+// gets a small selfish crumb or nothing. These ride the hero's Tag Gauge (they
+// fire only when the hero boon fires) and scale with tagBoonAmp/chain.
+const TAG_R = 300;
+const TAG_NEAR = 230;
+const teamHealTag = (pct: number): EffectNode => ({ kind: 'heal', amount: pct, pctMaxHp: true, target: 'allies-in-radius', radius: TAG_R });
+const teamModTag = (mods: Record<string, number>, duration = 3): EffectNode => ({ kind: 'statmod', mods, duration, target: 'allies-in-radius', radius: TAG_R });
+const selfModTag = (mods: Record<string, number>, duration = 3): EffectNode => ({ kind: 'statmod', mods, duration, target: 'self' });
+const purgeAlliesTag = (): EffectNode => ({ kind: 'purge', target: 'allies-in-radius' });
+const manaTeamTag = (amount: number): EffectNode => ({ kind: 'mana', op: 'restore', amount, target: 'allies-in-radius', radius: TAG_R });
+const shoveNearestTag = (): EffectNode => ({ kind: 'displace', mode: 'knockback', target: 'random-enemy-in-radius', radius: TAG_NEAR, distance: 250, toward: 'away-from-caster' });
+// Echo Conduit (§7): a Soak tag leaves a lingering element field. The zone tick
+// re-applies the boon element (the ctx carries it), so the soak stays on the ground.
+const echoSoakField = (): EffectNode => ({
+  kind: 'zone',
+  at: 'self',
+  zone: {
+    shape: 'circle',
+    radius: 240,
+    duration: 4,
+    tick: { interval: 1, affects: 'enemies', effects: [{ kind: 'damage', dtype: 'magical', amount: 6, target: 'target' }] },
+    auraMods: { affects: 'enemies', mods: { moveSpeedPct: -14 } }
+  }
+});
 
 // ============================================================
 // Phase 1 item catalog: consumables, components, and 15+
@@ -363,6 +389,7 @@ export const ASSEMBLED: ItemDef[] = [
     id: 'mask-of-madness', name: 'Mask of Madness', tier: 't1', cost: 1900,
     components: ['morbid-mask', 'quarterstaff'], recipeCost: 125,
     passiveMods: { damage: 10, lifestealPct: 20 },
+    tagBoon: { effects: [selfModTag({ damagePct: 6 })], tooltip: 'TAG-IN: self +6% damage 3s' },
     lore: 'It screams advice. The advice is always attack.',
     glyph: 'mask',
     active: {
@@ -448,6 +475,7 @@ export const ASSEMBLED: ItemDef[] = [
     id: 'force-staff', name: 'Force Staff', tier: 't1', cost: 2200,
     components: ['staff-of-wizardry', 'ring-of-regen'], recipeCost: 1025,
     passiveMods: { int: 10, hpRegen: 4 },
+    tagBoon: { effects: [shoveNearestTag()], tooltip: 'TAG-IN: shove the nearest foe (a free Gather crumb)' },
     lore: 'It pushes. Friend, foe, self \u2014 physics does not take sides.',
     glyph: 'staff',
     appearance: { parts: ['boot-trail', 'cloak'], tint: '#9fd0ec' },
@@ -468,6 +496,7 @@ export const ASSEMBLED: ItemDef[] = [
     id: 'glimmer-cape', name: 'Glimmer Cape', tier: 't1', cost: 1950,
     components: ['cloak', 'shadow-amulet'], recipeCost: 400,
     passiveMods: { magicResistPct: 20 },
+    tagBoon: { effects: [teamModTag({ magicResistPct: 15 }, 3)], tooltip: 'TAG-IN: nearby allies +15% magic resist 3s' },
     lore: 'Woven from dusk. Wrap a friend in it and watch them stop existing.',
     glyph: 'cloak',
     appearance: { parts: ['cloak'], tint: '#b89fff', aura: { archetype: 'shield', color: '#b89fff', color2: '#4a3a78' } },
@@ -492,6 +521,7 @@ export const ASSEMBLED: ItemDef[] = [
     components: ['chainmail', 'ring-of-regen', 'ring-of-regen'], recipeCost: 975,
     passiveMods: { armor: 5, hpRegen: 6.5 },
     aura: { radius: 1200, affects: 'allies', mods: { hpRegen: 3.5 } },
+    tagBoon: { effects: [teamHealTag(8)], tooltip: 'TAG-IN: heal nearby allies 8%' },
     lore: 'A whirring heart of brass that believes in the whole party.',
     glyph: 'gear',
     appearance: { parts: ['heart-core'], tint: '#7dffb5', aura: { archetype: 'ground-aoe', color: '#7dffb5', color2: '#e7d9a8' } },
@@ -511,6 +541,7 @@ export const ASSEMBLED: ItemDef[] = [
     components: ['broadsword', 'claymore', 'quarterstaff'], recipeCost: 750,
     passiveMods: { damage: 50, hpRegen: 9, manaRegen: 4 },
     attackMod: { cleave: { pct: 60, radius: 600 } },
+    tagBoon: { effects: [selfModTag({ damagePct: 6 })], tooltip: 'TAG-IN: self +6% damage 3s' },
     lore: 'An axe with opinions about crowds.',
     glyph: 'axe',
     appearance: { weapon: { kind: 'broad-cleaver', color: '#c8cdd8' } },
@@ -521,6 +552,7 @@ export const ASSEMBLED: ItemDef[] = [
     components: ['broadsword', 'blades-of-attack'], recipeCost: 450,
     passiveMods: { damage: 32 },
     attackMod: { critChance: 20, critMult: 160 },
+    tagBoon: { effects: [selfModTag({ damagePct: 6 })], tooltip: 'TAG-IN: self +6% damage 3s' },
     lore: 'A blade of living crystal that sings on the lucky swings.',
     glyph: 'blade',
     appearance: { parts: ['crystal-edge'], tint: '#ffccd8' },
@@ -556,6 +588,7 @@ export const ASSEMBLED: ItemDef[] = [
     components: ['mithril-hammer', 'gloves-of-haste'], recipeCost: 900,
     passiveMods: { damage: 24, attackSpeed: 20 },
     attackMod: { procChance: 30, procDamage: 140 },
+    tagBoon: { effects: [selfModTag({ damagePct: 6 })], tooltip: 'TAG-IN: self +6% damage 3s' },
     lore: 'A hammer with a storm trapped in the head. It leaks.',
     glyph: 'hammer',
     appearance: { weapon: { kind: 'storm-haft', color: '#7ddcff', emissive: '#244b7a' }, aura: { archetype: 'storm', color: '#7ddcff', color2: '#ffffff' } },
@@ -568,6 +601,7 @@ export const ASSEMBLED: ItemDef[] = [
     passiveMods: { str: 4, agi: 4, int: 4 },
     aura: { radius: 1200, affects: 'allies', mods: { moveSpeed: 20 } },
     charges: 4,
+    tagBoon: { effects: [teamModTag({ attackSpeed: 15 }, 3)], tooltip: 'TAG-IN: nearby allies +attack speed 3s' },
     lore: 'Its beat keeps tired legs honest.',
     glyph: 'drum',
     active: {
@@ -587,6 +621,7 @@ export const ASSEMBLED: ItemDef[] = [
     components: ['ring-of-regen', 'sages-mask', 'blades-of-attack'], recipeCost: 1375,
     passiveMods: { hpRegen: 3.5, manaRegen: 2 },
     aura: { radius: 1200, affects: 'allies', mods: { lifestealPct: 15, damagePct: 12, armor: 3 } },
+    tagBoon: { effects: [teamModTag({ lifestealPct: 8, damagePct: 8 }, 4)], tooltip: 'TAG-IN: nearby allies +8% lifesteal & damage 4s' },
     lore: 'A fanged chalice that tithes every wound.',
     glyph: 'fang',
     appearance: { parts: ['heart-core'], tint: '#b01818', aura: { archetype: 'shield', color: '#b01818', color2: '#ffb08a' } }
@@ -613,6 +648,7 @@ export const ASSEMBLED: ItemDef[] = [
     id: 'butterfly', name: 'Butterfly', tier: 't4', cost: 5375,
     components: ['eaglesong', 'quarterstaff', 'quarterstaff'], recipeCost: 825,
     passiveMods: { agi: 35, damage: 25, attackSpeed: 35, evasionPct: 35 },
+    tagBoon: { effects: [selfModTag({ damagePct: 8 })], tooltip: 'TAG-IN: self +8% damage 3s' },
     lore: 'The blade misses because you have already left.',
     glyph: 'wing',
     appearance: { parts: ['wing-blades'], tint: '#c8ffd8' },
@@ -753,6 +789,7 @@ export const EXTENDED_COMPONENTS: ItemDef[] = [
     components: ['ring-of-regen'], recipeCost: 250,
     passiveMods: { hpRegen: 3.5 },
     aura: { radius: 1200, affects: 'allies', mods: { hpRegen: 3 } },
+    tagBoon: { effects: [teamHealTag(3)], tooltip: 'TAG-IN: heal nearby allies 3%' },
     lore: 'A little team medicine stitched into a circlet.', glyph: 'helm'
   },
   {
@@ -760,6 +797,7 @@ export const EXTENDED_COMPONENTS: ItemDef[] = [
     components: ['ring-of-protection'], recipeCost: 250,
     passiveMods: { armor: 1 },
     aura: { radius: 1200, affects: 'allies', mods: { armor: 2 } },
+    tagBoon: { effects: [teamModTag({ armor: 3 }, 3)], tooltip: 'TAG-IN: nearby allies +3 armor 3s' },
     lore: 'Small shield, wide confidence.', glyph: 'shield'
   },
   {
@@ -767,6 +805,7 @@ export const EXTENDED_COMPONENTS: ItemDef[] = [
     components: ['sages-mask', 'ring-of-protection'], recipeCost: 75,
     passiveMods: { manaRegen: 2, armor: 1 },
     aura: { radius: 1200, affects: 'allies', mods: { manaRegen: 1.5 } },
+    tagBoon: { effects: [manaTeamTag(60)], tooltip: 'TAG-IN: restore nearby allies\u2019 mana' },
     lore: 'A modest aura for lanes that plan to last.', glyph: 'ring'
   }
 ];
@@ -798,8 +837,9 @@ export const EXTENDED_ASSEMBLED: ItemDef[] = [
     id: 'vanguard-sigil', name: 'Vanguard Sigil', tier: 't1', cost: 1825,
     components: ['quickstep-cord', 'chainmail', 'ring-of-protection'], recipeCost: 750,
     passiveMods: { tagBoonAmpPct: 12, armor: 4, damageTakenReductionPct: 6 },
+    tagBoon: { effects: [selfModTag({ damageTakenReductionPct: 14 }, 3)], tooltip: 'TAG-IN: shielded arrival \u2014 self +14% DR 3s (a Bulwark for heroes without one)' },
     lore: 'A front-line seal that turns a tag-in into a shielded arrival.', glyph: 'shield',
-    description: 'Amplifies tag boons while adding durable front-line stats.',
+    description: 'Grants a Bulwark tag-in (shielded arrival) and amplifies tag boons.',
     appearance: { parts: ['shield'], tint: '#9fb4d8' }
   },
   {
@@ -822,8 +862,9 @@ export const EXTENDED_ASSEMBLED: ItemDef[] = [
     id: 'echo-conduit', name: 'Echo Conduit', tier: 't2', cost: 3350,
     components: ['resonance-catalyst', 'quickstep-cord'], recipeCost: 900,
     passiveMods: { reactionAmpPct: 35, elementalGaugeSec: 1.5, tagBoonAmpPct: 10, spellAmpPct: 8 },
+    tagBoon: { onArchetype: { Soak: [echoSoakField()] }, tooltip: 'TAG-IN: your Soak tag leaves a lingering element field' },
     lore: 'A resonant loop that leaves the element ringing after the swap.', glyph: 'orb',
-    description: 'Boosts reactions and tag boon magnitude for Resonance teams.',
+    description: 'Soak tags leave a lingering element field; boosts reactions and tag boon magnitude.',
     appearance: { parts: ['mana-orb'], tint: '#8ee8ff', aura: { archetype: 'dome', color: '#8ee8ff', color2: '#ffffff' } }
   },
   {
@@ -878,6 +919,7 @@ export const EXTENDED_ASSEMBLED: ItemDef[] = [
     components: ['arcane-boots', 'mekansm', 'headdress'], recipeCost: 1450,
     passiveMods: { moveSpeed: 45, maxMana: 250, armor: 5, hpRegen: 7 },
     aura: { radius: 1200, affects: 'allies', mods: { hpRegen: 4.5, armor: 3 } },
+    tagBoon: { effects: [purgeAlliesTag(), teamHealTag(6)], tooltip: 'TAG-IN: cleanse a debuff off nearby allies + heal 6%' },
     lore: 'A full-party reset strapped to a pair of boots.', glyph: 'boot',
     active: {
       id: 'guardian-greaves-active', name: 'Mend', targeting: 'no-target', castPoint: 0, cooldown: [65], manaCost: [100],
@@ -914,6 +956,7 @@ export const EXTENDED_ASSEMBLED: ItemDef[] = [
     components: ['hood-of-defiance', 'headdress'], recipeCost: 1350,
     passiveMods: { hpRegen: 11, magicResistPct: 25 },
     aura: { radius: 1200, affects: 'allies', mods: { magicResistPct: 10, hpRegen: 3 } },
+    tagBoon: { effects: [teamModTag({ magicResistPct: 12, damageTakenReductionPct: 8 }, 3)], tooltip: 'TAG-IN: nearby allies +magic shield 3s' },
     lore: 'The team breathes in, and the next spell breaks softer.', glyph: 'pipe',
     appearance: { parts: ['pauldrons'], tint: '#8ee8ff', aura: { archetype: 'shield', color: '#8ee8ff', color2: '#ffffff' } },
     active: {

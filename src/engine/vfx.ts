@@ -450,6 +450,13 @@ export class VfxManager {
         }
         break;
       }
+      case 'swap-flat': {
+        // §9: a faint, colorless puff for a gauge-down reposition swap — the dull
+        // counterpart to the tag-boon arrival beat.
+        const p = unitPos(ev.uid);
+        if (p) this.burst(p.x, p.y, '#9aa6b2', 0.5, 0.18, '#c8d0d8', 'soft');
+        break;
+      }
       case 'immune-block': {
         const p = unitPos(ev.uid);
         if (p) this.burst(p.x, p.y, '#ffffff', 0.65, 0.22, '#7adf6a');

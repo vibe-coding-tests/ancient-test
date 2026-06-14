@@ -3260,7 +3260,9 @@ export class Hud {
       r.sharedFocus?.name ?? '',
       r.ultReady.map((u) => u.name).join('+'),
       r.tagChain ? `${r.tagChain.count}:${Math.round(r.tagChain.pct * 12)}:${r.tagChain.ampPct}` : '',
-      `${r.offField.count}:${r.offField.names.join('+')}`
+      `${r.offField.count}:${r.offField.names.join('+')}`,
+      r.nextLink ? `${r.nextLink.slot}:${r.nextLink.heroId}` : '',
+      r.swapCharges ? `sc${Math.floor(r.swapCharges.current)}/${r.swapCharges.max}` : ''
     ].join('|');
     if (key === this.lastCombatReadoutKey) return;
     this.lastCombatReadoutKey = key;
@@ -3288,11 +3290,17 @@ export class Hud {
     const offFieldHtml = r.offField.count
       ? `<div class="off-field-line">Off-field: ${r.offField.names.map(esc).join(', ')}</div>`
       : '';
+    const nextLinkHtml = r.nextLink
+      ? `<div class="next-link-line">${r.tagChain ? 'Chain' : 'Next'} ▸ <kbd>${esc(glyphForAction(this.game.settings, `swap-${r.nextLink.slot + 1}` as InputAction))}</kbd> <span>${esc(r.nextLink.name)}</span> <em>${esc(r.nextLink.archetype)}</em></div>`
+      : '';
+    const swapChargeHtml = r.swapCharges
+      ? `<div class="swap-charge-line">Swap ${Array.from({ length: r.swapCharges.max }, (_, i) => `<i class="${i < Math.floor(r.swapCharges!.current) ? 'on' : ''}"></i>`).join('')}</div>`
+      : '';
 
     this.combatReadout.classList.remove('hidden');
     this.combatReadout.innerHTML = `
       <div class="readout-casts">${castHtml}</div>
-      <div class="readout-status">${threatHtml}${focusHtml}${ultHtml}${tagHtml}${offFieldHtml}</div>`;
+      <div class="readout-status">${threatHtml}${focusHtml}${ultHtml}${tagHtml}${offFieldHtml}${nextLinkHtml}${swapChargeHtml}</div>`;
   }
 
   private renderLiveGym(): void {
@@ -3990,6 +3998,7 @@ export class Hud {
           </label>
           <h3>Options</h3>
           <label class="opt-row"><input type="checkbox" id="opt-resonance" ${g.settings.resonance ? 'checked' : ''}> Resonance mode (micro/raids)</label>
+          <label class="opt-row"><input type="checkbox" id="opt-swap-charges" ${g.settings.swapCharges ? 'checked' : ''}> Swap charges (high-skill: 2 charges, no floor)</label>
           <label class="opt-row"><input type="checkbox" id="opt-mute" ${g.settings.audio.muted ? 'checked' : ''}> Mute all audio</label>
           <label class="opt-row">Master volume <input type="range" id="opt-master-volume" min="0" max="1" step="0.05" value="${g.settings.audio.master}"></label>
           <label class="opt-row">SFX volume <input type="range" id="opt-sfx-volume" min="0" max="1" step="0.05" value="${g.settings.audio.sfx}"></label>
@@ -4131,6 +4140,9 @@ export class Hud {
     });
     this.modal.querySelector('#opt-resonance')?.addEventListener('change', (e) => {
       g.setResonanceEnabled((e.target as HTMLInputElement).checked);
+    });
+    this.modal.querySelector('#opt-swap-charges')?.addEventListener('change', (e) => {
+      g.setSwapChargesEnabled((e.target as HTMLInputElement).checked);
     });
     this.modal.querySelector('#opt-mute')?.addEventListener('change', (e) => {
       g.settings.audio.muted = (e.target as HTMLInputElement).checked;

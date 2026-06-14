@@ -81,6 +81,13 @@ export const TUNING = {
     peelDiveRadius: 520,        // gambit `peel` action: an ally is "dived" if an enemy is this close
     comboWindowSec: 4,          // default combo follow-up window
     comboWeight: 1.25,          // default combo score multiplier
+    combo: {
+      stepDiscount: 0.86,       // each planned setup step discounts the payoff by this much
+      planManaMargin: 0.05,     // plan-level budget may dip this far below the per-cast floor
+      nextStepBonus: 1.35,      // raise the order that advances the active single-unit plan
+      holdPayoffPenalty: 0.42,  // suppress payoff while its setup/amplifier is ready first
+      minScore: 1.05
+    },
     ultHoldDiscount: 0.45,      // AoE-ult discount slope below holdClusterMin (scaled by depth)
     ultHoldFloor: 0.4,          // ult-hold never discounts an ult below this multiplier
     depthRefAiDepth: 0.45,      // baseline (normal-tier) depth for depth-scaled behaviors
@@ -97,6 +104,20 @@ export const TUNING = {
       eulsBase: 0.6, bossEuls: 1.8,
       interruptBonus: 0.8,
       intentEscape: 1.15, bossIntentBias: 1.2
+    },
+    // Role-by-item vocabulary from GAMBIT_AI_OVERHAUL Phase 1. These are only
+    // positive nudges; the underlying save, threat, range, and mana checks still
+    // decide whether an item is worth using.
+    archetypeWeight: {
+      initiator: { initiation: 1.35, lockdown: 1.22, immunity: 1.14, field: 1.06 },
+      nuker: { amplify: 1.35, nuke: 1.25, lockdown: 1.08 },
+      disabler: { lockdown: 1.35, amplify: 1.1 },
+      carry: { immunity: 1.28, sustain: 1.22, escape: 1.18, lockdown: 1.05 },
+      support: { save: 1.35, sustain: 1.25, cleanse: 1.16, lockdown: 1.08 },
+      durable: { field: 1.28, sustain: 1.24, immunity: 1.14, lockdown: 1.1 },
+      pusher: { nuke: 1.25, field: 1.25, initiation: 1.05 },
+      escape: { escape: 1.35, save: 1.12, lockdown: 1.08 },
+      generalist: { initiation: 1, immunity: 1, lockdown: 1, amplify: 1, nuke: 1, save: 1, sustain: 1, escape: 1, field: 1, cleanse: 1 }
     },
     // Item-active leash/heal radii and HP gates (was inline cast-range constants).
     itemRange: {
@@ -256,17 +277,20 @@ export const TUNING = {
   audioVoiceCap: 6,               // pooled voice concurrency cap (perf budget)
 
   // --- hero swap (SPEC §6) ---
-  swapFloorSec: 1.5,
-  swapCooldownSec: 1.5,
+  swapFloorSec: 1.5,          // anti-spam floor on the swap action itself (§2.1)
   swapCdFloorPct: 0.5,        // swapped-in hero cooldowns floored at 50% of remaining
-  resonanceSwapFloorSec: 1.0,
-  resonanceSwapCooldownSec: 1.0,
+  resonanceSwapFloorSec: 1.0, // matches Genshin's hard 1s floor with Resonance on
   resonanceElementGaugeSec: 4,
   tagChainWindowSec: 2.5,
   tagChainAmpPerStepPct: 15,
   tagChainMaxSteps: 3,
   resonanceOffFieldPersistenceSec: 5,
   swapCancelGraceSec: 0.6,    // §8.3: a swap pressed mid cast-point queues until the cast fires (no lost cast)
+  // §2.3 charge-meter (opt-in toggle): replaces the swap floor with a 2-charge meter —
+  // swap twice fast, then wait a charge to refill. A high-skill alternative, off by default.
+  swapChargeMax: 2,
+  swapChargeRefillSec: 4,            // a spent charge refills over this many seconds
+  resonanceSwapChargeRefillSec: 3,  // faster under Resonance, matching the tighter floor
 
   // --- Genshin-overworld locomotion / traversal (GAMEPLAY_OVERHAUL G1/G3) ---
   locomotion: {

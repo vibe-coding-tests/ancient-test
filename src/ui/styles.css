@@ -1289,6 +1289,13 @@ button:disabled { opacity: 0.45; cursor: default; }
 #combat-readout .tag-chain-line i { display: block; height: 4px; margin-top: 2px; border-radius: 3px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
 #combat-readout .tag-chain-line em { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--brass), #fff0a8); }
 #combat-readout .off-field-line { color: #aee9ff; font-size: 11px; }
+#combat-readout .next-link-line { color: #cfe6ff; font-size: 11px; font-weight: 600; }
+#combat-readout .next-link-line kbd { background: rgba(255, 255, 255, 0.12); border-radius: 4px; padding: 0 5px; color: #fff; font-weight: 700; }
+#combat-readout .next-link-line span { color: #fff; font-weight: 700; }
+#combat-readout .next-link-line em { color: #9fb4d8; font-style: normal; font-size: 10px; }
+#combat-readout .swap-charge-line { color: #cfe6ff; font-size: 11px; font-weight: 600; display: flex; gap: 4px; align-items: center; }
+#combat-readout .swap-charge-line i { width: 9px; height: 9px; border-radius: 50%; border: 1px solid rgba(207, 230, 255, 0.5); background: rgba(207, 230, 255, 0.12); }
+#combat-readout .swap-charge-line i.on { background: var(--brass); border-color: var(--brass); }
 
 /* ---------- gambit editor ---------- */
 

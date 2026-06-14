@@ -40,7 +40,31 @@ test.describe('macro sessions (gym & raid)', () => {
     const errors = watchPageErrors(page);
     await boot(page, { hero: 'juggernaut', seed: 52 });
     await clearCinematics(page);
-    await page.evaluate(() => (window as any).__test.fillParty({ level: 30 }));
+    await page.evaluate(() => {
+      const t = (window as any).__test;
+      const g = (window as any).__game;
+      t.fillParty({ heroIds: ['sven', 'sniper', 'lich', 'earthshaker'], level: 30 });
+
+      // Stable raid-clear loadout: mirrors the macro raid unit fixtures instead
+      // of relying on the generic fillParty roster, whose items are intentionally empty.
+      const loadouts: Record<string, string[]> = {
+        'juggernaut': ['black-king-bar', 'battlefury', 'butterfly'],
+        'sven': ['black-king-bar', 'assault-cuirass', 'heart-of-tarrasque'],
+        'sniper': ['dragon-lance', 'maelstrom', 'crystalys'],
+        'lich': ['scythe-of-vyse', 'glimmer-cape', 'aghanims-scepter'],
+        'earthshaker': ['blink-dagger', 'black-king-bar', 'assault-cuirass']
+      };
+      const aggro = [
+        { if: [{ k: 'ability-ready', slot: 0 }], then: { k: 'cast', slot: 0, targetMode: 'focus' } },
+        { if: [{ k: 'ability-ready', slot: 1 }], then: { k: 'cast', slot: 1, targetMode: 'focus' } },
+        { if: [{ k: 'ability-ready', slot: 2 }], then: { k: 'cast', slot: 2, targetMode: 'focus' } },
+        { if: [{ k: 'always' }], then: { k: 'attack-focus' } }
+      ];
+      for (const rec of g.party) {
+        rec.items = [0, 1, 2, 3, 4, 5].map((idx) => loadouts[rec.heroId]?.[idx] ? { id: loadouts[rec.heroId][idx] } : null);
+        rec.gambits = aggro;
+      }
+    });
 
     const result = await page.evaluate(() => {
       const t = (window as any).__test;
