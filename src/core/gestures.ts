@@ -30,6 +30,10 @@ function inferGesture(def: AbilityDef): AnimGesture {
   const arch = def.vfx.archetype;
   const effects = effectsOf(def);
 
+  // Held self-buffs and toggles need a stance change, not a generic item/use cast.
+  if (def.toggle || def.id.includes('berserkers-rage') || def.id.includes('battle-trance') || def.id.includes('metamorphosis') || def.id.includes('pulse-nova')) {
+    return 'toggle-stance';
+  }
   // A held channel (Freezing Field, capture) reads as a sustained loop.
   if (def.channel || hasKind(effects, 'capture-channel')) return 'channel-loop';
   // Spawning anything is a beckon.
@@ -63,8 +67,9 @@ function inferSound(def: AbilityDef): SoundArchetype {
   switch (def.vfx.archetype) {
     case 'projectile': return 'bow';
     case 'beam': return 'storm';
-    case 'chain': return 'storm';
+    case 'chain': return 'lightning';
     case 'storm': return 'storm';
+    case 'cyclone': return 'storm';
     case 'hook': return 'impact';
     case 'wall': return 'frost';
     case 'summon-pop': return 'summon';
@@ -85,7 +90,7 @@ function inferGlyph(def: AbilityDef): string {
   const effects = effectsOf(def);
 
   if (def.ult) {
-    if (arch === 'vortex' || arch === 'dome' || arch === 'mine') return arch;
+    if (arch === 'vortex' || arch === 'dome' || arch === 'mine' || arch === 'cyclone') return arch;
     if (arch === 'summon-pop' || hasKind(effects, 'summon')) return 'summon-pop';
     if (def.channel || hasKind(effects, 'capture-channel')) return 'channel';
     if (arch === 'global-mark') return 'crown';

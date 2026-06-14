@@ -1,4 +1,5 @@
 import type { DropSource, ItemDef, ItemRarity, ItemTier } from '../../core/types';
+import { GEM_DEFS, type GemGrade } from '../gems';
 
 // ============================================================
 // Phase 1 item catalog: consumables, components, and 15+
@@ -224,6 +225,36 @@ export const COMPONENTS: ItemDef[] = [
     }
   }
 ];
+
+const GEM_ITEM_COST: Record<GemGrade, number> = {
+  chipped: 120,
+  flawed: 280,
+  standard: 650,
+  flawless: 1400,
+  perfect: 2800
+};
+
+function gemRarity(grade: GemGrade): ItemRarity {
+  switch (grade) {
+    case 'chipped': return 'common';
+    case 'flawed': return 'uncommon';
+    case 'standard': return 'rare';
+    case 'flawless':
+    case 'perfect': return 'mythical';
+  }
+}
+
+export const GEM_ITEMS: ItemDef[] = GEM_DEFS.map((gem) => ({
+  id: gem.id,
+  name: gem.name,
+  tier: 'component',
+  rarity: gemRarity(gem.grade),
+  exclusiveTo: ['creep', 'dungeon'],
+  cost: GEM_ITEM_COST[gem.grade],
+  passiveMods: {},
+  lore: `Socket gem: ${Object.entries(gem.mods).map(([k, v]) => `+${v} ${k}`).join(', ')}.`,
+  glyph: 'gem'
+}));
 
 export const ASSEMBLED: ItemDef[] = [
   {
@@ -1475,6 +1506,6 @@ function normalizeLootMetadata(item: ItemDef): ItemDef {
   };
 }
 
-export const ALL_ITEMS: ItemDef[] = [...CONSUMABLES, ...COMPONENTS, ...EXTENDED_COMPONENTS, ...ASSEMBLED, ...EXTENDED_ASSEMBLED]
+export const ALL_ITEMS: ItemDef[] = [...CONSUMABLES, ...COMPONENTS, ...GEM_ITEMS, ...EXTENDED_COMPONENTS, ...ASSEMBLED, ...EXTENDED_ASSEMBLED]
   .map(normalizeItemActive)
   .map(normalizeLootMetadata);

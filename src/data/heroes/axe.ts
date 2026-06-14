@@ -18,8 +18,8 @@ export const AXE: HeroDef = {
     baseAttackTime: 1.7,
     moveSpeed: 315,
     turnRate: 0.6,
-    hpRegen: 2.8,
-    manaRegen: 0.8
+    hpRegen: 3.5,
+    manaRegen: 1.5
   },
   skillOrder: [0, 2, 1],
   abilities: [

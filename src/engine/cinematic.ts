@@ -28,6 +28,7 @@ export interface CinematicView {
   stageText: string;
   sound?: CutsceneBeat['sound'];
   speaker?: string;
+  portraitHeroId?: string;
   text?: string;
   revealedText: string;   // typewriter reveal (STORY §3.4: tap completes the line)
   skipProgress: number;   // 0..1 hold-to-confirm skip fill
@@ -231,6 +232,7 @@ export class CinematicDirector {
       stageText: stageText(beat, ctx),
       sound: beat.sound,
       speaker: line ? fillTemplate(line.speaker, ctx) : undefined,
+      portraitHeroId: line?.portraitHeroId ? fillTemplate(line.portraitHeroId, ctx) : undefined,
       text: fullText,
       revealedText,
       skipProgress: p.skipHeld ? Math.min(1, p.skipHold / SKIP_HOLD_SEC) : 0,

@@ -19,8 +19,8 @@ export const SNIPER: HeroDef = {
     attackProjectileSpeed: 3000,
     moveSpeed: 285,
     turnRate: 0.6,
-    hpRegen: 1.2,
-    manaRegen: 0.9
+    hpRegen: 2.5,
+    manaRegen: 1.5
   },
   skillOrder: [1, 2, 0],
   abilities: [

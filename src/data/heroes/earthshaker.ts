@@ -18,8 +18,8 @@ export const EARTHSHAKER: HeroDef = {
     baseAttackTime: 1.7,
     moveSpeed: 300,
     turnRate: 0.6,
-    hpRegen: 2.2,
-    manaRegen: 0.9
+    hpRegen: 3.5,
+    manaRegen: 1.5
   },
   skillOrder: [0, 2, 1],
   combo: [{ before: 'es-fissure', after: 'es-echo-slam', windowSec: 4, weight: 1.55 }],

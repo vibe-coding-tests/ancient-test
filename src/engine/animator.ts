@@ -143,6 +143,8 @@ function castPose(g: AnimGesture, castStyle: string | undefined, time: number, w
       POSE.l = 0.5; POSE.r = 0.6; POSE.bodyZ = lean; POSE.bodyX = 0.05; break;
     case 'item-use':
       POSE.l = -0.2; POSE.r = -1.7 + sway * 0.05; break;
+    case 'toggle-stance':
+      POSE.l = -0.75; POSE.r = -0.75; POSE.bodyY = Math.abs(sway) * 0.06; POSE.bodyZ = lean * 0.8; break;
     case 'melee-swing':
     default:
       POSE.l = 0.1; POSE.r = -1.7; POSE.bodyZ = lean * 0.5; break;

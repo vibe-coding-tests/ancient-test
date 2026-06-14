@@ -42,4 +42,20 @@ describe('vfx cache', () => {
     expect(state.proceduralSprites).toBeGreaterThanOrEqual(0);
     expect(state.proceduralTelegraphs).toBeGreaterThanOrEqual(0);
   });
+
+  it('renders the cyclone archetype as a transient without assets', () => {
+    const vfx = new VfxManager(() => 0);
+
+    vfx.handleEvent(
+      {
+        t: 'cast',
+        uid: 1,
+        abilityId: 'euls-active',
+        vfx: { archetype: 'cyclone', color: '#9fe8e8', color2: '#ffffff', scale: 0.9 }
+      },
+      () => ({ x: 0, y: 0, h: 0 })
+    );
+
+    expect(vfx.group.children.length).toBeGreaterThan(0);
+  });
 });

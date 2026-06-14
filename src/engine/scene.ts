@@ -4,7 +4,7 @@ import type { Sim } from '../core/sim';
 import type { Unit } from '../core/unit';
 import { REG } from '../core/registry';
 import { buildTerrain, type TerrainInfo } from './terrain';
-import { applyHeroLikeness, applyItemAppearances, buildUnitRig, buildSelectionRing, mountHeroModel, recolorToPalette, type UnitRig } from './models';
+import { applyHeroLikeness, applyItemAppearances, attachHeroWeaponModel, buildUnitRig, buildSelectionRing, mountHeroModel, recolorToPalette, type UnitRig } from './models';
 import { HeroAssetLoader, heroAssetEntry, creepCreatureUrl, heroBaseId } from './assets';
 import { animateRig, applyCinematicGesture, newAnimState, type AnimState } from './animator';
 import { loadVfxTextureAtlas, VfxManager } from './vfx';
@@ -973,6 +973,12 @@ export class GameScene {
           // WS-B: re-apply worn items now that sockets resolved, so the weapon hangs
           // off the authored hand bone instead of the hidden procedural one.
           applyItemAppearances(rig, this.itemAppearancesFor(u));
+          void this.heroAssets.loadHeroWeapon(assetEntry).then((weapon) => {
+            if (weapon && this.isLive() && token === this.sceneToken && this.views.get(u.uid)?.rig === rig) {
+              attachHeroWeaponModel(rig, cloneModel(weapon.scene));
+              applyItemAppearances(rig, this.itemAppearancesFor(u));
+            }
+          });
         } else if (!asset) {
           mountSharedBase();
         }

@@ -31,8 +31,8 @@ function baseStats(attribute: HeroDef['attribute'], ranged = false): HeroBaseSta
     attackProjectileSpeed: ranged ? 1000 : undefined,
     moveSpeed: ranged ? 300 : 310,
     turnRate: 0.6,
-    hpRegen: primary === 'str' ? 1.7 : 1.2,
-    manaRegen: primary === 'int' ? 1.4 : 0.9
+    hpRegen: primary === 'str' ? 3.5 : primary === 'agi' ? 2.5 : 2.0,
+    manaRegen: primary === 'int' ? 2.5 : 1.5
   };
 }
 

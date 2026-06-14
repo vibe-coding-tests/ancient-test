@@ -22,16 +22,17 @@ never imports `three` or reads renderer-only fields.
 | Surface | State |
 |---------|-------|
 | Hero likeness profiles | **122 / 122** unique, no duplicates (`engine/models.ts`) |
-| Hero models enabled | **111 / 122** — 80 per-hero KayKit humanoid GLBs (`ENABLED_HERO_MODELS`) plus 31 creature-base heroes through shared Quaternius GLBs (`ENABLED_HERO_BASES` → `/assets/creeps/<base>.glb`). Remaining 11 are intentional procedural holdouts. **No-budget policy** (DECISIONS 2026-06-13): one file per humanoid cohort hero, ~118MB total; creature heroes reuse the already-vendored creature GLBs |
-| Ability VFX coverage | **488 / 488** authored; archetypes incl. `vortex`/`dome`/`mine` |
+| Hero models enabled | **111 / 122** — 80 per-hero KayKit humanoid GLBs (`ENABLED_HERO_MODELS`), **all A4 tri-tone retextured** (texture-space palette gradient map, not a flat factor wash), plus 31 creature-base heroes through shared Quaternius GLBs (`ENABLED_HERO_BASES` → `/assets/creeps/<base>.glb`). Remaining 11 are intentional procedural holdouts. **No-budget policy** (DECISIONS 2026-06-13): one file per humanoid cohort hero, ~120MB total; creature heroes reuse the already-vendored creature GLBs |
+| Hero weapons enabled | **80 / 80** authored humanoid heroes ship original generated held weapon GLBs (`/assets/weapons/heroes/<id>.glb`) attached through the resolved hand socket; item weapon visuals still override them |
+| Ability VFX coverage | **488 / 488** authored; archetypes incl. `vortex`/`dome`/`mine`/`cyclone` |
 | Attack animation | weapon-driven (`attackStyleFor`): 8 styles incl. `bird-dive`, `creature-lunge` |
-| Cast/anim gestures | `AnimGesture` ×9, auto-resolved + hand-set on signatures |
-| Item visuals | D1+D2 shipped: `appearance` on **76** items, `attackVisual` on **28**; the remaining ~52 are intentionally invisible consumables/components (§6.1) |
+| Cast/anim gestures | `AnimGesture` ×10, including `toggle-stance`; auto-resolved + hand-set on signatures |
+| Item visuals | D1+D2 shipped, plus `cyclone` for Eul's/Wind Waker; `appearance` on **76+** items, `attackVisual` on **28+**; the remaining basics are intentionally invisible consumables/components (§6.1) |
 | Creature GLBs | 20 Quaternius creatures vendored, mounted on creeps and the 31 creature-base heroes via the shared `mountHeroModel` + `animateAuthoredRig` path (not a static pose) |
 | Env assets | terrain PBR (ambientCG), 2 HDRIs (Poly Haven) **both wired** — day + night beds swap by the cycle (`scene.applyEnvPhase`); original tiling water normal (`textures/water/water_normal.webp`) layered into the water shader; OFL display font (Cinzel) vendored + wired via `@font-face`; foliage + town (Quaternius) |
 | VFX textures | original `/assets/vfx/vfx_atlas.webp` for sprites/telegraphs, with procedural `DataTexture` fallback |
-| Audio | synth floor (`SoundArchetype` ×11) **+ sampled enhancement layer**: `engine/sampled-audio.ts` decodes original per-biome music beds + one-shot SFX (`/assets/audio/*`), layered over the synth on medium+; synth stays the guaranteed fallback (boot floor / headless / missing file) |
-| Pipeline | `build_assets.mjs` (resample/prune/dedup/meshopt/webp + **palette recolor** + audio/font groups), generators (`generate_vfx_atlas`/`generate_water_normal`/`generate_audio`), `assets.ts` + `sampled-audio.ts` loaders + fallback, `ASSETS.md` ledger, `manifest.json` |
+| Audio | synth floor (`SoundArchetype` ×12, including `lightning`) **+ sampled enhancement layer**: `engine/sampled-audio.ts` decodes original per-biome music beds + one-shot SFX (`/assets/audio/*`), layered over the synth on medium+; synth stays the guaranteed fallback (boot floor / headless / missing file) |
+| Pipeline | `build_assets.mjs` (resample/prune/dedup/meshopt/webp + **palette recolor: flat factor _and_ A4 `tritone` texture-space gradient map** + audio/font groups), generators (`generate_vfx_atlas`/`generate_water_normal`/`generate_audio`), `assets.ts` + `sampled-audio.ts` loaders + fallback, `ASSETS.md` ledger, `manifest.json` |
 | Visual target | coherent stylized fantasy theme across heroes, regions, VFX, items, UI, and audio |
 
 ---
@@ -96,19 +97,19 @@ Implementation:
    `palette` (the same luminance/keyword mapping the build `recolorToPalette`
    uses, moved to a tiny runtime helper).
 3. **Differentiate by weapon + likeness sockets.** A Knight-base and a
-   Mage-base diverge by the weapon GLB attached to the hand socket and the
-   procedural likeness overlay (eyes/horns/crest) re-parented to head/shoulder
-   sockets.
+   Mage-base diverge by the generated weapon GLB attached to the hand socket and
+   the procedural likeness overlay (eyes/horns/crest) re-parented to
+   head/shoulder sockets.
 4. **Use bespoke assets freely when theme demands it.** Raid bosses, Elite Five
    anchors, gym leaders, and abstract heroes can get custom GLBs, textures,
    portraits, and audio beds.
 
 Implications for `assets.ts`:
-- Replace the per-hero `modelUrl` manifest with a `HERO_BASE: Record<heroId,
-  { base, weapon?, palette, clips }>` map (palette can be read from hero data at
-  registration, or duplicated like the starter spec).
-- `heroAssetEntry` resolves base + weapon URLs; `loadHero` caches **per base**,
-  not per hero, so 122 heroes trigger ~14 loads total.
+- Track the humanoid body URL and generated `weaponUrl` together in the hero
+  asset entry, while the broader `HERO_BASE` map still covers shared creature
+  bases and procedural holdouts.
+- Generated weapon GLBs are cached separately and mounted only after the hand
+  socket resolves, so they stay optional and fallback-safe.
 - Keep build-time recolor for heroes that earn a **bespoke** texture, especially
   raid leaders, iconic heroes, and region anchors.
 
@@ -177,13 +178,13 @@ bespoke generated GLB is a later, optional upgrade per hero.
 > candidates for a **bespoke** retextured GLB over a shared base.
 
 ### 3.7 Batches
-- **A0 — shared base + runtime recolor scaffolding. Engineering shipped; base art
-  pending.** `HERO_BASE` maps all 122 heroes to a base (16 cohorts + 11 procedural
+- **A0 — shared base + runtime recolor scaffolding. Shipped.** `HERO_BASE` maps
+  all 122 heroes to a base (16 cohorts + 11 procedural
   holdouts), `recolorToPalette` tints a cloned base to a hero's three colors at
   runtime (materials cloned so cohort members don't share tint), and
   `HeroAssetLoader.loadBase` caches **per base** (≈16 loads for 122 heroes). The
-  path is gated by `ENABLED_HERO_BASES` (empty until the CC0 base GLBs ship), so it
-  is inert and 404-free today; the 6 starters keep their dedicated retextured GLBs.
+  path is gated by `ENABLED_HERO_BASES` for creature bases, so it is 404-free
+  today; humanoid cohorts ship per-hero retextured GLBs.
   Scene wiring is **done**: `scene.ts` prefers a per-hero GLB, then the shared
   base via `loadBase` → `recolorToPalette` → `mountHeroModel`, then procedural
   (creature-base heroes already mount through this path). The humanoid shared-base
@@ -202,8 +203,18 @@ bespoke generated GLB is a later, optional upgrade per hero.
   (`spider`, `demon`, `dragonevolved`, `bull`, etc.). These heroes stay off the
   per-hero `heroAssetEntry` path and mount through `ENABLED_HERO_BASES`, with
   procedural fallback intact.
-- **A4 — bespoke marquee retextures** (raid bosses + iconic heroes) as their own
-  files, flipped on one at a time.
+- **A4 — multi-tone retextures. SHIPPED for the full cohort (all 80).** A build
+  mode `recolorMode: "tritone"` (`build_assets.mjs`) gradient-maps each base atlas
+  in **texture space** — the source atlas's own per-pixel luminance drives a
+  three-stop ramp (shadow→secondary, midtone→primary, highlight→accent) and the
+  material factor is neutralized to white. This replaces the flat single-tone wash
+  (the old §12 risk) with genuine multi-tone heroes **without hand-painting**,
+  fully deterministic. Every Knight/Mage/Barbarian/Rogue cohort hero in
+  `heroes.json` now carries `recolorMode: "tritone"`, so each ships its three-color
+  identity as shadow/body/trim tones (verified across icy casters, red brutes,
+  gold/green/orange leads). The legacy uniform-factor path stays in the script as a
+  fallback. A truly hand-painted atlas per marquee hero remains an optional further
+  upgrade on top of this generated path.
 
 ---
 
@@ -220,41 +231,44 @@ rides the authored model instead of the hidden procedural rig.
    `rightHand` target, and `replaceWeapon` counter-scales the weapon by the model
    height-fit factor so it sits at rig size on the GLB hand. The scene re-applies
    `applyItemAppearances` after a mount so the weapon re-homes off the hidden
-   procedural arm. **Attaching a per-hero weapon GLB** to the same socket is the
-   remaining art-pass step (needs the CC0 weapon GLBs vendored).
-3. **Likeness re-parent (deferred):** for the enabled GLB heroes the authored
-   model *is* the likeness, so the procedural overlay stays hidden (current
-   behavior). Re-parenting individual overlay parts to head/shoulder sockets is a
-   later refinement once shared bases need procedural accents on top.
-4. **Fallback intact:** with no GLB, or a base that exposes no matching bone, the
+   procedural arm.
+3. **Per-hero weapon GLBs (done).** `scripts/assets/generate_hero_weapons.mjs`
+   writes 80 original low-poly held weapons under
+   `/assets/weapons/heroes/<id>.glb`; `HeroAssetLoader.loadHeroWeapon` mounts
+   them as default socket weapons, and item weapons still take precedence.
+4. **Likeness policy (done):** for the enabled GLB heroes the authored model is
+   the likeness, so the procedural overlay stays hidden. If future shared bases
+   need extra horns, crowns, or shoulder pieces, those parts can be re-parented to
+   the existing head/shoulder sockets without changing the sim path.
+5. **Fallback intact:** with no GLB, or a base that exposes no matching bone, the
    weapon falls back to the right hand / item layer (always visible) and nothing
    throws.
 
-Gate: model-cache socket test (resolve + counter-scale + no-bone fallback) — green.
+Gate: model-cache socket test (resolve + counter-scale + no-bone fallback + generated weapon override/restore) — green.
 
 ---
 
 ## 5. WS-C — Animations
 
-Attack windups are already weapon-driven and feel-locked. Remaining is **clip
-wiring for authored models**:
+Attack windups are weapon-driven and feel-locked. Authored model clips are wired:
 
-- **Humanoid clip map (done for starters):** per hero, rename the KayKit 76-clip
-  set down to `idle/run/attack/cast/channel/death`, choosing melee vs ranged vs
-  spell `attack` by `silhouette.weapon`. Extend the `heroes.json` pattern to a
-  shared per-base default with per-hero `attack`/`cast` overrides.
+- **Humanoid clip map (done):** the KayKit 76-clip set is renamed down to
+  `idle/run/attack/cast/channel/death`, choosing melee vs ranged vs spell
+  `attack` by `silhouette.weapon`. The `heroes.json` pattern covers all 80
+  humanoid cohort heroes.
 - **Creature clips (already wired):** creeps mount their Quaternius GLB through
   `mountHeroModel` with `asset.animations`, so they get a mixer, and
   `animateAuthoredRig` drives `idle/run/attack/cast/channel/death` off sim state
   for **any** rig with a mixer — the `findClip` synonyms already cover
-  `Idle`/`Walk`/`Attack`/`Death`/`bite`/`claw`. So creeps and creature-base heroes
-  animate off sim state today (not a static pose). Remaining is per-base clip-name
-  overrides where a base ships oddly-named clips.
-- **Cast/channel coupling:** when a GLB has a spell clip, fire it on `cast`
-  events and loop it during `channel` (mixer path already exists; just route the
-  event). Toggle ults flip a held stance.
-- **Optional new gesture:** `toggle-stance` (`AnimGesture`) for Metamorphosis /
-  Berserker's Rage / Pulse Nova if the held-stance read matters — costed per §1.
+  `Idle`/`Walk`/`Attack`/`Death`/`bite`/`claw`. Creeps and creature-base heroes
+  animate off sim state today (not a static pose). Per-base clip-name overrides
+  can be added if a future GLB ships unusual clip names.
+- **Cast/channel coupling (done):** when a GLB has a spell clip,
+  `animateAuthoredRig` fires it during cast windows and loops `channel` while
+  channeling. Toggle-style casts use `toggle-stance`.
+- **Toggle stance (done):** `AnimGesture` includes `toggle-stance` for
+  Berserker's Rage, Pulse Nova, Metamorphosis-style self buffs, and future held
+  stance ultimates.
 
 Gate: `movement`, `kit-smoke`, anim coverage, mixer smoke.
 
@@ -306,12 +320,11 @@ bracer / wraith-band / null-talisman (small wrist geo), magic-wand (charge
 glow), arcane-boots (`boot-trail`, partly present), medallion-of-courage
 (`pauldrons`). **Shipped in D1/D2.**
 
-### 6.4 New `ItemAppearancePart` / kind candidates (costed)
+### 6.4 New `ItemAppearancePart` / kind candidates (shipped)
 `cloak` (Glimmer/Force), `halo` (Holy Locket/Guardian), `cyclone`
-(Eul's/Wind Waker), `armor-shred-flash` (`AttackVisualKind`, Desolator/Solar/
-Nullifier). **D2 shipped `cloak`, `halo`, and `armor-shred-flash`; `cyclone`
-stays unlanded because the existing `storm` archetype still carries Eul's/Wind
-Waker.**
+(Eul's/Wind Waker), and `armor-shred-flash` (`AttackVisualKind`, Desolator/
+Solar/Nullifier) are all landed. `cyclone` is now its own `VfxArchetype`, so
+Eul's and Wind Waker read as a vertical lift instead of a generic storm burst.
 
 Gate: appearance/attack coverage lint widened, boundary, kit-smoke on actives.
 
@@ -332,7 +345,7 @@ sprite atlases raise fidelity on medium+ tiers:
 Shipped: medium+ attempts `/assets/vfx/vfx_atlas.webp` and slices it into four
 sprite cells plus four telegraph cells. The atlas is original/generated in-repo
 and logged in `ASSETS.md`; missing files or headless tests keep using procedural
-`DataTexture`s. No new VFX archetypes needed (coverage is complete). All
+`DataTexture`s. The final `cyclone` archetype is landed, and coverage is complete. All
 additive, tier-gated, off on low. Gate: perf harness, no-asset boot, theme fit.
 
 ---
@@ -358,8 +371,9 @@ it). The sampled-audio enhancement layer now ships:
   explicit signatures — `roar` (STR ults, e.g. ursa-enrage/sven), `void` (portal
   kits, e.g. enigma-black-hole), `frost` (cryo, e.g. lich) — with `soundForAbility`
   inference covering the rest. Verified across the roster by audio test 20.
-- **New `SoundArchetype` `lightning`** stays unlanded (the `storm` archetype
-  still carries the lightning families) — costed per §1, land only if one earns it.
+- **New `SoundArchetype` `lightning` (done).** Electric chain signatures and
+  lightning items now resolve to `lightning`, while `storm` remains the broader
+  wind/cloud voice.
 
 Gate: voice-pool cap, no-raw-import on synth, sampled-layer headless safety
 (audio test 20b), audio-channel mix test, theme fit — green.
@@ -413,17 +427,17 @@ are fine when they improve the theme and load safely.
 
 ## 11. Delivery batches (each ships green)
 
-0. **A0** — shared base + runtime recolor + `HERO_BASE` map. **Engineering shipped**
-   (map + `recolorToPalette` + per-base cache, gated by `ENABLED_HERO_BASES`); base
-   GLB art + scene wiring remain.
-1. **A1** — Knight + Mage cohorts (47) on shared bases. *Art pass:* vendor `knight`/
-   `mage` base GLBs, enable in `ENABLED_HERO_BASES`, wire mount→base+recolor.
-2. **B**  — sockets + weapon attachment + re-parenting. **Shipped** (socket resolve,
-   weapon re-home + counter-scale, scene re-apply); per-hero weapon GLBs are art.
-3. **A2** — Barbarian + Rogue cohorts (33). *Art pass.*
-4. **C-creatures** — creature clip wiring. **Effectively shipped** (shared
+0. **A0** — shared base + runtime recolor + `HERO_BASE` map. **Shipped.**
+   The map, `recolorToPalette`, per-base cache, scene fallback, and creature
+   base wiring are live.
+1. **A1** — Knight + Mage cohorts (47). **Shipped** as per-hero tri-tone GLBs.
+2. **B**  — sockets + weapon attachment + re-parenting policy. **Shipped**
+   (socket resolve, weapon re-home + counter-scale, scene re-apply, generated
+   per-hero weapon GLBs).
+3. **A2** — Barbarian + Rogue cohorts (33). **Shipped** as per-hero tri-tone GLBs.
+4. **C-creatures** — creature clip wiring. **Shipped** (shared
    `mountHeroModel` + `animateAuthoredRig` already drives creeps/creatures off sim
-   state); only odd per-base clip-name overrides remain.
+   state). Per-base clip-name overrides are available for future unusual GLBs.
 5. **A3** — creature-base heroes (31). **Shipped** by reusing the vendored
    Quaternius creature GLBs through `ENABLED_HERO_BASES`.
 6. **D1** — core item visuals (the ~29), widen coverage lint. **Shipped.**
@@ -435,16 +449,25 @@ are fine when they improve the theme and load safely.
     hero kits + inference; verified by audio test 20).
 11. **G**  — water normals, day/night HDRIs, font, prop dressing. **Shipped**
     (all generated/vendored + wired; procedural floor intact).
-12. **A4** — bespoke marquee hero retextures, one at a time. *Remaining (art):*
-    needs hand-painted multi-tone textures over the raw KayKit pack — the
-    pipeline (`heroes.json` recolor + `materialMap`) and runtime hooks are ready,
-    but a true bespoke retexture is human art, not a generated/downloaded drop-in.
+12. **A4** — multi-tone hero retextures. **SHIPPED (all 80 cohort heroes).** The
+    `recolorMode: "tritone"` build mode gradient-maps each base atlas in texture
+    space for a real multi-tone read (no hand-painting); every Knight/Mage/
+    Barbarian/Rogue hero in `heroes.json` is on it and rebuilt. A hand-painted
+    per-hero atlas remains an optional upgrade on top.
+13. **Final vocabulary pass** — `cyclone` VFX, `lightning` sound, and
+    `toggle-stance` gesture. **Shipped.** Eul's/Wind Waker, electric chain
+    signatures, and held stance casts now use distinct closed-vocabulary entries.
 
-> **Status:** every engineering workstream is shipped and green. The sole
-> remaining item is **A4** — bespoke hand-authored hero textures for marquee
-> heroes, flipped on one at a time by rebuilding from the raw CC0 base pack
-> (`tmp/asset_src/kaykit`, gitignored). All cohort heroes already ship a clean
-> palette-recolored GLB, so A4 is pure optional polish; nothing else blocks play.
+> **Status: every workstream in this plan is shipped and green, including the
+> final vocabulary pass.**
+> All 80 cohort heroes now ship a tri-tone texture-space retexture (their
+> three-color identity as shadow/body/trim), 31 creature-base heroes reuse the
+> Quaternius GLBs, and 11 abstract heroes stay procedural by design — 122/122
+> covered. Nothing engineering-side remains. Further upgrades are custom art:
+> hand-painted bespoke atlases for marquee heroes or bespoke generated models
+> for the 11 procedural holdouts. Rebuild any
+> hero from the raw CC0 pack (`tmp/asset_src/kaykit`, gitignored); the procedural
+> floor stays the live fallback throughout.
 
 Procedural batches and asset batches run in parallel: the floor never depends on
 an asset landing.
@@ -458,9 +481,10 @@ an asset landing.
   response, and region mood before it lands.
 - **Socket mismatch.** KayKit hand/back bone names must be resolved defensively;
   missing socket → attach to rig root (today's behavior), never throw.
-- **Single-atlas recolor reads flat.** Uniform tint suits casters and
-  differentiates shared bases by color. Richer multi-tone heroes should get
-  bespoke texture work in A4.
+- **Single-atlas recolor reads flat.** Resolved: all 80 cohort heroes ship the A4
+  `tritone` build mode (texture-space gradient map, shadow/midtone/highlight →
+  palette) instead of a uniform factor tint — multi-tone, generated, no
+  hand-painting. The flat-factor path is kept only as a script fallback.
 - **Creature clip pollution / determinism.** Clip wiring is renderer-side only;
   the sim/feel and macro/determinism tests must not move.
 - **Test isolation.** A pre-existing cross-file `REG`-state race can flake the

@@ -40,7 +40,7 @@ const PROJ_SPEC: ProjectileSpec = (() => {
   return { model: 'linear', speed: 1800, width: 40, range: 1800, onHit, disjointable: false };
 })();
 
-const VOICE_SOUNDS: SoundArchetype[] = ['blade', 'bow', 'impact', 'frost', 'fire', 'storm', 'void', 'heal', 'summon', 'roar'];
+const VOICE_SOUNDS: SoundArchetype[] = ['blade', 'bow', 'impact', 'frost', 'fire', 'storm', 'void', 'heal', 'summon', 'item', 'roar', 'lightning'];
 const VOICE_TIMBRES = ['sharp', 'bright', 'cold', 'warm', 'deep', 'booming', 'gravel', 'ethereal'];
 
 export interface PerfHarnessOpts {

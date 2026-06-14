@@ -32,7 +32,7 @@ beforeAll(() => registerAllContent());
 const VFX_ARCHETYPES: VfxArchetype[] = [
   'projectile', 'ground-aoe', 'chain', 'beam', 'summon-pop', 'shield',
   'stun-stars', 'channel', 'global-mark', 'hook', 'wall', 'storm',
-  'vortex', 'dome', 'mine'
+  'vortex', 'dome', 'mine', 'cyclone'
 ];
 
 const STATUS_IDS = [
@@ -40,8 +40,8 @@ const STATUS_IDS = [
   'invis', 'magic-immune', 'break', 'cyclone', 'sleep', 'frozen', 'buff'
 ];
 
-const ANIM_GESTURES: AnimGesture[] = ['melee-swing', 'ranged-shot', 'staff-cast', 'ground-slam', 'dash', 'channel-loop', 'summon-gesture', 'item-use', 'global-cast'];
-const SOUND_ARCHETYPES: SoundArchetype[] = ['blade', 'bow', 'impact', 'frost', 'fire', 'storm', 'void', 'heal', 'summon', 'item', 'roar'];
+const ANIM_GESTURES: AnimGesture[] = ['melee-swing', 'ranged-shot', 'staff-cast', 'ground-slam', 'dash', 'channel-loop', 'summon-gesture', 'item-use', 'global-cast', 'toggle-stance'];
+const SOUND_ARCHETYPES: SoundArchetype[] = ['blade', 'bow', 'impact', 'frost', 'fire', 'storm', 'void', 'heal', 'summon', 'item', 'roar', 'lightning'];
 const STINGER_IDS = ['capture', 'merge', 'levelup', 'badge', 'raid-clear'];
 const CUTSCENE_SHOT_ANGLES = ['wide', 'close', 'low', 'high', 'over-shoulder', 'title-card'];
 const CUTSCENE_SHOT_MOVES = ['hold', 'push-in', 'pull-back', 'crane', 'snap'];
@@ -252,7 +252,7 @@ describe('data lint: heroes', () => {
 
 describe('data lint: items', () => {
   it('has the Phase 2 item catalog of 30+ entries and resolving recipes', () => {
-    const assembled = ALL_ITEMS.filter((i) => i.tier === 'core' || (i.tier === 'basic' && i.components));
+    const assembled = ALL_ITEMS.filter((i) => ['t1', 't2', 't3', 't4', 'special'].includes(i.tier) || (i.tier === 'basic' && i.components));
     expect(assembled.length).toBeGreaterThanOrEqual(12);
     expect(ALL_ITEMS.length).toBeGreaterThanOrEqual(30);
   });
@@ -342,6 +342,9 @@ describe('data lint: items', () => {
     expect(REG.item('scythe-of-vyse').appearance?.parts).toContain('hex-sigil');
     expect(REG.item('aghanims-scepter').appearance?.parts).toContain('mana-orb');
     expect(REG.item('aether-lens').appearance?.parts).toContain('mana-orb');
+    expect(REG.item('euls-scepter').active?.vfx?.archetype).toBe('cyclone');
+    expect(REG.item('wind-waker').appearance?.aura?.archetype).toBe('cyclone');
+    expect(REG.item('mjollnir').active?.sound).toBe('lightning');
     expect(REG.item('rod-of-atos').active?.vfx?.archetype).toBe('chain');
   });
 
@@ -761,6 +764,18 @@ describe('data lint: anim coverage (test 19)', () => {
       expect(ANIM_GESTURES, `${a.id}: resolved gesture`).toContain(gestureForAbility(a));
       expect(SOUND_ARCHETYPES, `${a.id}: resolved sound`).toContain(soundForAbility(a));
     }
+  });
+
+  it('lands the final VFX_ASSETS vocabulary refinements on signature content', () => {
+    const trollRage = REG.hero('troll-warlord').abilities.find((a) => a.id === 'troll-berserkers-rage');
+    const pulseNova = REG.hero('leshrac').abilities.find((a) => a.id === 'lesh-pulse-nova');
+    const lightningStorm = REG.hero('leshrac').abilities.find((a) => a.id === 'lesh-lightning-storm');
+
+    expect(trollRage?.anim).toBe('toggle-stance');
+    expect(pulseNova?.anim).toBe('toggle-stance');
+    expect(lightningStorm?.sound).toBe('lightning');
+    expect(REG.item('euls-scepter').active?.vfx.archetype).toBe('cyclone');
+    expect(REG.item('wind-waker').active?.vfx.archetype).toBe('cyclone');
   });
 });
 

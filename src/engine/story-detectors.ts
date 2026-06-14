@@ -28,7 +28,8 @@ export interface StoryObserveCtx {
 
 export type StoryTrigger =
   | { kind: 'legend'; legendId: string }
-  | { kind: 'boss-phase'; bossHeroId?: string; marqueeRaidId?: string };
+  | { kind: 'boss-phase'; bossHeroId?: string; marqueeRaidId?: string }
+  | { kind: 'resonance'; reaction: string };
 
 function dist2(a: Vec2, b: Vec2): number {
   const dx = a.x - b.x;
@@ -37,7 +38,7 @@ function dist2(a: Vec2, b: Vec2): number {
 }
 
 export class StoryDetector {
-  private recentHooks: { atSec: number; casterUid: number }[] = [];
+  private recentHooks: { atSec: number; casterUid: number; targetUid?: number }[] = [];
   private recentAxeCalls: { atSec: number; casterUid: number }[] = [];
   private recentKills = new Map<number, number[]>();
   private phaseFired = new Set<number>(); // boss uids whose break already fired this encounter
@@ -68,6 +69,8 @@ export class StoryDetector {
       } else if (ev.t === 'death') {
         const legend = this.onDeath(ev, ctx);
         if (legend) out.push(legend);
+      } else if (ev.t === 'reaction') {
+        out.push({ kind: 'resonance', reaction: ev.reaction });
       }
     }
 
@@ -81,18 +84,18 @@ export class StoryDetector {
     if (!caster || caster.team !== ctx.playerTeam) return null;
 
     // Hooked Home — record a player Pudge hook; resolution happens on a later death.
-    if (ev.abilityId === HOOK_ID) {
-      this.recentHooks.push({ atSec: ctx.nowSec, casterUid: ev.uid });
+    if (ev.abilityId === HOOK_ID && caster.heroId === 'pudge') {
+      this.recentHooks.push({ atSec: ctx.nowSec, casterUid: ev.uid, targetUid: ev.target });
       return null;
     }
 
-    if (ev.abilityId === AXE_CALL_ID) {
+    if (ev.abilityId === AXE_CALL_ID && caster.heroId === 'axe') {
       this.recentAxeCalls.push({ atSec: ctx.nowSec, casterUid: ev.uid });
       return null;
     }
 
     // The Coil That Closed the Game — Dream Coil catching multiple enemies.
-    if (ev.abilityId === DREAM_COIL_ID) {
+    if (ev.abilityId === DREAM_COIL_ID && caster.heroId === 'puck') {
       let caught = 0;
       const r2 = 550 * 550;
       for (const u of ctx.sim.unitsArr) {
@@ -102,7 +105,7 @@ export class StoryDetector {
     }
 
     // The Pit Remembers — a player Echo Slam catching 4+ enemies inside Roshan's Pit.
-    if (ev.abilityId === ECHO_SLAM_ID && ctx.raidId === PIT_RAID_ID) {
+    if (ev.abilityId === ECHO_SLAM_ID && caster.heroId === 'earthshaker' && ctx.raidId === PIT_RAID_ID) {
       let caught = 0;
       const r2 = ECHO_SLAM_RADIUS * ECHO_SLAM_RADIUS;
       for (const u of ctx.sim.unitsArr) {
@@ -118,6 +121,7 @@ export class StoryDetector {
     if (!victim) return null;
 
     if (victim.team === ctx.playerTeam) {
+      this.recentKills.delete(ev.uid);
       const paid = this.recentAxeCalls.some((h) => h.casterUid === ev.uid);
       if (paid) {
         const enemiesAlive = ctx.sim.unitsArr.filter((u) => u.team !== ctx.playerTeam && u.alive).length;
@@ -141,7 +145,9 @@ export class StoryDetector {
     // "Hooked home": a recent player Pudge stands in the base/fountain zone as the victim dies.
     const homed = this.recentHooks.some((h) => {
       const pudge = ctx.sim.unit(h.casterUid);
-      return !!pudge && pudge.alive && dist2(pudge.pos, ctx.townPos!) <= r * r;
+      const credited = ev.killer === h.casterUid;
+      const targeted = h.targetUid === undefined || h.targetUid === ev.uid;
+      return credited && targeted && !!pudge && pudge.alive && dist2(pudge.pos, ctx.townPos!) <= r * r;
     });
     return homed ? { kind: 'legend', legendId: 'hooked-home' } : null;
   }

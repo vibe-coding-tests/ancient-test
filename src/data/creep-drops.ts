@@ -1,4 +1,5 @@
 import { TUNING } from './tuning';
+import { GEM_DEFS } from './gems';
 import type { CreepTier, DifficultyTier, ItemDropTable, ItemQuality, ItemRarity } from '../core/types';
 
 const COMMON_CONSUMABLES = [
@@ -10,6 +11,10 @@ const COMMON_CONSUMABLES = [
   'sentry-ward',
   'smoke-of-deceit'
 ].map((id) => ({ id, weight: 1 }));
+
+const CHIPPED_GEMS = GEM_DEFS
+  .filter((gem) => gem.grade === 'chipped')
+  .map((gem) => ({ id: gem.id, weight: 1 }));
 
 function itemEntry(id: string, rarity: ItemRarity = 'legendary', weight = 1) {
   return { id, weight, rarity };
@@ -78,13 +83,15 @@ export const DEFAULT_CREEP_DROP_TABLES: Record<CreepTier, ItemDropTable> = {
   small: {
     guaranteed: [],
     slots: [
-      { id: 'creep-common-consumable', rarity: 'common', rolls: 1, chance: { normal: 0.30, nightmare: 0.36, hell: 0.42 }, pool: COMMON_CONSUMABLES, source: 'creep' }
+      { id: 'creep-common-consumable', rarity: 'common', rolls: 1, chance: { normal: 0.30, nightmare: 0.36, hell: 0.42 }, pool: COMMON_CONSUMABLES, source: 'creep' },
+      { id: 'creep-gem-chip', rarity: 'common', rolls: 1, chance: { normal: 0.08, nightmare: 0.11, hell: 0.14 }, pool: CHIPPED_GEMS, source: 'creep' }
     ]
   },
   medium: {
     guaranteed: [],
     slots: [
       { id: 'creep-common-consumable', rarity: 'common', rolls: 1, chance: { normal: 0.40, nightmare: 0.46, hell: 0.52 }, pool: COMMON_CONSUMABLES, source: 'creep' },
+      { id: 'creep-gem-chip', rarity: 'common', rolls: 1, chance: { normal: 0.12, nightmare: 0.16, hell: 0.20 }, pool: CHIPPED_GEMS, source: 'creep' },
       { id: 'creep-uncommon-component', rarity: 'uncommon', rolls: 1, chance: { normal: 0.25, nightmare: 0.32, hell: 0.40 }, pool: EARLY_COMPONENTS, source: 'creep' }
     ]
   },
@@ -93,6 +100,7 @@ export const DEFAULT_CREEP_DROP_TABLES: Record<CreepTier, ItemDropTable> = {
     slots: [
       { id: 'creep-common-consumable', rarity: 'common', rolls: 1, chance: { normal: 0.35, nightmare: 0.42, hell: 0.50 }, pool: COMMON_CONSUMABLES, source: 'creep' },
       { id: 'creep-uncommon-component', rarity: 'uncommon', rolls: 1, chance: { normal: 0.55, nightmare: 0.64, hell: 0.74 }, pool: EARLY_COMPONENTS, source: 'creep' },
+      { id: 'creep-gem-chip', rarity: 'common', rolls: 1, chance: { normal: 0.18, nightmare: 0.24, hell: 0.30 }, pool: CHIPPED_GEMS, source: 'creep' },
       { id: 'creep-large-endgame', rarity: 'legendary', rolls: 1, chance: TUNING.overworldEgSlotPct.largeCreep, pool: LARGE_ENDGAME_CORES, qualityOddsByTier: qualityOddsByTier(), source: 'creep', raritySplit: true }
     ]
   },

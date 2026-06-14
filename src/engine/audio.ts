@@ -298,7 +298,7 @@ export class ProceduralAudio {
     const p = this.timbrePitch(timbre);
     // Big-shape spells (zones, walls, vortices, domes, ground slams) get a
     // sampled air-whoosh on medium+; pooled above so it never machine-guns.
-    if (archetype === 'ground-aoe' || archetype === 'wall' || archetype === 'vortex' || archetype === 'dome') {
+    if (archetype === 'ground-aoe' || archetype === 'wall' || archetype === 'vortex' || archetype === 'dome' || archetype === 'cyclone') {
       this.playSample('whoosh', 0.3, 'voice');
     }
     switch (sound) {
@@ -324,6 +324,11 @@ export class ProceduralAudio {
       case 'storm':
         this.sweep(720 * p, 1180 * p, 0.12, 'sawtooth', 0.12, 'voice');
         this.noise(0.055, 0.06);
+        break;
+      case 'lightning':
+        this.sweep(980 * p, 2100 * p, 0.07, 'square', 0.11, 'voice');
+        this.tone(2600 * p, 0.045, 'sawtooth', 0.06, 'voice');
+        this.noise(0.035, 0.045);
         break;
       case 'void':
         this.sweep(300 * p, 90, 0.18, 'sine', 0.16, 'voice');
@@ -353,6 +358,7 @@ export class ProceduralAudio {
     switch (archetype) {
       case 'storm':
       case 'chain':
+      case 'cyclone':
         this.sweep(720 * p, 1180 * p, 0.12, 'sawtooth', 0.12, 'voice');
         this.noise(0.055, 0.06);
         break;

@@ -1,9 +1,9 @@
 {
   "version": 1,
-  "hash": "fc357807fbfd",
-  "generatedAt": "2026-06-14T03:53:47.933Z",
+  "hash": "93ce12b96b83",
+  "generatedAt": "2026-06-14T04:32:29.966Z",
   "assetRoot": "/assets/",
-  "totalBytes": 126171180,
+  "totalBytes": 126634424,
   "groups": {
     "audio": {
       "count": 10,
@@ -19,7 +19,7 @@
     },
     "hero": {
       "count": 80,
-      "bytes": 113021600
+      "bytes": 113003068
     },
     "terrain": {
       "count": 27,
@@ -36,6 +36,10 @@
     "vfx": {
       "count": 1,
       "bytes": 79834
+    },
+    "weapon": {
+      "count": 80,
+      "bytes": 481776
     }
   },
   "files": [
@@ -362,802 +366,802 @@
     {
       "path": "heroes/abaddon.glb",
       "url": "/assets/heroes/abaddon.glb",
-      "bytes": 1426920,
+      "bytes": 1426800,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/alchemist.glb",
       "url": "/assets/heroes/alchemist.glb",
-      "bytes": 1417312,
+      "bytes": 1417036,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/anti-mage.glb",
       "url": "/assets/heroes/anti-mage.glb",
-      "bytes": 1406212,
+      "bytes": 1405988,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/arc-warden.glb",
       "url": "/assets/heroes/arc-warden.glb",
-      "bytes": 1407116,
+      "bytes": 1407036,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/axe.glb",
       "url": "/assets/heroes/axe.glb",
-      "bytes": 1417312,
+      "bytes": 1417052,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/beastmaster.glb",
       "url": "/assets/heroes/beastmaster.glb",
-      "bytes": 1417312,
+      "bytes": 1417060,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/bloodseeker.glb",
       "url": "/assets/heroes/bloodseeker.glb",
-      "bytes": 1406232,
+      "bytes": 1405900,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/bounty-hunter.glb",
       "url": "/assets/heroes/bounty-hunter.glb",
-      "bytes": 1406232,
+      "bytes": 1405940,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/brewmaster.glb",
       "url": "/assets/heroes/brewmaster.glb",
-      "bytes": 1417312,
+      "bytes": 1417216,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/bristleback.glb",
       "url": "/assets/heroes/bristleback.glb",
-      "bytes": 1417312,
+      "bytes": 1417052,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/chaos-knight.glb",
       "url": "/assets/heroes/chaos-knight.glb",
-      "bytes": 1426924,
+      "bytes": 1426856,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/chen.glb",
       "url": "/assets/heroes/chen.glb",
-      "bytes": 1425968,
+      "bytes": 1425664,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/clinkz.glb",
       "url": "/assets/heroes/clinkz.glb",
-      "bytes": 1405288,
+      "bytes": 1405224,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/clockwerk.glb",
       "url": "/assets/heroes/clockwerk.glb",
-      "bytes": 1426924,
+      "bytes": 1426832,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/crystal-maiden.glb",
       "url": "/assets/heroes/crystal-maiden.glb",
-      "bytes": 1407132,
+      "bytes": 1406596,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/dark-seer.glb",
       "url": "/assets/heroes/dark-seer.glb",
-      "bytes": 1407116,
+      "bytes": 1406940,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/dark-willow.glb",
       "url": "/assets/heroes/dark-willow.glb",
-      "bytes": 1407116,
+      "bytes": 1406948,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/dawnbreaker.glb",
       "url": "/assets/heroes/dawnbreaker.glb",
-      "bytes": 1426904,
+      "bytes": 1426680,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/dazzle.glb",
       "url": "/assets/heroes/dazzle.glb",
-      "bytes": 1407116,
+      "bytes": 1407004,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/death-prophet.glb",
       "url": "/assets/heroes/death-prophet.glb",
-      "bytes": 1407132,
+      "bytes": 1406820,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/disruptor.glb",
       "url": "/assets/heroes/disruptor.glb",
-      "bytes": 1407112,
+      "bytes": 1406940,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/dragon-knight.glb",
       "url": "/assets/heroes/dragon-knight.glb",
-      "bytes": 1426924,
+      "bytes": 1426744,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/drow-ranger.glb",
       "url": "/assets/heroes/drow-ranger.glb",
-      "bytes": 1405284,
+      "bytes": 1404920,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/earthshaker.glb",
       "url": "/assets/heroes/earthshaker.glb",
-      "bytes": 1417312,
+      "bytes": 1417004,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/ember-spirit.glb",
       "url": "/assets/heroes/ember-spirit.glb",
-      "bytes": 1406212,
+      "bytes": 1405972,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/enchantress.glb",
       "url": "/assets/heroes/enchantress.glb",
-      "bytes": 1407132,
+      "bytes": 1406788,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/faceless-void.glb",
       "url": "/assets/heroes/faceless-void.glb",
-      "bytes": 1426924,
+      "bytes": 1426672,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/grimstroke.glb",
       "url": "/assets/heroes/grimstroke.glb",
-      "bytes": 1407132,
+      "bytes": 1406948,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/huskar.glb",
       "url": "/assets/heroes/huskar.glb",
-      "bytes": 1410324,
+      "bytes": 1410216,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/invoker.glb",
       "url": "/assets/heroes/invoker.glb",
-      "bytes": 1407132,
+      "bytes": 1406820,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/juggernaut.glb",
       "url": "/assets/heroes/juggernaut.glb",
-      "bytes": 1426924,
+      "bytes": 1426848,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/keeper-of-the-light.glb",
       "url": "/assets/heroes/keeper-of-the-light.glb",
-      "bytes": 1407116,
+      "bytes": 1406668,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/kunkka.glb",
       "url": "/assets/heroes/kunkka.glb",
-      "bytes": 1426924,
+      "bytes": 1426848,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/legion-commander.glb",
       "url": "/assets/heroes/legion-commander.glb",
-      "bytes": 1426924,
+      "bytes": 1426704,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/lich.glb",
       "url": "/assets/heroes/lich.glb",
-      "bytes": 1407132,
+      "bytes": 1406764,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/lifestealer.glb",
       "url": "/assets/heroes/lifestealer.glb",
-      "bytes": 1417312,
+      "bytes": 1417128,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/lina.glb",
       "url": "/assets/heroes/lina.glb",
-      "bytes": 1407116,
+      "bytes": 1406812,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/lion.glb",
       "url": "/assets/heroes/lion.glb",
-      "bytes": 1407116,
+      "bytes": 1407012,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/luna.glb",
       "url": "/assets/heroes/luna.glb",
-      "bytes": 1405304,
+      "bytes": 1405016,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/magnus.glb",
       "url": "/assets/heroes/magnus.glb",
-      "bytes": 1417312,
+      "bytes": 1416964,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/marci.glb",
       "url": "/assets/heroes/marci.glb",
-      "bytes": 1406232,
+      "bytes": 1405972,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/mars.glb",
       "url": "/assets/heroes/mars.glb",
-      "bytes": 1426924,
+      "bytes": 1426816,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/meepo.glb",
       "url": "/assets/heroes/meepo.glb",
-      "bytes": 1406232,
+      "bytes": 1405908,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/mirana.glb",
       "url": "/assets/heroes/mirana.glb",
-      "bytes": 1405284,
+      "bytes": 1404828,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/monkey-king.glb",
       "url": "/assets/heroes/monkey-king.glb",
-      "bytes": 1406232,
+      "bytes": 1405932,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/natures-prophet.glb",
       "url": "/assets/heroes/natures-prophet.glb",
-      "bytes": 1407132,
+      "bytes": 1406788,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/necrophos.glb",
       "url": "/assets/heroes/necrophos.glb",
-      "bytes": 1407132,
+      "bytes": 1406836,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/ogre-magi.glb",
       "url": "/assets/heroes/ogre-magi.glb",
-      "bytes": 1417296,
+      "bytes": 1417272,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/omniknight.glb",
       "url": "/assets/heroes/omniknight.glb",
-      "bytes": 1426920,
+      "bytes": 1426736,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/outworld-destroyer.glb",
       "url": "/assets/heroes/outworld-destroyer.glb",
-      "bytes": 1407116,
+      "bytes": 1406956,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/pangolier.glb",
       "url": "/assets/heroes/pangolier.glb",
-      "bytes": 1426924,
+      "bytes": 1426896,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/phantom-assassin.glb",
       "url": "/assets/heroes/phantom-assassin.glb",
-      "bytes": 1406232,
+      "bytes": 1405804,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/phantom-lancer.glb",
       "url": "/assets/heroes/phantom-lancer.glb",
-      "bytes": 1406212,
+      "bytes": 1406044,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/pudge.glb",
       "url": "/assets/heroes/pudge.glb",
-      "bytes": 1417312,
+      "bytes": 1416932,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/pugna.glb",
       "url": "/assets/heroes/pugna.glb",
-      "bytes": 1407116,
+      "bytes": 1406940,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/queen-of-pain.glb",
       "url": "/assets/heroes/queen-of-pain.glb",
-      "bytes": 1407116,
+      "bytes": 1406964,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/razor.glb",
       "url": "/assets/heroes/razor.glb",
-      "bytes": 1407116,
+      "bytes": 1406956,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/riki.glb",
       "url": "/assets/heroes/riki.glb",
-      "bytes": 1406212,
+      "bytes": 1405916,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/rubick.glb",
       "url": "/assets/heroes/rubick.glb",
-      "bytes": 1407132,
+      "bytes": 1406876,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/shadow-shaman.glb",
       "url": "/assets/heroes/shadow-shaman.glb",
-      "bytes": 1407132,
+      "bytes": 1406932,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/silencer.glb",
       "url": "/assets/heroes/silencer.glb",
-      "bytes": 1407116,
+      "bytes": 1406772,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/skywrath-mage.glb",
       "url": "/assets/heroes/skywrath-mage.glb",
-      "bytes": 1407116,
+      "bytes": 1406852,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/slardar.glb",
       "url": "/assets/heroes/slardar.glb",
-      "bytes": 1426924,
+      "bytes": 1426704,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/slark.glb",
       "url": "/assets/heroes/slark.glb",
-      "bytes": 1417312,
+      "bytes": 1417028,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/sniper.glb",
       "url": "/assets/heroes/sniper.glb",
-      "bytes": 1405304,
+      "bytes": 1404844,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/storm-spirit.glb",
       "url": "/assets/heroes/storm-spirit.glb",
-      "bytes": 1407116,
+      "bytes": 1406940,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/sven.glb",
       "url": "/assets/heroes/sven.glb",
-      "bytes": 1426924,
+      "bytes": 1426936,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/templar-assassin.glb",
       "url": "/assets/heroes/templar-assassin.glb",
-      "bytes": 1405284,
+      "bytes": 1405032,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/timbersaw.glb",
       "url": "/assets/heroes/timbersaw.glb",
-      "bytes": 1426924,
+      "bytes": 1426880,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/troll-warlord.glb",
       "url": "/assets/heroes/troll-warlord.glb",
-      "bytes": 1410324,
+      "bytes": 1410208,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/underlord.glb",
       "url": "/assets/heroes/underlord.glb",
-      "bytes": 1417312,
+      "bytes": 1417144,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/undying.glb",
       "url": "/assets/heroes/undying.glb",
-      "bytes": 1417312,
+      "bytes": 1417128,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/vengeful-spirit.glb",
       "url": "/assets/heroes/vengeful-spirit.glb",
-      "bytes": 1407116,
+      "bytes": 1406828,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/void-spirit.glb",
       "url": "/assets/heroes/void-spirit.glb",
-      "bytes": 1406212,
+      "bytes": 1406004,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/warlock.glb",
       "url": "/assets/heroes/warlock.glb",
-      "bytes": 1407136,
+      "bytes": 1406772,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/windranger.glb",
       "url": "/assets/heroes/windranger.glb",
-      "bytes": 1405300,
+      "bytes": 1404904,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/winter-wyvern.glb",
       "url": "/assets/heroes/winter-wyvern.glb",
-      "bytes": 1407116,
+      "bytes": 1406692,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/witch-doctor.glb",
       "url": "/assets/heroes/witch-doctor.glb",
-      "bytes": 1407132,
+      "bytes": 1406948,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/wraith-king.glb",
       "url": "/assets/heroes/wraith-king.glb",
-      "bytes": 1426924,
+      "bytes": 1426848,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "heroes/zeus.glb",
       "url": "/assets/heroes/zeus.glb",
-      "bytes": 1407132,
+      "bytes": 1406868,
       "type": "model",
       "group": "hero",
       "preloadGroup": "hero",
       "sourceSpec": "scripts/assets/specs/heroes.json",
-      "source": "KayKit Adventurers (Kay Lousberg) base, retextured by us — CC0"
+      "source": "KayKit Adventurers (Kay Lousberg) base, tri-tone palette retexture by us — CC0"
     },
     {
       "path": "props/foliage/bush.glb",
@@ -1548,6 +1552,806 @@
       "preloadGroup": "vfx",
       "sourceSpec": "scripts/assets/generate_vfx_atlas.mjs",
       "source": "Original generated VFX atlas"
+    },
+    {
+      "path": "weapons/heroes/abaddon.glb",
+      "url": "/assets/weapons/heroes/abaddon.glb",
+      "bytes": 6624,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/alchemist.glb",
+      "url": "/assets/weapons/heroes/alchemist.glb",
+      "bytes": 6648,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/anti-mage.glb",
+      "url": "/assets/weapons/heroes/anti-mage.glb",
+      "bytes": 7904,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/arc-warden.glb",
+      "url": "/assets/weapons/heroes/arc-warden.glb",
+      "bytes": 8840,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/axe.glb",
+      "url": "/assets/weapons/heroes/axe.glb",
+      "bytes": 4996,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/beastmaster.glb",
+      "url": "/assets/weapons/heroes/beastmaster.glb",
+      "bytes": 6368,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/bloodseeker.glb",
+      "url": "/assets/weapons/heroes/bloodseeker.glb",
+      "bytes": 6652,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/bounty-hunter.glb",
+      "url": "/assets/weapons/heroes/bounty-hunter.glb",
+      "bytes": 3568,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/brewmaster.glb",
+      "url": "/assets/weapons/heroes/brewmaster.glb",
+      "bytes": 8764,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/bristleback.glb",
+      "url": "/assets/weapons/heroes/bristleback.glb",
+      "bytes": 5028,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/chaos-knight.glb",
+      "url": "/assets/weapons/heroes/chaos-knight.glb",
+      "bytes": 6700,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/chen.glb",
+      "url": "/assets/weapons/heroes/chen.glb",
+      "bytes": 5004,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/clinkz.glb",
+      "url": "/assets/weapons/heroes/clinkz.glb",
+      "bytes": 3492,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/clockwerk.glb",
+      "url": "/assets/weapons/heroes/clockwerk.glb",
+      "bytes": 6224,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/crystal-maiden.glb",
+      "url": "/assets/weapons/heroes/crystal-maiden.glb",
+      "bytes": 5084,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/dark-seer.glb",
+      "url": "/assets/weapons/heroes/dark-seer.glb",
+      "bytes": 8804,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/dark-willow.glb",
+      "url": "/assets/weapons/heroes/dark-willow.glb",
+      "bytes": 5344,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/dawnbreaker.glb",
+      "url": "/assets/weapons/heroes/dawnbreaker.glb",
+      "bytes": 4968,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/dazzle.glb",
+      "url": "/assets/weapons/heroes/dazzle.glb",
+      "bytes": 4980,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/death-prophet.glb",
+      "url": "/assets/weapons/heroes/death-prophet.glb",
+      "bytes": 5072,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/disruptor.glb",
+      "url": "/assets/weapons/heroes/disruptor.glb",
+      "bytes": 8752,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/dragon-knight.glb",
+      "url": "/assets/weapons/heroes/dragon-knight.glb",
+      "bytes": 6708,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/drow-ranger.glb",
+      "url": "/assets/weapons/heroes/drow-ranger.glb",
+      "bytes": 6340,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/earthshaker.glb",
+      "url": "/assets/weapons/heroes/earthshaker.glb",
+      "bytes": 5016,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/ember-spirit.glb",
+      "url": "/assets/weapons/heroes/ember-spirit.glb",
+      "bytes": 6656,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/enchantress.glb",
+      "url": "/assets/weapons/heroes/enchantress.glb",
+      "bytes": 5628,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/faceless-void.glb",
+      "url": "/assets/weapons/heroes/faceless-void.glb",
+      "bytes": 4992,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/grimstroke.glb",
+      "url": "/assets/weapons/heroes/grimstroke.glb",
+      "bytes": 6360,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/huskar.glb",
+      "url": "/assets/weapons/heroes/huskar.glb",
+      "bytes": 5612,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/invoker.glb",
+      "url": "/assets/weapons/heroes/invoker.glb",
+      "bytes": 8788,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/juggernaut.glb",
+      "url": "/assets/weapons/heroes/juggernaut.glb",
+      "bytes": 6648,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/keeper-of-the-light.glb",
+      "url": "/assets/weapons/heroes/keeper-of-the-light.glb",
+      "bytes": 5024,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/kunkka.glb",
+      "url": "/assets/weapons/heroes/kunkka.glb",
+      "bytes": 6628,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/legion-commander.glb",
+      "url": "/assets/weapons/heroes/legion-commander.glb",
+      "bytes": 6700,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/lich.glb",
+      "url": "/assets/weapons/heroes/lich.glb",
+      "bytes": 5032,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/lifestealer.glb",
+      "url": "/assets/weapons/heroes/lifestealer.glb",
+      "bytes": 6108,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/lina.glb",
+      "url": "/assets/weapons/heroes/lina.glb",
+      "bytes": 5036,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/lion.glb",
+      "url": "/assets/weapons/heroes/lion.glb",
+      "bytes": 5024,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/luna.glb",
+      "url": "/assets/weapons/heroes/luna.glb",
+      "bytes": 7852,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/magnus.glb",
+      "url": "/assets/weapons/heroes/magnus.glb",
+      "bytes": 6900,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/marci.glb",
+      "url": "/assets/weapons/heroes/marci.glb",
+      "bytes": 3508,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/mars.glb",
+      "url": "/assets/weapons/heroes/mars.glb",
+      "bytes": 5624,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/meepo.glb",
+      "url": "/assets/weapons/heroes/meepo.glb",
+      "bytes": 3520,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/mirana.glb",
+      "url": "/assets/weapons/heroes/mirana.glb",
+      "bytes": 6324,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/monkey-king.glb",
+      "url": "/assets/weapons/heroes/monkey-king.glb",
+      "bytes": 3764,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/natures-prophet.glb",
+      "url": "/assets/weapons/heroes/natures-prophet.glb",
+      "bytes": 5080,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/necrophos.glb",
+      "url": "/assets/weapons/heroes/necrophos.glb",
+      "bytes": 5036,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/ogre-magi.glb",
+      "url": "/assets/weapons/heroes/ogre-magi.glb",
+      "bytes": 4956,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/omniknight.glb",
+      "url": "/assets/weapons/heroes/omniknight.glb",
+      "bytes": 4960,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/outworld-destroyer.glb",
+      "url": "/assets/weapons/heroes/outworld-destroyer.glb",
+      "bytes": 8852,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/pangolier.glb",
+      "url": "/assets/weapons/heroes/pangolier.glb",
+      "bytes": 6620,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/phantom-assassin.glb",
+      "url": "/assets/weapons/heroes/phantom-assassin.glb",
+      "bytes": 3568,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/phantom-lancer.glb",
+      "url": "/assets/weapons/heroes/phantom-lancer.glb",
+      "bytes": 5604,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/pudge.glb",
+      "url": "/assets/weapons/heroes/pudge.glb",
+      "bytes": 6952,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/pugna.glb",
+      "url": "/assets/weapons/heroes/pugna.glb",
+      "bytes": 5008,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/queen-of-pain.glb",
+      "url": "/assets/weapons/heroes/queen-of-pain.glb",
+      "bytes": 3520,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/razor.glb",
+      "url": "/assets/weapons/heroes/razor.glb",
+      "bytes": 8696,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/riki.glb",
+      "url": "/assets/weapons/heroes/riki.glb",
+      "bytes": 3484,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/rubick.glb",
+      "url": "/assets/weapons/heroes/rubick.glb",
+      "bytes": 5028,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/shadow-shaman.glb",
+      "url": "/assets/weapons/heroes/shadow-shaman.glb",
+      "bytes": 5056,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/silencer.glb",
+      "url": "/assets/weapons/heroes/silencer.glb",
+      "bytes": 7908,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/skywrath-mage.glb",
+      "url": "/assets/weapons/heroes/skywrath-mage.glb",
+      "bytes": 5084,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/slardar.glb",
+      "url": "/assets/weapons/heroes/slardar.glb",
+      "bytes": 5592,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/slark.glb",
+      "url": "/assets/weapons/heroes/slark.glb",
+      "bytes": 3500,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/sniper.glb",
+      "url": "/assets/weapons/heroes/sniper.glb",
+      "bytes": 7712,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/storm-spirit.glb",
+      "url": "/assets/weapons/heroes/storm-spirit.glb",
+      "bytes": 8820,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/sven.glb",
+      "url": "/assets/weapons/heroes/sven.glb",
+      "bytes": 6604,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/templar-assassin.glb",
+      "url": "/assets/weapons/heroes/templar-assassin.glb",
+      "bytes": 7884,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/timbersaw.glb",
+      "url": "/assets/weapons/heroes/timbersaw.glb",
+      "bytes": 9356,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/troll-warlord.glb",
+      "url": "/assets/weapons/heroes/troll-warlord.glb",
+      "bytes": 6376,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/underlord.glb",
+      "url": "/assets/weapons/heroes/underlord.glb",
+      "bytes": 6648,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/undying.glb",
+      "url": "/assets/weapons/heroes/undying.glb",
+      "bytes": 5008,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/vengeful-spirit.glb",
+      "url": "/assets/weapons/heroes/vengeful-spirit.glb",
+      "bytes": 5628,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/void-spirit.glb",
+      "url": "/assets/weapons/heroes/void-spirit.glb",
+      "bytes": 6616,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/warlock.glb",
+      "url": "/assets/weapons/heroes/warlock.glb",
+      "bytes": 5072,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/windranger.glb",
+      "url": "/assets/weapons/heroes/windranger.glb",
+      "bytes": 6384,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/winter-wyvern.glb",
+      "url": "/assets/weapons/heroes/winter-wyvern.glb",
+      "bytes": 5032,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/witch-doctor.glb",
+      "url": "/assets/weapons/heroes/witch-doctor.glb",
+      "bytes": 5084,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/wraith-king.glb",
+      "url": "/assets/weapons/heroes/wraith-king.glb",
+      "bytes": 6660,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "weapons/heroes/zeus.glb",
+      "url": "/assets/weapons/heroes/zeus.glb",
+      "bytes": 8780,
+      "type": "model",
+      "group": "weapon",
+      "preloadGroup": "weapon",
+      "sourceSpec": null,
+      "source": null
     }
   ]
 }

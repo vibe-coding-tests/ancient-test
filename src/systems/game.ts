@@ -1,6 +1,7 @@
 import { TUNING } from '../data/tuning';
 import { DEFAULT_CREEP_DROP_TABLES, qualityOddsByTier } from '../data/creep-drops';
-import { GRADE_UP_COSTS, MASTERWORK_COSTS, REFORGE_COSTS, disenchant, gradeUp, masterwork, reforge } from '../data/forge';
+import { GRADE_UP_COSTS, MASTERWORK_COSTS, REFORGE_COSTS, disenchant, gradeUp, masterwork, reforge, refreshResolvedMods } from '../data/forge';
+import { gemDef, isGemId } from '../data/gems';
 import { ITEM_GRADES } from '../data/grade';
 import { QUALITY_GRADES, nextQuality, rarityColor } from '../data/quality';
 import { applyLootFilter, DEFAULT_LOOT_FILTER, type LootFilterRule } from './loot-filter';
@@ -48,7 +49,7 @@ import { ELITE_DRAFT } from '../data/drafts';
 import { resonanceMods } from '../core/resonance';
 import { levelFromXp, xpForLevel } from '../core/stats';
 import { dist, fromAngle, norm, sub } from '../core/math2d';
-import type { ActiveElement, ArmoryLoadouts, BossDef, CreepTier, CreepInstanceSave, DifficultyTier, DraftDef, DropSource, DungeonDef, DungeonModifierDef, DungeonProgressSave, DungeonRoom, EchoProgress, GambitRule, GameSave, GraphicsSettings, HeroLoadoutSlots, HeroSave, ItemDropTable, ItemGrade, ItemQuality, ItemRarity, ItemSave, LootBand, LoreEntryDef, MacroHeroSetup, NeutralItemDef, Order, QuestProgress, RaidDef, RegionDef, RoomTemplate, RoomType, SeasonalEventDef, SimEvent, StingerId, Vec2 } from '../core/types';
+import type { ActiveElement, ArmoryLoadouts, BossDef, CreepTier, CreepInstanceSave, CutsceneDef, DifficultyTier, DraftDef, DropSource, DungeonDef, DungeonModifierDef, DungeonProgressSave, DungeonRoom, EchoProgress, GambitRule, GameSave, GraphicsSettings, HeroLoadoutSlots, HeroSave, ItemDropTable, ItemGrade, ItemQuality, ItemRarity, ItemSave, LootBand, LoreEntryDef, MacroHeroSetup, NeutralItemDef, Order, QuestProgress, RaidDef, RegionDef, RoomTemplate, RoomType, SeasonalEventDef, SimEvent, StingerId, Vec2 } from '../core/types';
 import { ProceduralAudio } from '../engine/audio';
 import { CinematicDirector, type CinematicView, type CutsceneContext } from '../engine/cinematic';
 import { StoryDetector, type StoryObserveCtx, type StoryTrigger } from '../engine/story-detectors';
@@ -854,17 +855,32 @@ export class Game {
     if (this.toasts.length > 60) this.toasts.splice(0, this.toasts.length - 60);
   }
 
+  private cutsceneSeenKey(id: string, ctx: CutsceneContext): string {
+    const scoped = (suffix: unknown) => `cinematic:${id}:${String(suffix)}`;
+    if (id === 'echo-milestone-stinger' && ctx.hero) return scoped(ctx.hero);
+    if ((id === 'boss-phase-stinger' || id === 'boss-clear-stinger') && ctx.boss) return scoped(ctx.boss);
+    if (id === 'raid-clear-stinger' && ctx.raid) return scoped(ctx.raid);
+    if (id === 'item-chase-first-hold' && ctx.item) return scoped(ctx.item);
+    return `cinematic:${id}`;
+  }
+
+  private cutsceneToastLine(def: CutsceneDef, ctx: CutsceneContext): string {
+    const template = def.beats.find((b) => b.line)?.line?.text ?? def.title;
+    return template.replace(/\{([a-zA-Z0-9_-]+)\}/g, (_, key: string) => String(ctx[key] ?? ''));
+  }
+
   playCutscene(id: string, ctx: CutsceneContext = {}): boolean {
     const def = REG.cutscenes.get(id);
     if (!def) return false;
-    const seenKey = `cinematic:${id}`;
+    const seenKey = this.cutsceneSeenKey(id, ctx);
     const seen = this.journalSeen.has(seenKey);
     this.journalSeen.add(seenKey);
     // §4.3: a bark, or any tier fully suppressed by settings, routes its line as a toast so
     // the information still reaches the player; only the staging is withheld.
-    if (def.tier === 'bark' || this.cinematic.routesToToast(def)) {
-      const line = def.beats[0]?.line?.text;
-      if (line) this.msg(line.replace(/\{([a-zA-Z0-9_-]+)\}/g, (_, key: string) => String(ctx[key] ?? '')), 'bark');
+    // §3.4 / §4.4: repeat views collapse to bark/toast; full-length replay lives in the gallery.
+    if (seen || def.tier === 'bark' || this.cinematic.routesToToast(def)) {
+      const line = this.cutsceneToastLine(def, ctx);
+      if (line) this.msg(line, 'bark');
       return true;
     }
     this.cinematic.play(def, ctx, seen);
@@ -1017,24 +1033,63 @@ export class Game {
   }
 
   private activeFestival: string | null = null;
+  private seasonalModeTarget(event: SeasonalEventDef): { kind: 'raid' | 'dungeon'; id: string; endless?: boolean; maxSec?: number; modifiers?: string[] } {
+    switch (event.id) {
+      case 'diretide-roshan-candy':
+        return { kind: 'raid', id: 'roshan-pit' };
+      case 'wraith-night-altar':
+        return { kind: 'dungeon', id: 'frost-hollow', modifiers: ['frozen-oath', 'packed-halls'] };
+      case 'continuum-descent':
+        return { kind: 'dungeon', id: 'severed-dark', endless: true, modifiers: ['deep-map'] };
+      case 'cycle-beast':
+        return { kind: 'raid', id: 'last-eldwurm', maxSec: 90 };
+      case 'dark-reef-crawl':
+        return { kind: 'raid', id: 'renegade-marshal' };
+      case 'collapsing-hollow':
+        return { kind: 'dungeon', id: 'ember-caldera', maxSec: 180, modifiers: ['single-life'] };
+      case 'nemestice-fall':
+        return { kind: 'dungeon', id: 'ember-caldera', maxSec: 210, modifiers: ['single-life', 'packed-halls'] };
+      case 'crowns-fall':
+        return { kind: 'dungeon', id: 'worldstone-vault', modifiers: ['champion-sigil', 'deep-map'] };
+      case 'dark-moon-hunt':
+        return { kind: 'raid', id: 'forsaken-queen' };
+    }
+    return { kind: 'raid', id: 'roshan-pit' };
+  }
 
   /** True if this festival's underlying mode can launch right now (full party, in region, not busy). */
   festivalLaunchable(eventId: string): boolean {
     const event = REG.seasonalEvents.get(eventId);
     if (!event || this.liveGym || this.liveRaid || this.liveDungeon || this.party.length < 5) return false;
     const map = this.seasonalModeTarget(event);
-    if (!map) return false;
     if (map.kind === 'raid') return map.id !== ROSHAN_RAID_ID || (this.raidProgress[map.id]?.roshanRespawnAt ?? 0) <= this.playtime;
     return REG.dungeon(map.id).regionId === this.region.id;
   }
 
-  private seasonalModeTarget(event: SeasonalEventDef): { kind: 'raid' | 'dungeon'; id: string; endless?: boolean } | null {
-    switch (event.mode) {
-      case 'roshan-candy': return { kind: 'raid', id: 'roshan-pit' };
-      case 'wave-defense': return { kind: 'dungeon', id: 'frost-hollow' };
-      case 'endless-descent': return { kind: 'dungeon', id: 'frost-hollow', endless: true };
-      default: return null;
+  seasonalEventStatus(eventId: string): { launchable: boolean; target: string; detail: string } {
+    const event = REG.seasonalEvents.get(eventId);
+    if (!event) return { launchable: false, target: 'Unknown', detail: 'Unknown festival.' };
+    const map = this.seasonalModeTarget(event);
+    const target = map.kind === 'raid'
+      ? `Raid · ${REG.raid(map.id).name}${map.maxSec ? ` · ${map.maxSec}s rite` : ''}`
+      : `${map.endless ? 'Endless dungeon' : 'Dungeon'} · ${REG.dungeon(map.id).name}${map.maxSec ? ` · ${map.maxSec}s rite` : ''}`;
+    if (this.liveGym || this.liveRaid || this.liveDungeon) return { launchable: false, target, detail: 'Finish the current fight first.' };
+    if (this.party.length < 5) return { launchable: false, target, detail: 'Requires a full party of 5 heroes.' };
+    if (map.kind === 'raid') {
+      if (map.id === ROSHAN_RAID_ID) {
+        const at = this.raidProgress[map.id]?.roshanRespawnAt ?? 0;
+        if (at > this.playtime) return { launchable: false, target, detail: `Roshan returns in ${Math.ceil(at - this.playtime)}s.` };
+      }
+      return { launchable: true, target, detail: `Launches ${target}.` };
     }
+    const dungeon = REG.dungeon(map.id);
+    if (dungeon.regionId !== this.region.id) {
+      return { launchable: false, target, detail: `Travel to ${REG.region(dungeon.regionId).name}.` };
+    }
+    const mods = map.modifiers?.length
+      ? ` · ${map.modifiers.map((id) => dungeon.modifiers?.find((m) => m.id === id)?.name ?? id).join(', ')}`
+      : '';
+    return { launchable: true, target, detail: `Launches ${target}${mods}.` };
   }
 
   private grantFestivalReward(event: SeasonalEventDef): void {
@@ -1045,10 +1100,10 @@ export class Game {
   /** Launch the festival's existing-system session driver (raid/dungeon) when playable. */
   private launchSeasonalMode(event: SeasonalEventDef): boolean {
     const map = this.seasonalModeTarget(event);
-    if (!map || !this.festivalLaunchable(event.id)) return false;
+    if (!this.festivalLaunchable(event.id)) return false;
     const ok = map.kind === 'raid'
-      ? this.startLiveRaid(map.id)
-      : this.startDungeon(map.id, 'normal', map.endless ? { endless: true } : {});
+      ? this.startLiveRaid(map.id, 'normal', map.maxSec ? { maxSec: map.maxSec } : undefined)
+      : this.startDungeon(map.id, 'normal', { endless: map.endless, maxSec: map.maxSec, modifiers: map.modifiers });
     return ok;
   }
 
@@ -1068,13 +1123,12 @@ export class Game {
     this.codexUnlock('festival:' + event.id);
     this.playCutscene(event.cutsceneId, { event: event.name });
     // §7.5: festivals are new drivers over the existing raid/dungeon session machinery. Launch
-    // the mode when playable (reward pays out on clear); otherwise remember it now with its purse.
+    // the mode when playable. Rewards pay on clear, never merely for invoking the story wrapper.
     if (this.launchSeasonalMode(event)) {
       this.activeFestival = event.id;
       this.msg(`${event.name} begins — clear it to earn the ${event.reward.label}.`, 'info');
     } else {
-      this.grantFestivalReward(event);
-      this.msg(`${event.name}: ${event.reward.label} earned`, 'good');
+      this.msg(this.seasonalEventStatus(event.id).detail, 'bad');
     }
     this.autosave('festival');
     return true;
@@ -1432,6 +1486,7 @@ export class Game {
     const gym = REG.gym(gymId);
     this.liveGym = new LiveGymFight(gym, this.gymPlayerTeam(), this.region.seed + Math.round(this.playtime));
     this.liveGymId = gymId;
+    this.story.beginEncounter();
     this.queuedOrders = [];
     this.scene.resetUnitViews(); // gym sim uids must not alias overworld views
     const first = this.liveGym.playerHeroes()[0];
@@ -1464,6 +1519,7 @@ export class Game {
       this.scene.pushEvent(ev, fight.sim);
       this.audio.handleEvent(ev);
     }
+    this.observeStory(this.frameEvents, { sim: fight.sim });
     this.audio.update?.({ biome: this.region.biome, dayTime: 0.5, inCombat: true, dt });
     this.scene.update(fight.sim, fight.cameraFollow(), dt, 0.5, this.cinematicPresentationView());
     if (fight.done && fight.result) {
@@ -1663,7 +1719,7 @@ export class Game {
     return { won: true, result };
   }
 
-  startLiveRaid(raidId: string, tier: DifficultyTier = 'normal'): boolean {
+  startLiveRaid(raidId: string, tier: DifficultyTier = 'normal', opts: { maxSec?: number } = {}): boolean {
     if (this.liveGym || this.liveRaid) return false;
     const def = REG.raid(raidId);
     if (this.party.length < 5) {
@@ -1682,7 +1738,7 @@ export class Game {
     this.liveRaidTier = tier;
     this.liveRaidClears = prog?.clears ?? 0;
     this.liveRaidAegis = this.aegisReady();
-    this.liveRaid = new LiveRaid(def, this.gymPlayerTeam(), tier, stableContentSeed(`${raidId}:${tier}`, this.liveRaidClears) + Math.round(this.playtime), { aegis: this.liveRaidAegis });
+    this.liveRaid = new LiveRaid(def, this.gymPlayerTeam(), tier, stableContentSeed(`${raidId}:${tier}`, this.liveRaidClears) + Math.round(this.playtime), { aegis: this.liveRaidAegis, maxSec: opts.maxSec });
     this.story.beginEncounter();
     this.playRaidIntroSetpieces(raidId, def.name);
     this.queuedOrders = [];
@@ -2610,6 +2666,10 @@ export class Game {
     const hero = this.heroSnapshot(heroId);
     const saved = this.inventoryStash[stashIdx];
     if (!hero || !saved) return false;
+    if (isGemId(saved.id)) {
+      this.msg('Gems must be socketed at the Tinker\'s Bench', 'bad');
+      return false;
+    }
 
     const items = normalizeSavedItems(hero.items);
     const free = items.findIndex((it) => it === null);
@@ -3034,9 +3094,60 @@ export class Game {
   private forgeableArmoryItem(stashIdx: number): { item: ItemSave; def: ReturnType<typeof REG.item> } | null {
     const item = this.inventoryStash[stashIdx];
     if (!item?.bound) return null;
+    if (isGemId(item.id)) return null;
     const def = REG.item(item.id);
     if (def.tier === 'consumable' || def.tier === 'special') return null;
     return { item, def };
+  }
+
+  socketArmoryGem(stashIdx: number, socketIdx: number, gemStashIdx: number): boolean {
+    if (stashIdx === gemStashIdx) {
+      this.msg('Choose a gem from a different Armory slot', 'bad');
+      return false;
+    }
+    const target = this.forgeableArmoryItem(stashIdx);
+    const gemItem = this.inventoryStash[gemStashIdx];
+    const gem = gemItem ? gemDef(gemItem.id) : undefined;
+    if (!target || !gem) {
+      this.msg('Socketing needs a bound item and a gem', 'bad');
+      return false;
+    }
+    const sockets = [...(target.item.sockets ?? [])];
+    if (socketIdx < 0 || socketIdx >= sockets.length) {
+      this.msg(`${target.def.name} has no socket there`, 'bad');
+      return false;
+    }
+    if (sockets[socketIdx]) {
+      this.msg('That socket is already filled', 'bad');
+      return false;
+    }
+    sockets[socketIdx] = gem.id;
+    const updated = refreshResolvedMods({ ...target.item, sockets }, target.def);
+    this.inventoryStash.splice(gemStashIdx, 1);
+    const itemIdx = gemStashIdx < stashIdx ? stashIdx - 1 : stashIdx;
+    this.inventoryStash[itemIdx] = updated;
+    this.msg(`Socketed ${gem.name} into ${target.def.name}`, 'good');
+    return true;
+  }
+
+  unsocketArmoryGem(stashIdx: number, socketIdx: number): boolean {
+    const target = this.forgeableArmoryItem(stashIdx);
+    if (!target) {
+      this.msg('Only bound Armory items can be unsocketed', 'bad');
+      return false;
+    }
+    const sockets = [...(target.item.sockets ?? [])];
+    const gemId = socketIdx >= 0 && socketIdx < sockets.length ? sockets[socketIdx] : null;
+    const gem = gemId ? gemDef(gemId) : undefined;
+    if (!gemId || !gem) {
+      this.msg('That socket is empty', 'bad');
+      return false;
+    }
+    sockets[socketIdx] = null;
+    this.inventoryStash[stashIdx] = refreshResolvedMods({ ...target.item, sockets }, target.def);
+    this.inventoryStash.push({ id: gemId });
+    this.msg(`Returned ${gem.name} to the Armory`, 'info');
+    return true;
   }
 
   forgeGradeUpQuote(stashIdx: number, deterministic = true): { from: ItemGrade; to: Exclude<ItemGrade, 'broken'>; gold: number; essence: number; chance: number; deterministic: boolean } | null {

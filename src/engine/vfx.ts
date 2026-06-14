@@ -601,6 +601,10 @@ export class VfxManager {
       this.dome(x, y, vfx.color, vfx.color2 ?? '#ffffff', (vfx.scale ?? 1) * 2.6, 0.9);
       return;
     }
+    if (vfx.archetype === 'cyclone') {
+      this.cyclone(x, y, vfx.color, vfx.color2 ?? '#ffffff', vfx.scale ?? 1);
+      return;
+    }
     if (vfx.archetype === 'mine') {
       this.mine(x, y, vfx.color, vfx.color2 ?? '#ffffff', vfx.scale ?? 1);
       return;
@@ -686,6 +690,54 @@ export class VfxManager {
       shell.rotation.y = t * 0.4;
       shellMat.opacity = 0.32 * (1 - lifeT * 0.5);
       baseMat.opacity = 0.7 * (0.6 + Math.sin(t * 6) * 0.3) * (1 - lifeT * 0.3);
+    });
+  }
+
+  // WS-D: Eul's/Wind Waker lift. A vertical spiral column is distinct from the
+  // broader storm archetype and pairs with the unit's cyclone status lift.
+  private cyclone(x: number, y: number, color: string, color2: string, scale: number): void {
+    const g = new THREE.Group();
+    g.position.copy(this.w(x, y, 0.08));
+    const base = new THREE.Mesh(
+      sharedGeometry(new THREE.RingGeometry(0.45 * scale, 1.05 * scale, 36)),
+      new THREE.MeshBasicMaterial({ color: color2, transparent: true, opacity: 0.68, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending })
+    );
+    base.rotation.x = -Math.PI / 2;
+    g.add(base);
+    const wisps: THREE.Mesh[] = [];
+    for (let i = 0; i < 7; i++) {
+      const wisp = new THREE.Mesh(
+        sharedGeometry(new THREE.CylinderGeometry(0.035 * scale, 0.08 * scale, 1.35 * scale, 5, 1, true)),
+        new THREE.MeshBasicMaterial({ color: i % 2 === 0 ? color : color2, transparent: true, opacity: 0.62, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending })
+      );
+      wisp.userData.phase = (i / 7) * Math.PI * 2;
+      g.add(wisp);
+      wisps.push(wisp);
+    }
+    const top = new THREE.Mesh(
+      sharedGeometry(new THREE.TorusGeometry(0.55 * scale, 0.04 * scale, 6, 28)),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.56, depthWrite: false, blending: THREE.AdditiveBlending })
+    );
+    top.position.y = 2.2 * scale;
+    top.rotation.x = Math.PI / 2;
+    g.add(top);
+    const baseMat = base.material as THREE.MeshBasicMaterial;
+    const topMat = top.material as THREE.MeshBasicMaterial;
+    this.push(g, 0.85, (t, lifeT) => {
+      base.rotation.z = t * 3.4;
+      baseMat.opacity = 0.68 * (1 - lifeT * 0.55);
+      top.rotation.z = -t * 4.2;
+      top.position.y = (1.45 + Math.sin(t * 7) * 0.08) * scale;
+      topMat.opacity = 0.56 * (1 - lifeT * 0.35);
+      for (const wisp of wisps) {
+        const p = wisp.userData.phase as number;
+        const a = p + t * 5.2;
+        const h = 0.25 + ((p + t * 2.1) % (Math.PI * 2)) / (Math.PI * 2) * 2.1;
+        const r = (0.38 + h * 0.14) * scale;
+        wisp.position.set(Math.cos(a) * r, h * scale, Math.sin(a) * r);
+        wisp.rotation.set(0.45, -a, 0.2);
+        (wisp.material as THREE.MeshBasicMaterial).opacity = 0.62 * (1 - lifeT);
+      }
     });
   }
 

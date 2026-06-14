@@ -51,7 +51,7 @@ describe('role-true default gambit sweep', () => {
     let newWins = 0;
     let oldWins = 0;
     let draws = 0;
-    const N = 12;
+    const N = 16;
     for (let seed = 1; seed <= N; seed++) {
       // same seed, brains swapped between sides, to cancel positional bias.
       const r1 = runMacroBattle({ seed, teamA: newTeam(), teamB: oldTeam(), maxSec: 60 });

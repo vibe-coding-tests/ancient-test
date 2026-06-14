@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { applyHeroLikeness, applyItemAppearances, buildUnitRig, modelGeometryCacheSize, mountHeroModel, recolorToPalette } from '../engine/models';
+import { applyHeroLikeness, applyItemAppearances, attachHeroWeaponModel, buildUnitRig, modelGeometryCacheSize, mountHeroModel, recolorToPalette } from '../engine/models';
 import { ENABLED_HERO_MODELS, ENABLED_HERO_BASES, HERO_BASE, heroAssetEntry, heroBaseId, heroBaseUrl, PHASE5_STARTER_ASSETS } from '../engine/assets';
 import { ALL_HEROES } from '../data/index';
 
@@ -41,6 +41,7 @@ describe('pluggable hero rig (Phase 5)', () => {
     for (const a of PHASE5_STARTER_ASSETS) {
       expect(ENABLED_HERO_MODELS.has(a.heroId), `${a.heroId} enabled`).toBe(true);
       expect(heroAssetEntry(a.heroId), `${a.heroId} entry`).not.toBeNull();
+      expect(a.weaponUrl, `${a.heroId} weapon`).toBe(`/assets/weapons/heroes/${a.heroId}.glb`);
     }
     // Creature-cohort heroes mount through shared bases, not per-hero GLB entries.
     expect(heroAssetEntry('broodmother')).toBeNull();
@@ -107,6 +108,31 @@ describe('pluggable hero rig (Phase 5)', () => {
     applyItemAppearances(rig, [{ weapon: { kind: 'sword', color: '#d8dce8' } }]);
     // Falls back to the item layer (on root, always visible) rather than vanishing.
     expect(rig.weapon?.parent).toBe(rig.itemLayer);
+  });
+
+  it('attaches generated hero weapon GLBs as the default and lets item weapons override them', () => {
+    const rig = buildUnitRig({ build: 'biped', scale: 1, weapon: 'sword' }, ['#888899', '#666677', '#aaaabb']);
+    const model = new THREE.Group();
+    const torso = new THREE.Mesh(new THREE.BoxGeometry(2, 6, 2), new THREE.MeshStandardMaterial());
+    const hand = new THREE.Object3D(); hand.name = 'Hand_R';
+    model.add(torso, hand);
+    mountHeroModel(rig, model);
+
+    const heroWeapon = new THREE.Group();
+    heroWeapon.add(new THREE.Mesh(new THREE.BoxGeometry(1, 0.1, 0.1), new THREE.MeshStandardMaterial()));
+    attachHeroWeaponModel(rig, heroWeapon);
+
+    expect(rig.defaultWeapon).toBe(heroWeapon);
+    expect(rig.weapon).toBe(heroWeapon);
+    expect(heroWeapon.parent).toBe(hand);
+
+    applyItemAppearances(rig, [{ weapon: { kind: 'glowing-blade', color: '#ffd86a' } }]);
+    expect(rig.weapon).not.toBe(heroWeapon);
+    expect(heroWeapon.parent).toBeNull();
+
+    applyItemAppearances(rig, []);
+    expect(rig.weapon).toBe(heroWeapon);
+    expect(heroWeapon.parent).toBe(hand);
   });
 });
 

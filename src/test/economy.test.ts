@@ -7,6 +7,7 @@ import { rollLoot, scaledBounty } from '../core/phase3';
 import { overflowXpToGold } from '../core/progression';
 import { xpForLevel } from '../core/stats';
 import { GRADE_UP_COSTS, MASTERWORK_COSTS, REFORGE_COSTS } from '../data/forge';
+import { gemDef } from '../data/gems';
 import { TUNING } from '../data/tuning';
 import { GATED_TOP_TIER, Game, itemAllowedFromSource, newGameSave } from '../systems/game';
 import type { CreepDef, GambitRule, GameSave, SimEvent } from '../core/types';
@@ -682,6 +683,29 @@ describe('loot overhaul curated chase and black-market sinks', () => {
     expect(g.inventoryStash[0].gradeRoll).toBeGreaterThan(beforeRoll);
     expect(g.gold).toBe(goldBeforeMasterwork - MASTERWORK_COSTS.sharp.gold);
     expect(g.essence).toBe(essenceBeforeMasterwork - MASTERWORK_COSTS.sharp.essence);
+  });
+
+  it('sockets and unsockets Armory gems on bound items', () => {
+    const save = soloSave('juggernaut', 20);
+    save.inventoryStash = [
+      { id: 'daedalus', bound: true, grade: 'refined', gradeRoll: 0.5, affixes: [], sockets: [null], resolvedMods: {} },
+      { id: 'chipped-topaz' }
+    ];
+    const g = Game.headless(save);
+    const gem = gemDef('chipped-topaz')!;
+
+    expect(REG.item('chipped-topaz').exclusiveTo).toEqual(['creep', 'dungeon']);
+    expect(g.equipArmoryItemForHero('juggernaut', 1)).toBe(false);
+    expect(g.socketArmoryGem(0, 0, 1)).toBe(true);
+    expect(g.inventoryStash).toHaveLength(1);
+    expect(g.inventoryStash[0].sockets).toEqual(['chipped-topaz']);
+    const damageWithGem = g.inventoryStash[0].resolvedMods?.damage ?? 0;
+    expect(damageWithGem).toBeGreaterThan(gem.mods.damage ?? 0);
+
+    expect(g.unsocketArmoryGem(0, 0)).toBe(true);
+    expect(g.inventoryStash[0].sockets).toEqual([null]);
+    expect(g.inventoryStash[0].resolvedMods?.damage ?? 0).toBeLessThan(damageWithGem);
+    expect(g.inventoryStash[1]).toEqual({ id: 'chipped-topaz' });
   });
 
   it('exposes live Black Market wheel costs through the view-model', () => {

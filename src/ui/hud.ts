@@ -3,6 +3,7 @@ import { TUNING } from '../data/tuning';
 import { QUALITY_GRADES, qualityColor, rarityColor } from '../data/quality';
 import { affixDef } from '../data/affixes';
 import { GRADE_DEFS } from '../data/grade';
+import { gemDef } from '../data/gems';
 import { xpProgress } from '../core/progression';
 import { itemReady, sellValue, computeBuyPlan } from '../core/items';
 import { buybackCost } from '../core/phase3';
@@ -1336,6 +1337,12 @@ export class Hud {
     const heroOptions = armory.heroes
       .map((h) => `<option value="${h.heroId}">${h.name}${h.fielded ? ' · fielded' : ''}</option>`)
       .join('');
+    const gemOptions = armory.stash
+      .map((it, i) => {
+        const gem = gemDef(it.id);
+        return gem ? `<option value="${i}">${gem.name}</option>` : '';
+      })
+      .join('');
     const conflictHtml = armory.conflicts.length === 0
       ? ''
       : `<div class="rr-sub bad">Contention: ${armory.conflicts.map((c) => `${REG.item(c.itemId).name} claimed ${c.requested}×, owned ${c.owned}×`).join(' · ')}</div>`;
@@ -1343,33 +1350,46 @@ export class Hud {
       ? `<p class="dim">No stashed items yet. Bosses, raids, chests, and wild creeps can stock the Armory.</p>`
       : armory.stash.map((it, i) => {
           const def = REG.item(it.id);
+          const gem = gemDef(it.id);
           const qLabel = it.quality && it.quality !== 'standard'
             ? ` · <span style="color:${qualityColor(it.quality)}">${QUALITY_GRADES[it.quality].name}</span>`
             : '';
           const gDef = GRADE_DEFS[it.grade ?? 'standard'];
-          const flags = [def.tier, gradeLabel(it), it.bound ? 'bound' : 'liquid'].join(' · ');
-          const quote = it.bound ? g.qualityUpgradeQuote(i) : null;
+          const flags = gem ? ['gem', gem.grade, 'socket material'].join(' · ') : [def.tier, gradeLabel(it), it.bound ? 'bound' : 'liquid'].join(' · ');
+          const quote = !gem && it.bound ? g.qualityUpgradeQuote(i) : null;
           const qualityForge = quote
             ? `<button class="btn small" data-arm-upgrade="${i}">Quality ${QUALITY_GRADES[quote.to].name} (${quote.essence}e/${quote.gold}g)</button>`
             : '';
-          const gradeDet = it.bound ? g.forgeGradeUpQuote(i, true) : null;
-          const gradeGamble = it.bound ? g.forgeGradeUpQuote(i, false) : null;
-          const reforge = it.bound ? g.reforgeArmoryItemQuote(i) : null;
-          const masterwork = it.bound ? g.masterworkArmoryItemQuote(i) : null;
-          const powerForge = [
+          const gradeDet = !gem && it.bound ? g.forgeGradeUpQuote(i, true) : null;
+          const gradeGamble = !gem && it.bound ? g.forgeGradeUpQuote(i, false) : null;
+          const reforge = !gem && it.bound ? g.reforgeArmoryItemQuote(i) : null;
+          const masterwork = !gem && it.bound ? g.masterworkArmoryItemQuote(i) : null;
+          const socketControls = !gem && it.bound && (it.sockets ?? []).length > 0
+            ? (it.sockets ?? []).map((socketed, socketIdx) => {
+                const socketedGem = socketed ? gemDef(socketed) : null;
+                return socketedGem
+                  ? `<button class="btn small" data-arm-unsocket="${i}:${socketIdx}">Unsocket ${socketedGem.name}</button>`
+                  : gemOptions
+                    ? `<select class="small-select" data-arm-gem-pick="${i}:${socketIdx}">${gemOptions}</select><button class="btn small" data-arm-socket="${i}:${socketIdx}">Socket</button>`
+                    : `<span class="rr-sub">empty socket</span>`;
+              }).join('')
+            : '';
+          const powerForge = gem ? [
+            `<span class="rr-sub">Socket into a bound item with an empty slot.</span>`
+          ].join('') : [
             gradeDet ? `<button class="btn small" data-arm-grade-det="${i}">Grade ${gradeDet.to} (${gradeDet.essence}e)</button>` : '',
             gradeGamble ? `<button class="btn small" data-arm-grade-gamble="${i}">Gamble ${gradeGamble.to} (${gradeGamble.gold}g/${gradeGamble.essence}e · ${Math.round(gradeGamble.chance * 100)}%)</button>` : '',
             reforge ? `<button class="btn small" data-arm-reforge="${i}">Reforge (${reforge.gold}g/${reforge.essence}e)</button>` : '',
-            masterwork ? `<button class="btn small" data-arm-masterwork="${i}">Masterwork (${masterwork.gold}g/${masterwork.essence}e)</button>` : ''
+            masterwork ? `<button class="btn small" data-arm-masterwork="${i}">Masterwork (${masterwork.gold}g/${masterwork.essence}e)</button>` : '',
+            socketControls
           ].join('');
           return `<div class="svc-row" style="border-left:3px solid ${rarityColor(def.rarity)}; outline:1px solid ${gDef.frame}">
             <div class="svc-main"><b style="color:${rarityColor(def.rarity)}">${def.name}</b> <em>${flags}${qLabel}</em><div class="rr-sub">${def.lore}</div></div>
             <div class="svc-actions">
-              <select class="small-select" data-arm-pick="${i}">${heroOptions}</select>
-              <button class="btn small" data-arm-hero-eq="${i}">Equip</button>
+              ${gem ? '' : `<select class="small-select" data-arm-pick="${i}">${heroOptions}</select><button class="btn small" data-arm-hero-eq="${i}">Equip</button>`}
               ${powerForge}
               ${qualityForge}
-              ${it.bound ? `<button class="btn small" data-arm-salvage="${i}">Salvage</button>` : ''}
+              ${!gem && it.bound ? `<button class="btn small" data-arm-salvage="${i}">Salvage</button>` : ''}
             </div>
           </div>`;
         }).join('');
@@ -1474,13 +1494,17 @@ export class Hud {
         <div class="svc-actions"><button class="btn small accent" data-champion="1" ${fiveCleared && !champDown ? '' : 'disabled'}>Challenge</button></div>
       </div>`;
 
-    const festivalHtml = [...REG.seasonalEvents.values()].map((event) => `
-      <div class="svc-row">
-        <div class="svc-main"><b>${event.name}</b> <em>${event.realEvent}</em>
-          <div class="rr-sub">${event.summary}</div>
-        </div>
-        <div class="svc-actions"><button class="btn small accent" data-festival="${event.id}">Invoke</button></div>
-      </div>`).join('');
+    const festivalHtml = [...REG.seasonalEvents.values()].map((event) => {
+      const status = g.seasonalEventStatus(event.id);
+      return `
+        <div class="svc-row">
+          <div class="svc-main"><b>${event.name}</b> <em>${event.realEvent}</em>
+            <div class="rr-sub">${event.summary}</div>
+            <div class="rr-sub">${status.target} — ${status.detail}</div>
+          </div>
+          <div class="svc-actions"><button class="btn small accent" data-festival="${event.id}" ${status.launchable ? '' : 'disabled'}>Invoke</button></div>
+        </div>`;
+    }).join('');
 
     // Gold sinks (§3.8)
     const downIdx = g.party.findIndex((r) => !r.unit || !r.unit.alive || r.respawnAt > g.sim.time);
@@ -1561,6 +1585,17 @@ export class Hud {
     this.modal.querySelectorAll<HTMLElement>('[data-arm-grade-gamble]').forEach((el) => el.addEventListener('click', () => { g.forgeArmoryItemGrade(Number(el.dataset.armGradeGamble), false); rerender(); }));
     this.modal.querySelectorAll<HTMLElement>('[data-arm-reforge]').forEach((el) => el.addEventListener('click', () => { g.reforgeArmoryItem(Number(el.dataset.armReforge)); rerender(); }));
     this.modal.querySelectorAll<HTMLElement>('[data-arm-masterwork]').forEach((el) => el.addEventListener('click', () => { g.masterworkArmoryItem(Number(el.dataset.armMasterwork)); rerender(); }));
+    this.modal.querySelectorAll<HTMLElement>('[data-arm-socket]').forEach((el) => el.addEventListener('click', () => {
+      const [idxRaw, socketRaw] = el.dataset.armSocket!.split(':');
+      const select = this.modal.querySelector<HTMLSelectElement>(`select[data-arm-gem-pick="${idxRaw}:${socketRaw}"]`);
+      if (select) g.socketArmoryGem(Number(idxRaw), Number(socketRaw), Number(select.value));
+      rerender();
+    }));
+    this.modal.querySelectorAll<HTMLElement>('[data-arm-unsocket]').forEach((el) => el.addEventListener('click', () => {
+      const [idxRaw, socketRaw] = el.dataset.armUnsocket!.split(':');
+      g.unsocketArmoryGem(Number(idxRaw), Number(socketRaw));
+      rerender();
+    }));
     this.modal.querySelectorAll<HTMLElement>('[data-arm-assemble]').forEach((el) => el.addEventListener('click', () => { g.assembleLegendary(el.dataset.armAssemble!); rerender(); }));
     this.modal.querySelectorAll<HTMLElement>('[data-arm-rec-hero]').forEach((el) => el.addEventListener('click', () => {
       const [heroId, slotRaw] = el.dataset.armRecHero!.split(':');

@@ -117,8 +117,8 @@ const rangedBase = (attr: HeroDef['attribute'], range = 600): HeroBaseStats => (
   attackProjectileSpeed: 1000,
   moveSpeed: 295,
   turnRate: 0.6,
-  hpRegen: 1.2,
-  manaRegen: 1.0
+  hpRegen: attr === 'str' ? 3.5 : attr === 'agi' ? 2.5 : 2.0,
+  manaRegen: attr === 'int' ? 2.5 : 1.5
 });
 
 const meleeBase = (attr: HeroDef['attribute']): HeroBaseStats => ({

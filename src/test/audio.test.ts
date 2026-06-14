@@ -15,7 +15,7 @@ import type { GameSave, SimEvent, SoundArchetype } from '../core/types';
 beforeAll(() => registerAllContent());
 
 const VALID_SOUNDS: SoundArchetype[] = [
-  'blade', 'bow', 'impact', 'frost', 'fire', 'storm', 'void', 'heal', 'summon', 'item', 'roar'
+  'blade', 'bow', 'impact', 'frost', 'fire', 'storm', 'void', 'heal', 'summon', 'item', 'roar', 'lightning'
 ];
 
 function settings(muted = false): GameSave['settings'] {
@@ -43,6 +43,14 @@ describe('test 20 — audio-coverage + safety', () => {
     for (const item of ALL_ITEMS) {
       if (item.active) expect(VALID_SOUNDS, `item:${item.id}`).toContain(soundForAbility(item.active));
     }
+  });
+
+  it('uses the lightning archetype for electric chain signatures', () => {
+    const leshrac = REG.hero('leshrac');
+    const lightningStorm = leshrac.abilities.find((a) => a.id === 'lesh-lightning-storm');
+    expect(lightningStorm).toBeDefined();
+    expect(soundForAbility(lightningStorm!)).toBe('lightning');
+    expect(REG.item('mjollnir').active?.sound).toBe('lightning');
   });
 
   it('constructs, drives, and tears down without throwing (headless)', () => {

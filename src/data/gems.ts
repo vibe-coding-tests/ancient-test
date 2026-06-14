@@ -11,7 +11,7 @@ export interface GemDef {
   mods: StatModMap;
 }
 
-const GEM_GRADES: GemGrade[] = ['chipped', 'flawed', 'standard', 'flawless', 'perfect'];
+export const GEM_GRADES: GemGrade[] = ['chipped', 'flawed', 'standard', 'flawless', 'perfect'];
 const GRADE_MULT: Record<GemGrade, number> = { chipped: 1, flawed: 1.7, standard: 2.5, flawless: 3.5, perfect: 5 };
 
 const BASE_GEMS: Record<GemKind, { name: string; mods: StatModMap }> = {
@@ -44,6 +44,10 @@ const GEMS = new Map(GEM_DEFS.map((gem) => [gem.id, gem]));
 
 export function gemDef(id: string): GemDef | undefined {
   return GEMS.get(id);
+}
+
+export function isGemId(id: string): boolean {
+  return GEMS.has(id);
 }
 
 export function gemMods(id: string | null): StatModMap {

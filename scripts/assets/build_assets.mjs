@@ -49,6 +49,7 @@ const DEFAULT_BUDGETS = {
     terrain: 1 * GB,
     town: 1 * GB,
     hero: 2 * GB,
+    weapon: 512 * 1024 * 1024,
     env: 1 * GB,
     audio: 512 * 1024 * 1024,
     ui: 256 * 1024 * 1024
@@ -58,6 +59,7 @@ const DEFAULT_BUDGETS = {
     terrain: 64 * 1024 * 1024,
     town: 64 * 1024 * 1024,
     hero: 64 * 1024 * 1024,
+    weapon: 16 * 1024 * 1024,
     env: 128 * 1024 * 1024,
     audio: 32 * 1024 * 1024,
     ui: 32 * 1024 * 1024
@@ -79,6 +81,7 @@ function assetUrl(rel) {
 function assetGroup(rel) {
   if (rel.startsWith('creeps/')) return 'creep';
   if (rel.startsWith('heroes/')) return 'hero';
+  if (rel.startsWith('weapons/')) return 'weapon';
   if (rel.startsWith('env/')) return 'env';
   if (rel.startsWith('audio/')) return 'audio';
   if (rel.startsWith('ui/')) return 'ui';
@@ -192,6 +195,64 @@ function recolorToPalette(root, palette, materialMap) {
   }
 }
 
+function hexToRgb255(hex) {
+  const h = hex.replace('#', '');
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+}
+
+/**
+ * Bespoke A4 retexture (VFX_ASSETS §11 batch A4): gradient-map a base atlas through
+ * a hero's three-color palette in TEXTURE space, instead of multiplying the whole
+ * atlas by one flat baseColorFactor (which reads mono-tone — the §12 "single-atlas
+ * recolor reads flat" risk). The source atlas's own per-pixel luminance drives a
+ * three-stop ramp (shadow → secondary, midtone → primary, highlight → accent), so
+ * KayKit's baked shading/AO and its distinct zones (armour vs cloth vs skin/trim)
+ * survive as separate palette tones. The base-color texture is rewritten and the
+ * material factor is neutralized to white so nothing double-tints at runtime.
+ * Fully deterministic and automatable — no hand-painting needed. `mid` shifts how
+ * much of the luminance range reads as the dominant identity color (default 0.5).
+ */
+async function retextureAtlas(doc, sharp, palette, mid = 0.5) {
+  const [primary, secondary, accent] = palette.map(hexToRgb255);
+  const lerp = (a, b, t) => [
+    Math.round(a[0] + (b[0] - a[0]) * t),
+    Math.round(a[1] + (b[1] - a[1]) * t),
+    Math.round(a[2] + (b[2] - a[2]) * t)
+  ];
+  // 256-entry lookup keyed by source luminance (sRGB byte space) for a fast remap.
+  const ramp = new Array(256);
+  for (let l = 0; l < 256; l++) {
+    const t = l / 255;
+    ramp[l] = t <= mid
+      ? lerp(secondary, primary, mid > 0 ? t / mid : 1)
+      : lerp(primary, accent, mid < 1 ? (t - mid) / (1 - mid) : 1);
+  }
+  let touched = 0;
+  for (const mat of doc.getRoot().listMaterials()) {
+    const tex = mat.getBaseColorTexture();
+    if (!tex || !tex.getImage()) continue;
+    const { data, info } = await sharp(Buffer.from(tex.getImage()))
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    for (let i = 0; i < data.length; i += 4) {
+      const lum = Math.round(0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]);
+      const [r, g, b] = ramp[lum];
+      data[i] = r;
+      data[i + 1] = g;
+      data[i + 2] = b;
+      // data[i + 3] (alpha) is preserved so cutout/transparent regions stay intact.
+    }
+    const png = await sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } }).png().toBuffer();
+    tex.setImage(png);
+    tex.setMimeType('image/png');
+    const alpha = mat.getBaseColorFactor()[3] ?? 1;
+    mat.setBaseColorFactor([1, 1, 1, alpha]);
+    touched++;
+  }
+  if (!touched) console.warn('  WARN retexture: no base-color textures found to remap');
+}
+
 async function processModel(io, fns, item) {
   const { dedup, meshopt, prune, resample, textureCompress } = fns.functions;
   const { MeshoptEncoder } = fns.meshopt;
@@ -226,8 +287,14 @@ async function processModel(io, fns, item) {
 
   // Retexture to a hero palette before compression (Phase 5). Runs on the raw
   // materials so the keyword/luminance mapping sees their original names + colors.
+  // 'tritone' (A4 bespoke) gradient-maps the atlas in texture space for a multi-tone
+  // read; the default factor tint stays the fast cohort path.
   if (item.recolor) {
-    recolorToPalette(root, item.recolor, item.materialMap);
+    if (item.recolorMode === 'tritone') {
+      await retextureAtlas(doc, sharp, item.recolor, item.recolorMid);
+    } else {
+      recolorToPalette(root, item.recolor, item.materialMap);
+    }
   }
 
   const transforms = [resample(), prune(), dedup()];

@@ -30,6 +30,8 @@ Today an item is its `ItemDef` plus an optional `quality`. Two Daedaluses are th
 
 Two more layers sit on top of an item once it exists: **sockets** (player-filled gem slots) and **set membership** (collect matching pieces for a bonus).
 
+This applies to the six main inventory slots. Three other item categories live outside that economy with their own slot rules: neutral items, augments (Aghanim's), and consumables. They get their own treatment in §8.
+
 The big change from v1: **affixes are the identity, Grade is the roll quality.** Grade no longer carries the whole experience. It decides how many affix slots an item gets and how high its numbers roll. The affixes decide whether you keep it. A Pristine item with two dull affixes can lose to a Sharp item that rolled lifesteal plus a crit proc on the hero who wants exactly that.
 
 ### Why these axes do not collide
@@ -148,7 +150,7 @@ export interface AffixDef {
   id: string;
   name: string;                 // "of the Bear", "Razor-Edged", "Blooddrinker's"
   kind: AffixKind;
-  tier: 1 | 2 | 3 | 4 | 5;      // affix power tier; gated by difficulty/region (§13)
+  tier: 1 | 2 | 3 | 4 | 5;      // affix power tier; gated by difficulty/region (§14)
   pools: AffixPoolId[];         // which item families can roll it (weapon-like, armor-like, caster-like, any)
   weight: number;               // roll weight within its pool
   // exactly one payload:
@@ -182,7 +184,7 @@ The pool is data and grows freely. The point is that two copies of the same base
 
 ### 4.4 How many affixes, and from where
 
-Affix slot count comes from **grade** (§3.1). Which affixes are eligible comes from **difficulty and region** (§13). A drop fills its slots by:
+Affix slot count comes from **grade** (§3.1). Which affixes are eligible comes from **difficulty and region** (§14). A drop fills its slots by:
 
 1. Pick prefix/suffix balance (a 2-slot item rolls one of each where possible).
 2. Draw from the family pool, filtered to the unlocked affix tiers, weighted by `weight`.
@@ -205,7 +207,7 @@ Borderlands legendaries and Diablo uniques are exciting because they change how 
 - *Glassbreaker*: attacks shred 2 armor for 4s, stacking.
 - *Echoing*: your item active has a 20% chance to not go on cooldown.
 
-Signatures roll at 8% on Refined and 20% on Pristine (§3.1), and only from tiers unlocked by difficulty. A signature is the godroll peak: rare, loud, worth chasing a slot to Pristine for. When one drops, it gets the full ceremony in §12.
+Signatures roll at 8% on Refined and 20% on Pristine (§3.1), and only from tiers unlocked by difficulty. A signature is the godroll peak: rare, loud, worth chasing a slot to Pristine for. When one drops, it gets the full ceremony in §13.
 
 ---
 
@@ -245,7 +247,49 @@ Set pieces show a set tag in the tooltip and count up live ("Frostforged 2/3") s
 
 ---
 
-## 8. QUALITY — NOW PURELY COSMETIC PRESTIGE
+## 8. ITEMS OUTSIDE THE SIX SLOTS
+
+The grade-and-affix economy in §3–§7 governs the six main inventory slots. Three other item categories sit outside it, each with its own slot rules and its own relationship to grades and affixes.
+
+### 8.1 Neutral items — the one found-power slot
+
+Each hero keeps a single dedicated **neutral slot**, separate from the six item slots and from the augment slots below. A neutral cannot be sold; the bench only swaps it between slot and stash. That stays.
+
+Neutrals are a different fantasy from the six-slot lottery: a curated power spike you find and understand at a glance, one at a time. So they take a lighter slice of the rehaul. A dropped neutral rolls a **grade** (the ±20% magnitude band from §3.2), which gives a found neutral a "is this a good one?" texture and a Forge upgrade path. It does **not** roll affixes, signatures, or sockets. Neutrals stay readable known quantities; the chase on them is grade alone.
+
+Everything else neutral stays: tiers 1–5, drop by creep tier (rates bumped in §10.2), and the bench reroll / enchant (three duplicates into one up-tier) / reclaim. New: a neutral can be Grade-Up'd at the Forge like a main item, and disenchanted for Essence.
+
+### 8.2 Augments — Aghanim's Scepter and Shard (NEW)
+
+Today Aghanim's Scepter, Blessing, and Shard are stat-stick items that each eat one of the six inventory slots, and the hero's actual scepter upgrade (`HeroDef.aghanim`) is only descriptive. That makes "do I give up a slot for Aghs?" a non-decision and wastes the upgrade's identity.
+
+Fix: a per-hero **augment track** with two dedicated slots that are not inventory slots.
+
+- **Scepter augment.** Consuming an Aghanim's Scepter (or Blessing) permanently grants that hero its scepter upgrade plus the scepter's stat bonus. Permanent once applied. Aghanim's Blessing folds in here as the always-permanent scepter.
+- **Shard augment.** Consuming an Aghanim's Shard permanently grants the shard upgrade plus its small stats.
+
+This frees an inventory slot and matches the lore that a hero "becomes more themselves." It reads like a class mod you bank into the hero rather than a stat stick you juggle. Augments take no grade and no affixes; they are categorical upgrades like special items, where the power is the ability change, not a rolled number.
+
+Acquisition is unchanged: Scepter, Blessing, and Shard still drop from bosses, raids, and dungeons or come from the recipe. The deeper work this unlocks is wiring each hero's actual scepter and shard ability change, turning `HeroDef.aghanim` from a descriptive flag into a real upgrade payload. The augment slot is the container; the per-hero upgrades fill in over time, with a stat-and-flag fallback for any hero whose upgrade is not yet authored.
+
+### 8.3 Consumables — percentage, not flat
+
+Flat heals fall off a cliff. Healing Salve's 400 HP is enormous at level 3 and trivial at level 25. So healing and mana consumables convert to a **percentage of max** over their existing durations, which keeps them useful at every level.
+
+| Consumable | Today (flat) | Rehaul (% of max, same duration) | Breaks on damage |
+|-----------|-------------|----------------------------------|------------------|
+| Tango | 7 hp/s × 16s = 112 | 15% of max HP over 16s, ×3 charges | no |
+| Healing Salve | 50 hp/s × 8s = 400 | 25% of max HP over 8s | yes |
+| Clarity | 11 mana/s × 20s = 220 | 25% of max mana over 20s | yes |
+| Faerie Fire / Mango / other instant restores | flat | small % of max, instant | — |
+
+The durations and break-on-damage rules are unchanged, so the *feel* is identical and only the magnitude scales. Worked example: Tango at 15% per charge heals 90 HP on a 600-HP support and 450 HP on a 3000-HP tank, instead of a flat 112 that means everything early and nothing late. A small flat floor, so a very low-pool hero is not shortchanged, is optional and can be tuned after play data. Non-healing consumables (Dust, Wards, Smoke, Tome of Knowledge) are unchanged. Percentage heals scale with the maxHp affixes and grade from §3–§4, which is intended: stacking HP makes your sustain better too.
+
+Implementation: the heal-over-time already runs through the `buff` status applying `hpRegenPctMax`, which exists and the sim reads for Healing Ward. Add the mirror stat `manaRegenPctMax`, point the consumable defs at the percentage stats, and the existing status path carries the rest.
+
+---
+
+## 9. QUALITY — NOW PURELY COSMETIC PRESTIGE
 
 v1 ran Quality (standard through unusual) and Grade as two parallel power ladders, which was confusing: both had six rungs, both had colors, both bumped numbers. v2 resolves this by making **Grade the power axis and Quality the cosmetic prestige axis.** Quality keeps its existing six steps, its particle effects, and the Inscribed per-kill counter, plus a small stat flourish for flavor. It is the Dota cosmetic read: a Frozen item glows, an Unusual one carries a rare particle, an Inscribed one counts your kills.
 
@@ -253,11 +297,11 @@ The Quality Gamble at the Forge stays as a cosmetic chase for players who want a
 
 ---
 
-## 9. DROP RATES — SINGLE-PLAYER GENEROUS
+## 10. DROP RATES — SINGLE-PLAYER GENEROUS
 
 The current rates were tuned for a gated game. This is a single-player action RPG. Something real should drop from almost every large kill, and ancient kills should never feel dry. The question after a fight is which grade and which affixes you got, not whether you got anything.
 
-### 9.1 Creep drop tables (revised)
+### 10.1 Creep drop tables (revised)
 
 Slots are independent rolls. Star rating (×1 / ×1.85 / ×3.2) scales HP and damage but not these percentages. Grade rolls against the source floor after the slot fires, then affixes fill the grade's slots.
 
@@ -286,7 +330,7 @@ Slots are independent rolls. Star rating (×1 / ×1.85 / ×3.2) scales HP and da
 | Mythical component | 28% | 38% | 50% | Same deep pool, separate roll |
 | Endgame core | 20% | 32% | 46% | T3/T4 assembled (split by EG rarity table) |
 
-### 9.2 Neutral item camps
+### 10.2 Neutral item camps
 
 | Camp | Old rate | New rate |
 |------|----------|----------|
@@ -295,7 +339,7 @@ Slots are independent rolls. Star rating (×1 / ×1.85 / ×3.2) scales HP and da
 | Large | 20% | 28% |
 | Ancient | 28% | 38% |
 
-### 9.3 Elite creeps (NEW)
+### 10.3 Elite creeps (NEW)
 
 A rare variant of large and ancient camp creeps: gold particle border, 1.2× scale, star-2 stat multipliers. Dangerous enough to register as a fight, rare enough to feel like a find.
 
@@ -304,19 +348,19 @@ A rare variant of large and ancient camp creeps: gold particle border, 1.2× sca
 | Elite (large) | 4% of large spawns | Sharp+ assembled | 40% / 55% / 70% |
 | Elite (ancient) | 3% of ancient spawns | Refined+ assembled | 55% / 70% / 85% |
 
-### 9.4 Hero drops on kill (NEW)
+### 10.4 Hero drops on kill (NEW)
 
 When an enemy hero dies in a dungeon or overworld encounter, one random item from their equipped loadout falls at grade −1 (minimum Broken), affixes and all. Cap one item per enemy hero per run. This gives a reason to read the enemy team before engaging: a Sharp Battlefury with a Cleaving affix is visible loot you can hunt.
 
-### 9.5 Dungeon rooms, bosses, raids, gym
+### 10.5 Dungeon rooms, bosses, raids, gym
 
 Unchanged in structure from v1: room chests scale grade with depth; boss first clears guarantee Sharp/Refined/Pristine by difficulty; raids drop multiple Refined+ pieces with an immortal chance; gym badges drop a themed Sharp item, bumped to Refined on speed-clear with a Pristine chance on a perfect run. Bad-luck pity after 8 dry raids stays.
 
 ---
 
-## 10. SOURCES BEYOND COMBAT
+## 11. SOURCES BEYOND COMBAT
 
-### 10.1 Roaming merchant — the transparent fallback
+### 11.1 Roaming merchant — the transparent fallback
 
 A wandering NPC that appears once every two region visits. Offers six items from the current region's pool. The player picks the item and the grade upfront, no gambling, priced at a premium. This sets a gold ceiling on each grade so no one has to grind a specific slot forever.
 
@@ -329,21 +373,21 @@ A wandering NPC that appears once every two region visits. Offers six items from
 
 Affixes on merchant items are still random, and Pristine is never sold, so a bought item never fully replaces a found one.
 
-### 10.2 The Gamble Vendor (NEW)
+### 11.2 The Gamble Vendor (NEW)
 
 The merchant is the safe path; this is the slot machine. Extending the existing Black Market (the `gamble` drop source already exists in code), a vendor sells a **random item of a chosen slot and tier** for currency, at a random grade and affix roll. You choose "weapon, T3" and pay; you get a surprise. This is the purest dopamine loop in the genre (Diablo's Kadala, Borderlands' Moxxi machines): a fast, repeatable spend with a real chance at a godroll. Prices scale with tier so it stays a sink, and a soft pity guarantees a Sharp+ result every N gambles so a dry streak still moves you forward.
 
-### 10.3 Exploration caches
+### 11.3 Exploration caches
 
 Hidden caches scattered through region maps, grade tied to region depth. Each holds 1–2 components, gems, or assembled items. Rewards reading the map instead of following the critical path.
 
 ---
 
-## 11. THE FORGE — CRAFTING THE ROLL
+## 12. THE FORGE — CRAFTING THE ROLL
 
 The Tinker's Bench gains a Forge panel. v1's Forge was three flavors of the same magnitude gamble. v2's Forge is a real crafting bench built around affixes, with one important rule throughout: **no operation ever makes an item worse.** You spend currency and choose to keep a result. Anxiety comes from cost, never from loss. (Diablo's enchanting works this way; v1's "reroll can drop you a whole grade" is gone.)
 
-### 11.1 One currency: Essence
+### 12.1 One currency: Essence
 
 v1 added Embers alongside the existing Essence, two recycle currencies doing the same job. v2 unifies on **Essence**. Disenchanting an item yields Essence; every Forge operation spends Essence and gold. Gold is the abundant, fast currency (gambles lean on gold); Essence is the considered, scarce one (deterministic operations lean on Essence). That split preserves the high-roller / patient / mixed play styles without a second currency to track.
 
@@ -355,11 +399,11 @@ v1 added Embers alongside the existing Essence, two recycle currencies doing the
 
 A signature affix or a high rarity adds a bonus, so recycling something special still feels worth more than vendoring junk.
 
-### 11.2 The operations
+### 12.2 The operations
 
 | Operation | What it does | Cost | Risk |
 |-----------|--------------|------|------|
-| **Grade Up** | Add an affix slot and raise the magnitude band one grade | gold + Essence, scaling by grade | none (gold/Essence gamble for the fast path; deterministic Essence path for the patient) |
+| **Grade Up** | Add an affix slot and raise the magnitude band one grade | gold + Essence, scaling by grade | none |
 | **Reroll Affix** | Reroll one chosen affix's identity and value from the pool | gold | none; preview the result, pay again to try, or keep |
 | **Reforge** | Reroll all affixes at once | gold + Essence | none; cheaper per-affix than rerolling each, but you give up the ones you liked |
 | **Imprint** | Lock one chosen affix so it survives a Reforge | Essence | none; the imprinted affix is guaranteed to reappear |
@@ -377,7 +421,7 @@ Two paths to Grade Up coexist, same as v1's instinct: a **fast gamble path** (go
 | → Refined | 1100g + 8 (40%) | 42 |
 | → Pristine | 2200g + 16 (22%) | 70 |
 
-### 11.3 The three play styles, preserved
+### 12.3 The three play styles, preserved
 
 **High-roller:** Grade Up on the gamble path, Reroll Affix repeatedly chasing a signature. Burns gold fast, sees results fast.
 
@@ -387,29 +431,29 @@ Two paths to Grade Up coexist, same as v1's instinct: a **fast gamble path** (go
 
 ---
 
-## 12. LOOT FEEL — THE PART THAT SELLS IT
+## 13. LOOT FEEL — THE PART THAT SELLS IT
 
 A looter lives or dies on the moment of the drop. v1 spent one line on this ("a grade pill on the loot toast"). It deserves a real pass, because the dopamine is mostly ceremony. The good news: the presentation systems already exist (the reward-streak audio with its semitone climb, the `StingerId` stinger system, the additive-bloom VFX language). This is wiring them to loot.
 
-### 12.1 The beam
+### 13.1 The beam
 
 Every meaningful drop plants a vertical light pillar in the world, colored by rarity and scaled by grade. A common component is a faint glint. A legendary is a tall colored shaft. A Pristine or signature drop is a thick beam with rising particles and a brief bloom flare. This is the Borderlands orange-beam reflex: you learn to read the floor from across the screen and your eye goes straight to the good one.
 
-### 12.2 The sound
+### 13.2 The sound
 
 Drop audio escalates with rarity and grade, reusing the reward-streak semitone climb already in the audio layer. A junk drop ticks. A rare chimes higher. A Pristine or signature drop fires a dedicated stinger (a new `StingerId`) plus a short slow-motion micro-pause, the same beat a Diablo unique or a Borderlands legendary gets. The sound is the reward before the player even reads the tooltip.
 
-### 12.3 The comparison
+### 13.3 The comparison
 
 The single most important UX in a looter: is this better than what I have? Every loot toast and tooltip shows a live comparison against the active hero's equipped item in that slot:
 
-- A green ↑ or red ↓ next to each changed stat.
+- A green up-arrow or red down-arrow next to each changed stat.
 - The affix diff (what this copy adds or loses versus the equipped one).
 - A bold "UPGRADE" or "SIDEGRADE" banner when it clearly beats or trades with the current piece.
 
 Without this, generous drops become a reading chore. With it, the player feels the upgrade instantly.
 
-### 12.4 The loot filter (NEW, and required)
+### 13.4 The loot filter (NEW, and required)
 
 Raising drop rates this much creates inventory spam, which kills the feel faster than dry drops do. So generosity ships with filtering:
 
@@ -421,7 +465,7 @@ The filter is what lets the drop rates stay loud. Diablo and Path of Exile live 
 
 ---
 
-## 13. DIFFICULTY AND THE ENDGAME CHASE
+## 14. DIFFICULTY AND THE ENDGAME CHASE
 
 Once a slot is Pristine, v1 had nothing left to chase but more Pristines. Affixes fix this: even at max grade, you re-run content to fish for better affix rolls and rarer signatures. Difficulty is the ladder that gates the affix pool, the way Diablo's world tiers and Borderlands' Mayhem levels work.
 
@@ -436,7 +480,7 @@ Region also flavors the pool: Icewrack rolls frost-leaning affixes, and so on, r
 
 ---
 
-## 14. COMPLETE UPGRADE LOOP EXAMPLE
+## 15. COMPLETE UPGRADE LOOP EXAMPLE
 
 Player is level 18, running Nightmare in Icewrack (3 badges).
 
@@ -451,9 +495,9 @@ Total investment: modest gold, Essence from recycled drops, and a few sessions. 
 
 ---
 
-## 15. IMPLEMENTATION
+## 16. IMPLEMENTATION
 
-### 15.1 New type surface
+### 16.1 New type surface
 
 ```typescript
 // types.ts additions
@@ -486,7 +530,7 @@ export interface InstancedItem {
   itemId: string;
   grade: ItemGrade;
   gradeRoll: number;        // 0..1 base-stat percentile within the grade band
-  affixes: RolledAffix[];
+  affixes: RolledAffix[];   // empty for neutrals and Broken-grade items
   sockets: (string | null)[]; // gem ids, null = empty
   resolvedMods: StatModMap; // base passiveMods + grade + affixes + gems, cached
   quality?: ItemQuality;    // cosmetic, unchanged from today
@@ -499,11 +543,17 @@ export interface ItemSetDef {
   pieces: string[];
   bonuses: { atPieces: number; mods?: StatModMap; aura?: AuraSpec; trigger?: TriggerSpec }[];
 }
+
+// Per-hero augment track (Aghanim's), separate from the six item slots and the neutral slot.
+export interface HeroAugments {
+  scepter?: boolean;        // Aghanim's Scepter / Blessing applied (permanent)
+  shard?: boolean;          // Aghanim's Shard applied (permanent)
+}
 ```
 
-`ItemDef` gains `set?: string` and an optional `socketCap?: number`.
+`ItemDef` gains `set?: string` and an optional `socketCap?: number`. `StatMods` gains `manaRegenPctMax` (the mirror of the existing `hpRegenPctMax`) for percentage mana consumables. `HeroDef.aghanim` grows from a descriptive flag toward a real upgrade payload (the scepter/shard ability change), with a stat-and-flag fallback until each hero's upgrade is authored.
 
-### 15.2 New files
+### 16.2 New files
 
 - **`src/data/grade.ts`**: `GRADE_DEFS` (slots, percentile band, frame color, signature/socket chance), `itemLevel()`, `gradeFloor()`, `gradeBaseStatMods()`, `levelReq()`.
 - **`src/data/affixes.ts`**: `AFFIX_DEFS`, `AFFIX_POOLS`, `rollAffixesFor(item, grade, difficulty, region, rng)`, `resolveAffix(affix, roll)`, `affixPoolForItem(def)`.
@@ -512,26 +562,27 @@ export interface ItemSetDef {
 - **`src/data/forge.ts`**: cost tables and the pure operations `attemptGradeUp`, `rerollAffix`, `reforge`, `imprintAffix`, `masterwork`, `socket`/`unsocket`, `disenchant` (returns Essence). All pure given an rng, none can lower an item.
 - **`src/systems/loot-filter.ts`**: pickup rules, auto-disenchant threshold, salvage-all with locks.
 
-### 15.3 Existing file changes
+### 16.3 Existing file changes
 
-- **`src/data/items/index.ts`**: re-tier `core` to `t1`–`t4`/`special`; tag `set` and `socketCap` where relevant.
-- **`src/data/creep-drops.ts`**: new generous rates (§9.1); resolution now produces an `InstancedItem` (grade then affixes); add the `elite` tier.
+- **`src/data/items/index.ts`**: re-tier `core` to `t1`–`t4`/`special`; tag `set` and `socketCap` where relevant; convert consumable heal/mana actives from flat `hpRegen`/`manaRegen` buffs to `hpRegenPctMax`/`manaRegenPctMax` (Tango, Salve, Clarity, instant restores per §8.3).
+- **`src/data/creep-drops.ts`**: new generous rates (§10.1); resolution now produces an `InstancedItem` (grade then affixes); add the `elite` tier. Neutral drops roll a grade only, no affixes (§8.1).
 - **`src/data/tuning.ts`**: `gradeRollVariance: 0.20`, `eliteSpawnChance`, `merchantGradeMultiplier`, `merchantRefreshPerVisits`, `gambleVendor` (prices, pity), `affixTiersByDifficulty`, `lootFilterDefaults`, updated `neutralDropPctByTier: { small: 0.16, medium: 0.20, large: 0.28, ancient: 0.38 }`.
-- **`src/systems/game.ts`**: `instantiateDrop(itemDef, context): InstancedItem` (grade floor from context, sample grade, roll base percentile, roll affixes, roll sockets, cache `resolvedMods`); set-bonus application on equip; gamble-vendor action; loot-filter hook on pickup.
-- **Save/equip path** (`ItemSave`, `ItemState`): carry `grade`, `gradeRoll`, `affixes`, `sockets`; a save migration defaults existing items to Standard grade, no affixes, no sockets (so old saves load as the baseline they already were).
-- **`src/ui/hud.ts`**: rarity glow + grade frame/pips (separate visuals, §1); tooltip with affix lines, signature in orange, set counter, sockets; the comparison arrows; the loot beam, escalating sound, and stinger; the loot-filter settings panel.
+- **`src/core/sim`**: read `manaRegenPctMax` in the regen path alongside the existing `hpRegenPctMax`.
+- **`src/systems/game.ts`**: `instantiateDrop(itemDef, context): InstancedItem` (grade floor from context, sample grade, roll base percentile, roll affixes, roll sockets, cache `resolvedMods`); set-bonus application on equip; per-hero augment apply (`applyScepter` / `applyShard`, permanent) reading and freeing the slot the Aghs items used to take; gamble-vendor action; loot-filter hook on pickup.
+- **Save/equip path** (`ItemSave`, `ItemState`): carry `grade`, `gradeRoll`, `affixes`, `sockets`; add per-hero `augments`. A save migration defaults existing items to Standard grade, no affixes, no sockets, and converts any equipped Aghs items into the matching augment so old saves load as the baseline they already were.
+- **`src/ui/hud.ts`**: rarity glow + grade frame/pips (separate visuals, §1); tooltip with affix lines, signature in orange, set counter, sockets; the comparison arrows; the loot beam, escalating sound, and stinger; the loot-filter settings panel; an augment row on the hero sheet (Scepter / Shard) distinct from the six item slots.
 
-### 15.4 Phased rollout
+### 16.4 Phased rollout
 
-**Phase A — Identity on drops.** Add the types. Implement grade, affixes, sockets, and the drop instancer with the new rates. Items start dropping with grades and affixes. Tooltip shows them; comparison arrows in. Forge shows "coming soon." Shops and crafted items stay Standard, affix-free.
+**Phase A — Identity on drops.** Add the types. Implement grade, affixes, sockets, and the drop instancer with the new rates. Items start dropping with grades and affixes. Tooltip shows them; comparison arrows in. Forge shows "coming soon." Shops and crafted items stay Standard, affix-free. Convert consumables to percentage here (small, self-contained, helps from level one).
 
-**Phase B — Forge and new sources.** Full Forge (Grade Up, Reroll, Reforge, Imprint, Masterwork, Sockets, Fuse, Disenchant) on unified Essence. Elite creeps, hero drops, gamble vendor, merchant, caches. Sets live. Loot filter live.
+**Phase B — Forge and new sources.** Full Forge (Grade Up, Reroll, Reforge, Imprint, Masterwork, Sockets, Fuse, Disenchant) on unified Essence. Elite creeps, hero drops, gamble vendor, merchant, caches. Sets live. Loot filter live. Augment track live (Aghs out of the inventory slots).
 
-**Phase C — Feel and balance.** The beam, escalating audio, and signature stinger. Difficulty-gated affix tiers and the T5 endgame pool. Full economy tuning pass from Phase A/B data.
+**Phase C — Feel and balance.** The beam, escalating audio, and signature stinger. Difficulty-gated affix tiers and the T5 endgame pool. Per-hero scepter/shard ability upgrades wired in over time. Full economy tuning pass from Phase A/B data.
 
 ---
 
-## 16. BALANCE GUARDRAILS
+## 17. BALANCE GUARDRAILS
 
 **The tier gap beats the grade-and-affix gap.** A loaded Pristine Crystalys never out-scales a plain Daedalus. The ±20% band plus two or three affixes is loud within a tier and quiet across tiers. Any item that breaks this gets its `gradeRollVariance` or affix budget lowered individually.
 
@@ -541,10 +592,240 @@ export interface ItemSetDef {
 
 **No operation lowers an item.** Every Forge action either improves the item or leaves it untouched; the cost is the risk. This keeps the bench a place of forward progress.
 
-**Special items stay exceptional.** Divine Rapier, Aegis, Refresher Shard, Cheese take no grade, no affixes, no sockets. Their power is categorical, not numerical.
+**Special items and augments stay exceptional.** Divine Rapier, Aegis, Refresher Shard, Cheese, and the Aghanim's augments take no grade, no affixes, no sockets. Their power is categorical, not numerical.
+
+**Percentage consumables scale, they do not spiral.** Heals are a percentage of max over a fixed duration with break-on-damage unchanged, so a tank heals more in absolute terms but at the same pace and the same interrupt risk. Tune the percentages against the highest HP pools in the game, not the lowest.
 
 **The filter is part of the rates.** Generous drops only feel good with the loot filter shipping alongside them. Tune them together, never the rates alone.
 
 ---
 
 *File: `ITEM_REHAUL.md` — v2 draft. All numbers subject to a tuning pass after Phase A play data.*
+
+---
+
+## Stat Balance Pass — Regen, AoE, and Utility (Jun 2026)
+
+### Context
+
+Dota 2 numbers port verbatim as a starting point, but this game's recovery economy is meaningfully different. There's no fountain, no rune respawns, and no full 5-player laning phase to fund consumable loops. Out-of-combat regen is the primary "catch your breath" mechanism between camps. The old values made recovery trivially slow — a hero taking 40% of their HP in a camp fight needed 2–3 full minutes of idle time to recover. That's incompatible with an exploration loop.
+
+Target feel: a hero should recover ~25–30% max HP per minute at baseline and ~50–60% HP/min after one early regen item. Mana should feel similarly — not infinite, but a short pause between rooms should be enough to cast a few abilities again.
+
+Hero cap is confirmed at **level 30**.
+
+---
+
+### HP Regen — Hero Base Stats
+
+| Hero archetype | Old `hpRegen` | New `hpRegen` |
+|:---|:---|:---|
+| STR primary (roster-standard, roster-complex) | 1.8 | **3.5** |
+| AGI primary (roster-standard, roster-complex) | 1.2 | **2.5** |
+| INT primary (roster-standard, roster-complex) | 1.2 | **2.0** |
+| phase3 seeded heroes | 1.3 (flat) | **3.5 / 2.5 / 2.0 by attr** |
+| phase2 seeded heroes | 1.2 (flat) | **3.5 / 2.5 / 2.0 by attr** |
+| Axe (STR) | 2.8 | **3.5** |
+| Pudge (STR) | 2.5 | **3.5** |
+| Sven (STR) | 2.0 | **3.5** |
+| Earthshaker (STR) | 2.2 | **3.5** |
+| Juggernaut (AGI) | 1.8 | **2.5** |
+| Luna (AGI) | 1.5 | **2.5** |
+| Sniper (AGI) | 1.2 | **2.5** |
+| Lich (INT) | 1.2 | **2.0** |
+| Crystal Maiden (INT) | 1.0 | **2.0** |
+
+Note: `hpRegenPerStr = 0.1` is unchanged. Attribute gains already provide per-level scaling; the base bump closes the yawning gap in the early game before stats accrue.
+
+---
+
+### Mana Regen — Hero Base Stats
+
+| Hero archetype | Old `manaRegen` | New `manaRegen` |
+|:---|:---|:---|
+| INT primary (all rosters) | 1.4 | **2.5** |
+| STR / AGI primary (all rosters) | 0.9 | **1.5** |
+| Axe, Pudge (STR) | 0.8 | **1.5** |
+| Sven (STR) | 0.7 | **1.5** |
+| Earthshaker (STR) | 0.9 | **1.5** |
+| Juggernaut (AGI) | 0.8 | **1.5** |
+| Luna (AGI) | 1.1 | **1.5** |
+| Sniper (AGI) | 0.9 | **1.5** |
+| Lich (INT) | 1.3 | **2.5** |
+| Crystal Maiden (INT) | 1.2 | **2.5** |
+
+---
+
+### HP Regen — Items
+
+| Item | Old `hpRegen` | New `hpRegen` | Notes |
+|:---|:---|:---|:---|
+| `ring-of-regen` | 1.75 | **3.5** | Component; doubled to match new baseline gap |
+| `ring-of-health` | 6.5 | **9.0** | Component |
+| `helm-of-iron-will` | 5 | **6.5** | Component |
+| `headdress` passive | 1.75 | **3.5** | Self-passive |
+| `headdress` aura | 2.0 | **3.0** | Team aura |
+| `tranquil-boots` | 12 | **14** | Boots slot; already strong, modest bump |
+| `guardian-greaves` passive | 5 | **7.0** | |
+| `guardian-greaves` aura | 3 | **4.5** | Team aura |
+| `perseverance` | 6.5 | **9.0** | |
+| `vanguard` | 6.5 | **9.0** | |
+| `hood-of-defiance` | 6.75 | **9.0** | |
+| `pipe-of-insight` passive | 8 | **11** | |
+| `pipe-of-insight` aura | 2 | **3.0** | Team aura |
+| `crimson-guard` | 6.5 | **9.0** | |
+| `mekansm` passive | 3.5 | **5.0** | |
+| `mekansm` aura | 2 | **3.5** | Team aura |
+| `battlefury` | 7.5 | **9.0** | |
+| `force-staff` | 2.5 | **4.0** | |
+| `nullifier` | 5 | **7.0** | |
+| `vladmirs-offering` | 1.75 | **3.5** | Passive; aura unchanged |
+| `soul-ring` | 1.75 | **3.5** | |
+| `linken's-sphere` | 6.5 | **8.0** | |
+| `meteor-hammer` | 6.5 | **9.0** | |
+| `bloodstone` | 6.5 | **8.0** | |
+| `eternal-shroud` | 6.75 | **9.0** | |
+| `helm-of-the-dominator` | 5 | **6.5** | |
+| `helm-of-the-overlord` | 6 | **8.0** | |
+| `wind-waker` | 2.5 | **4.0** | |
+
+`heart-of-tarrasque` — `hpRegenPctMax: 1.6%` unchanged. % regen scales with HP pool automatically; no adjustment needed.
+
+---
+
+### Mana Regen — Items
+
+| Item | Old `manaRegen` | New `manaRegen` | Notes |
+|:---|:---|:---|:---|
+| `sages-mask` | 1.0 | **2.0** | Component; doubled |
+| `void-stone` | 2.25 | **3.5** | Component |
+| `oblivion-staff` | 1.0 | **2.0** | Component / basic |
+| `kaya` | 1.5 | **2.5** | |
+| `kaya-and-sange` | 1.5 | **2.5** | Kept consistent with kaya |
+| `yasha-and-kaya` | 1.5 | **2.5** | Kept consistent with kaya |
+| `euls-scepter` | 2.5 | **3.5** | |
+| `battlefury` | 3.0 | **4.0** | |
+| `perseverance` | 2.25 | **3.5** | |
+| `ring-of-basilius` passive | 1.0 | **2.0** | |
+| `ring-of-basilius` aura | 1.0 | **1.5** | Team aura |
+| `vladmirs-offering` | 1.0 | **2.0** | |
+| `soul-ring` | 1.0 | **2.0** | |
+| `echo-sabre` | 1.0 | **2.0** | |
+| `orchid-malevolence` | 2.0 | **3.0** | |
+| `bloodthorn` | 2.0 | **3.0** | |
+| `lotus-orb` | 2.0 | **3.5** | |
+| `aether-lens` | 2.25 | **3.5** | |
+| `refresher-orb` | 6.0 | **6.0** | Unchanged — already strong at tier |
+| `octarine-core` | 3.0 | **4.0** | |
+| `wind-waker` | 4.0 | **5.0** | |
+| `scythe-of-vyse` | 5.0 | **6.0** | |
+| `eternal-shroud` active statmod | 8 | **10** | 8-second burst |
+| `bloodstone` | 2.25 | **3.5** | |
+| `linken's-sphere` | 2.25 | **3.5** | |
+
+---
+
+### AoE Damage — Radiance
+
+**Change:** Radiance aura updated from `damageTakenReductionPct: -4` to `damageTakenReductionPct: -10`.
+
+Rationale: The `-4%` debuff was barely perceptible in fights. At -10%, enemies in the 700-unit aura take 10% more damage from all sources — a meaningful incentive to not stand near the carrier and a real contribution in grouped fights. In Dota 2, Radiance deals 60 DPS to nearby enemies; this proxy approach achieves a similar "burn disincentive" without requiring a periodic-damage aura system.
+
+**Future work:** Extend `AuraSpec` to support `dotDps` + `dotType` so the burn can be implemented as true periodic magical damage rather than an amplification debuff. Once that lands, replace `damageTakenReductionPct: -10` with `dotDps: 60, dotType: 'magical'` to match the Dota original.
+
+---
+
+### AoE Damage — Camp Clustering
+
+Verify that `TUNING.ai.clusterRadius = 360` keeps 3–5 enemies within a 400-unit AoE radius in standard camps. If enemies spread too far (e.g. kite AI pushes spacing beyond AoE reach), AoE numbers alone can't fix AoE feel. This should be validated with a targeted sim test before tuning AoE ability values.
+
+---
+
+### Utility Stats — Notes
+
+- **`statusResistPct`** — useful only if status effects (stuns, slows, silences) are common and their uptime matters. Ensure encounters across all regions apply status effects frequently enough that 15–25% resist from an item like `kaya-and-sange` reads as a tangible reduction in lockdown. If encounters are too clean, this stat feels dead.
+- **`visionPct`** — valuable only once fog-of-war is applied during exploration. Currently unused in camp encounters that spawn at known positions. Revisit after fog/vision system is enabled.
+- **`castRange`** — most meaningful when enemies or mechanics create "just out of range" scenarios. Audit late-game boss encounters and dungeon mechanics to ensure there are consistent situations where an extra 225 units of cast range on `aether-lens` pays off.
+
+---
+
+## Tag-In / Genshin-Style Stat Pass (Jun 2026)
+
+### Motivation
+
+The game has hero swapping (resonance mode enables 1.2s CD; normal mode uses a 4s CD), a full elemental reaction system, and overworld traversal with a stamina pool. None of those systems had item hooks — swapping was entirely mechanical, reactions scaled only off `spellAmpPct`, and stamina was a flat global constant. This pass adds six new `StatMods` fields to close those gaps.
+
+---
+
+### New Stats
+
+| Stat | Type | Description |
+|---|---|---|
+| `swapCdReductionPct` | passive | Reduces hero swap cooldown. Capped at 80%. Applied from the incoming hero's stats at swap time. |
+| `swapInDamagePct` | passive | Grants a 3-second buff on tag-in: both `damagePct` and `spellAmpPct` are increased by this value. Creates a burst window for aggressive swapping. |
+| `swapInHealPct` | passive | Instant heal on tag-in equal to `N%` of max HP. Rewards cycling heroes to recover without shrines. |
+| `reactionAmpPct` | passive | Amplifies elemental reaction bonuses. Scales both `extraDamagePct` reactions (overload, superconduct, burning, etc.) and `damageMultiplier` reactions (vaporize, melt). Formula: `amp = 1 + reactionAmpPct / 100`. |
+| `elementalGaugeSec` | passive | Extends element aura duration on enemies hit by this unit. Baseline is 4s; a value of 1.0 extends to 5s, improving setup windows for reaction combos. |
+| `staminaBonus` | passive | Flat bonus to the overworld stamina pool. Stacks on the active hero's stats only — swapping to a hero without it returns the cap to baseline (existing stamina is not clipped). |
+
+---
+
+### System Wiring
+
+**`swapCdReductionPct`** and tag-in effects fire inside `trySwap()` immediately after `spawnHeroFromRecord`:
+
+```typescript
+const baseSwapCd = resonance ? TUNING.resonanceSwapCooldownSec : TUNING.swapCooldownSec;
+const cdMult = 1 - Math.min(0.8, (u.stats.swapCdReductionPct ?? 0) / 100);
+this.swapReadyAt = this.sim.time + baseSwapCd * cdMult;
+
+// instant heal
+if (healPct > 0) u.hp = Math.min(maxHp, u.hp + maxHp * healPct / 100);
+
+// 3s burst buff
+if (burstPct > 0) u.addStatus({ status: 'buff', tag: 'swap-in-burst', until: now + 3,
+  mods: { damagePct: burstPct, spellAmpPct: burstPct } }, true);
+```
+
+**`reactionAmpPct`** and **`elementalGaugeSec`** fire in `applyElementAura()` in `combat.ts`. Reaction amp multiplies both the flat extra-damage hit and the multiplier component. Gauge extension applies to the `until` timestamp on each applied aura.
+
+**`staminaBonus`** is applied in `updateLocomotion()`: `staminaCap = TUNING.traversal.staminaMax + (activeUnit?.stats.staminaBonus ?? 0)`.
+
+---
+
+### New Items
+
+#### Components
+
+| Item | Cost | Key Stats | Notes |
+|---|---|---|---|
+| `quickstep-cord` | 350 | `swapCdReductionPct: 12` | Budget swap enabler. Useful on any swapping build. |
+| `wanderer-wraps` | 300 | `staminaBonus: 60` | 25% more stamina. Good for exploration-heavy heroes. |
+| `prismatic-shard` | 400 | `reactionAmpPct: 10` | Early elemental investment. Builds into `resonance-catalyst`. |
+
+#### Assembled
+
+| Item | Cost | Components | Key Stats | Role |
+|---|---|---|---|---|
+| `breacher-cloak` | 1800 | `quickstep-cord` + `blades-of-attack` + `chainmail` + 400 recipe | `swapCdReductionPct: 28`, `swapInDamagePct: 18`, `agi: 10`, `moveSpeed: 15` | AGI tag-in carry item. Swap in, burst, swap out. |
+| `exchange-mark` | 1475 | `quickstep-cord` + `belt-of-strength` + `ring-of-regen` + 500 recipe | `swapCdReductionPct: 18`, `swapInHealPct: 8`, `str: 8`, `hpRegen: 3.5` | STR survivability item. Recover 8% HP each tag-in. |
+| `resonance-catalyst` | 2100 | `prismatic-shard` + `staff-of-wizardry` + `sages-mask` + 525 recipe | `reactionAmpPct: 25`, `elementalGaugeSec: 1.0`, `spellAmpPct: 10`, `int: 10`, `manaRegen: 2.5` | INT elemental amplifier. Pairs with any elemental hero. |
+
+---
+
+### Design Notes
+
+**Tag-in burst window (3 seconds):** Long enough to get off one cast and one attack animation, short enough that you have to commit to the swap before the camp fight ends to get value. The combined `damagePct + spellAmpPct` boost means it scales with whatever the hero was already building — agility carries get attack damage, casters get spell damage. No separate "tag-in physical" vs "tag-in magical" variants needed.
+
+**`swapInHealPct` vs regen:** Flat heal on tag-in is distinct from `hpRegen` — it's a burst of recovery when you choose to swap, not passive trickle. On `exchange-mark` at 8%, a 1500 HP strength hero recovers 120 HP per swap. With a 4s base CD that's roughly equivalent to 1800 HP/min recovery, but only while actively swapping. Passive `hpRegen: 3.5` on the same item covers the idle case.
+
+**`reactionAmpPct` scaling:** At 25% (full `resonance-catalyst`), vaporize goes from 1.5× to 1.625×. Overload's extra hit goes from 45% to 56.25% of base damage. These are meaningful improvements but don't break the reaction economy — reactions are still constrained by element gauge uptime, not amp values.
+
+**`elementalGaugeSec` and setup:** Extending gauges from 4s to 5s gives a generous extra second to follow up a reaction. This matters in longer fights where the second attacker can lag behind the first. Doesn't affect the reaction trigger timing itself, only the window before the aura decays without a trigger.
+
+**`staminaBonus` and hero swapping:** Stamina cap uses the active hero's staminaBonus only. There's no "party stamina pool" — the active hero is carrying the endurance. `wanderer-wraps` (+60 stamina) extends a sprint or two before exhaustion. Useful for scouting heroes who spend time moving between camps.
+
+**Future work:** 
+- A legendary-tier assembled item combining `breacher-cloak` and `exchange-mark` components (swap CD reduction + burst + survival in one slot).
+- `swapInShieldPct` — brief absorption shield on tag-in, as opposed to instant heal. Useful for initiators who tag in against burst.
+- A second wave of elemental items at the `core`/`t2–t3` tier once `resonance-catalyst` proves out in playtesting.

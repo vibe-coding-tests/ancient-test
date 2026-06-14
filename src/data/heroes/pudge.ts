@@ -18,8 +18,8 @@ export const PUDGE: HeroDef = {
     baseAttackTime: 1.7,
     moveSpeed: 280,
     turnRate: 0.7,
-    hpRegen: 2.5,
-    manaRegen: 0.8
+    hpRegen: 3.5,
+    manaRegen: 1.5
   },
   skillOrder: [0, 1, 2],
   abilities: [

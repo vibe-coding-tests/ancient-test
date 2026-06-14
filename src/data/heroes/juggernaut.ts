@@ -18,8 +18,8 @@ export const JUGGERNAUT: HeroDef = {
     baseAttackTime: 1.4,
     moveSpeed: 305,
     turnRate: 0.6,
-    hpRegen: 1.8,
-    manaRegen: 0.8
+    hpRegen: 2.5,
+    manaRegen: 1.5
   },
   skillOrder: [0, 2, 1],
   abilities: [

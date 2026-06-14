@@ -19,8 +19,8 @@ export const LUNA: HeroDef = {
     attackProjectileSpeed: 900,
     moveSpeed: 325,
     turnRate: 0.6,
-    hpRegen: 1.5,
-    manaRegen: 1.1
+    hpRegen: 2.5,
+    manaRegen: 1.5
   },
   skillOrder: [0, 2, 1],
   abilities: [

@@ -2,7 +2,7 @@ import { TUNING } from '../data/tuning';
 import { rollAffixesFor } from '../data/affixes';
 import { refreshResolvedMods } from '../data/forge';
 import { gradeFloor, rollGrade, type GradeFloorSource } from '../data/grade';
-import { socketsForDrop } from '../data/gems';
+import { isGemId, socketsForDrop } from '../data/gems';
 import { REG } from './registry';
 import { Rng, hashString } from './rng';
 import type {
@@ -90,6 +90,7 @@ function rollQuality(entry: DropEntry, table: ItemDropTable['slots'][number], ti
 }
 
 function itemSupportsRolledIdentity(itemId: string): boolean {
+  if (isGemId(itemId)) return false;
   const def = REG.item(itemId);
   return !['consumable', 'special'].includes(def.tier);
 }

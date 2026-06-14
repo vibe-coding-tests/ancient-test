@@ -18,8 +18,8 @@ export const SVEN: HeroDef = {
     baseAttackTime: 1.8,
     moveSpeed: 325,
     turnRate: 0.6,
-    hpRegen: 2.0,
-    manaRegen: 0.7
+    hpRegen: 3.5,
+    manaRegen: 1.5
   },
   skillOrder: [0, 1, 2],
   abilities: [

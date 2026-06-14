@@ -19,8 +19,8 @@ export const LICH: HeroDef = {
     attackProjectileSpeed: 900,
     moveSpeed: 290,
     turnRate: 0.5,
-    hpRegen: 1.2,
-    manaRegen: 1.3
+    hpRegen: 2.0,
+    manaRegen: 2.5
   },
   skillOrder: [0, 1, 2],
   abilities: [

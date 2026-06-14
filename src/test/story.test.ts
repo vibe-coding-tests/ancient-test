@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { registerAllContent } from '../data/index';
 import { REG } from '../core/registry';
-import { Game, newGameSave } from '../systems/game';
+import { Game, HeadlessAudio, newGameSave } from '../systems/game';
 import { CinematicDirector } from '../engine/cinematic';
 import { compileCutsceneDsl } from '../engine/cutscene-dsl';
 import { StoryDetector } from '../engine/story-detectors';
@@ -14,12 +14,31 @@ function freshGame(): Game {
   return Game.headless(newGameSave('juggernaut'));
 }
 
+function fullPartyGame(regionId = 'tranquil-vale'): Game {
+  const save = newGameSave('juggernaut');
+  const heroes = ['juggernaut', 'axe', 'crystal-maiden', 'sniper', 'sven'];
+  const template = save.roster[0];
+  save.playtimeSec = 1;
+  save.regionId = regionId;
+  save.playerPos = { ...REG.region(regionId).town.pos };
+  save.party = heroes;
+  save.recruited = heroes;
+  save.roster = heroes.map((heroId) => ({
+    ...structuredClone(template),
+    heroId,
+    level: 30,
+    xp: 0
+  }));
+  return Game.headless(save);
+}
+
 interface FakeUnit {
   uid: number;
   team: number;
   pos: { x: number; y: number };
   alive: boolean;
   hp: number;
+  heroId?: string;
   stats: { maxHp: number };
   ctrl: { kind: string };
 }
@@ -31,7 +50,7 @@ function fakeSim(units: FakeUnit[]): Sim {
   } as unknown as Sim;
 }
 
-function castEvent(uid: number, abilityId: string): SimEvent {
+function castEvent(uid: number, abilityId: string): Extract<SimEvent, { t: 'cast' }> {
   return { t: 'cast', uid, abilityId, vfx: { archetype: 'ground-aoe', color: '#fff' } };
 }
 
@@ -46,7 +65,7 @@ describe('STORY §7.3 legend detector', () => {
   }
 
   it('fires Pit Remembers on an Echo Slam catching 4+ enemies inside Roshan\'s Pit', () => {
-    const es: FakeUnit = { uid: 1, team: 0, pos: { x: 0, y: 0 }, alive: true, hp: 500, stats: { maxHp: 500 }, ctrl: { kind: 'gambit' } };
+    const es: FakeUnit = { uid: 1, team: 0, heroId: 'earthshaker', pos: { x: 0, y: 0 }, alive: true, hp: 500, stats: { maxHp: 500 }, ctrl: { kind: 'gambit' } };
     const sim = fakeSim([es, ...enemyRing(4, { x: 100, y: 0 }, 50)]);
     const det = new StoryDetector();
     const out = det.observe([castEvent(1, 'es-echo-slam')], { sim, nowSec: 1, playerTeam: 0, raidId: 'roshan-pit' });
@@ -54,7 +73,7 @@ describe('STORY §7.3 legend detector', () => {
   });
 
   it('does NOT fire Pit Remembers with too few enemies, or outside the Pit (no false positives)', () => {
-    const es: FakeUnit = { uid: 1, team: 0, pos: { x: 0, y: 0 }, alive: true, hp: 500, stats: { maxHp: 500 }, ctrl: { kind: 'gambit' } };
+    const es: FakeUnit = { uid: 1, team: 0, heroId: 'earthshaker', pos: { x: 0, y: 0 }, alive: true, hp: 500, stats: { maxHp: 500 }, ctrl: { kind: 'gambit' } };
     const few = fakeSim([es, ...enemyRing(3, { x: 100, y: 0 }, 50)]);
     expect(new StoryDetector().observe([castEvent(1, 'es-echo-slam')], { sim: few, nowSec: 1, playerTeam: 0, raidId: 'roshan-pit' })).toHaveLength(0);
 
@@ -63,32 +82,32 @@ describe('STORY §7.3 legend detector', () => {
   });
 
   it('fires Hooked Home when a player Pudge in the base zone hooks a victim to its death', () => {
-    const pudge: FakeUnit = { uid: 1, team: 0, pos: { x: 0, y: 0 }, alive: true, hp: 500, stats: { maxHp: 500 }, ctrl: { kind: 'player' } };
+    const pudge: FakeUnit = { uid: 1, team: 0, heroId: 'pudge', pos: { x: 0, y: 0 }, alive: true, hp: 500, stats: { maxHp: 500 }, ctrl: { kind: 'player' } };
     const victim: FakeUnit = { uid: 2, team: 1, pos: { x: 30, y: 0 }, alive: false, hp: 0, stats: { maxHp: 100 }, ctrl: { kind: 'gambit' } };
     const sim = fakeSim([pudge, victim]);
     const det = new StoryDetector();
-    const events: SimEvent[] = [castEvent(1, 'pudge-meat-hook'), { t: 'death', uid: 2, killer: 1 }];
+    const events: SimEvent[] = [{ ...castEvent(1, 'pudge-meat-hook'), target: 2 }, { t: 'death', uid: 2, killer: 1 }];
     const out = det.observe(events, { sim, nowSec: 1, playerTeam: 0, townPos: { x: 0, y: 0 }, townRadius: 900 });
     expect(out).toContainEqual({ kind: 'legend', legendId: 'hooked-home' });
   });
 
   it('does NOT fire Hooked Home when the Pudge is nowhere near home', () => {
-    const pudge: FakeUnit = { uid: 1, team: 0, pos: { x: 5000, y: 5000 }, alive: true, hp: 500, stats: { maxHp: 500 }, ctrl: { kind: 'player' } };
+    const pudge: FakeUnit = { uid: 1, team: 0, heroId: 'pudge', pos: { x: 5000, y: 5000 }, alive: true, hp: 500, stats: { maxHp: 500 }, ctrl: { kind: 'player' } };
     const victim: FakeUnit = { uid: 2, team: 1, pos: { x: 5030, y: 5000 }, alive: false, hp: 0, stats: { maxHp: 100 }, ctrl: { kind: 'gambit' } };
     const sim = fakeSim([pudge, victim]);
-    const events: SimEvent[] = [castEvent(1, 'pudge-meat-hook'), { t: 'death', uid: 2, killer: 1 }];
+    const events: SimEvent[] = [{ ...castEvent(1, 'pudge-meat-hook'), target: 2 }, { t: 'death', uid: 2, killer: 1 }];
     expect(new StoryDetector().observe(events, { sim, nowSec: 1, playerTeam: 0, townPos: { x: 0, y: 0 }, townRadius: 900 })).toHaveLength(0);
   });
 
   it('fires The Coil That Closed the Game when Puck coils 2+ enemies', () => {
-    const puck: FakeUnit = { uid: 1, team: 0, pos: { x: 0, y: 0 }, alive: true, hp: 500, stats: { maxHp: 500 }, ctrl: { kind: 'gambit' } };
+    const puck: FakeUnit = { uid: 1, team: 0, heroId: 'puck', pos: { x: 0, y: 0 }, alive: true, hp: 500, stats: { maxHp: 500 }, ctrl: { kind: 'gambit' } };
     const sim = fakeSim([puck, ...enemyRing(2, { x: 100, y: 0 }, 50)]);
     const out = new StoryDetector().observe([castEvent(1, 'puck-dream-coil')], { sim, nowSec: 1, playerTeam: 0 });
     expect(out).toContainEqual({ kind: 'legend', legendId: 'coil-closed-game' });
   });
 
   it('fires The Call That Paid Out when Axe dies after a decisive call', () => {
-    const axe: FakeUnit = { uid: 1, team: 0, pos: { x: 0, y: 0 }, alive: false, hp: 0, stats: { maxHp: 500 }, ctrl: { kind: 'player' } };
+    const axe: FakeUnit = { uid: 1, team: 0, heroId: 'axe', pos: { x: 0, y: 0 }, alive: false, hp: 0, stats: { maxHp: 500 }, ctrl: { kind: 'player' } };
     const enemy: FakeUnit = { uid: 2, team: 1, pos: { x: 100, y: 0 }, alive: false, hp: 0, stats: { maxHp: 100 }, ctrl: { kind: 'gambit' } };
     const det = new StoryDetector();
     const out = det.observe([castEvent(1, 'axe-berserkers-call'), { t: 'death', uid: 1, killer: 2 }], { sim: fakeSim([axe, enemy]), nowSec: 1, playerTeam: 0 });
@@ -102,6 +121,27 @@ describe('STORY §7.3 legend detector', () => {
     const events = enemies.map((e) => ({ t: 'death' as const, uid: e.uid, killer: 1 }));
     const out = det.observe(events, { sim: fakeSim([carry, ...enemies]), nowSec: 1, playerTeam: 0 });
     expect(out).toContainEqual({ kind: 'legend', legendId: 'rampage' });
+  });
+
+  it('does NOT fire Rampage if the killer dies before reaching five kills', () => {
+    const carry: FakeUnit = { uid: 1, team: 0, pos: { x: 0, y: 0 }, alive: false, hp: 0, stats: { maxHp: 500 }, ctrl: { kind: 'player' } };
+    const enemies = enemyRing(5, { x: 100, y: 0 }, 50).map((e) => ({ ...e, alive: false, hp: 0 }));
+    const det = new StoryDetector();
+    const events: SimEvent[] = [
+      ...enemies.slice(0, 4).map((e) => ({ t: 'death' as const, uid: e.uid, killer: 1 })),
+      { t: 'death', uid: 1, killer: 100 },
+      { t: 'death', uid: enemies[4].uid, killer: 1 }
+    ];
+    const out = det.observe(events, { sim: fakeSim([carry, ...enemies]), nowSec: 1, playerTeam: 0 });
+    expect(out).not.toContainEqual({ kind: 'legend', legendId: 'rampage' });
+  });
+
+  it('fires the first resonance story trigger from reaction events', () => {
+    const det = new StoryDetector();
+    const out = det.observe([
+      { t: 'reaction', uid: 2, from: 1, reaction: 'vaporize', elements: ['hydro', 'pyro'] }
+    ], { sim: fakeSim([]), nowSec: 1, playerTeam: 0 });
+    expect(out).toContainEqual({ kind: 'resonance', reaction: 'vaporize' });
   });
 });
 
@@ -236,6 +276,23 @@ describe('STORY §5 cut-scene DSL', () => {
 // STORY §8 — cinematics gallery + §7.4 titles + §2.6/§7.4 content
 // ----------------------------------------------------------------
 describe('STORY gallery, titles & content', () => {
+  it('passes the active cinematic view into the scene update path', () => {
+    let lastCinematicId: string | null = null;
+    const scene = {
+      selectedUid: -1,
+      terrain: { obstacles: [] },
+      pushEvent: () => {},
+      update: (_sim: unknown, _follow: unknown, _dt: number, _day: number, cinematic: { id?: string } | null = null) => {
+        lastCinematicId = cinematic?.id ?? null;
+      },
+      resetUnitViews: () => {},
+      setDungeonRoom: () => {}
+    };
+    const g = new Game(null, newGameSave('juggernaut'), { scene, audio: new HeadlessAudio() });
+    g.update(0.016);
+    expect(lastCinematicId).toBe('prologue-moon-breaks');
+  });
+
   it('gallery hides unseen replayable scenes spoiler-safe and replays only seen ones', () => {
     const g = freshGame();
     while (g.cinematic.active) g.cinematicSkip();
@@ -266,13 +323,40 @@ describe('STORY gallery, titles & content', () => {
     expect(roster.length).toBeGreaterThan(10);
   });
 
-  it('a festival that cannot launch its mode is still remembered with its purse', () => {
+  it('a festival that cannot launch its mode is remembered without paying its clear reward', () => {
     const g = freshGame();
     while (g.cinematic.active) g.cinematicSkip();
     expect(g.festivalLaunchable('diretide-roshan-candy')).toBe(false); // fresh game has no full party
     const goldBefore = g.gold;
     expect(g.runSeasonalEvent('wraith-night-altar')).toBe(true);
-    expect(g.gold).toBeGreaterThan(goldBefore); // festival purse paid out immediately
+    expect(g.gold).toBe(goldBefore);
+    expect(g.codexUnlocks.has('festival:wraith-night-altar')).toBe(true);
+  });
+
+  it('maps every seasonal event to a concrete playable raid or dungeon target', () => {
+    const g = freshGame();
+    for (const event of REG.seasonalEvents.values()) {
+      const status = g.seasonalEventStatus(event.id);
+      expect(status.target, event.id).not.toBe('Unknown');
+      expect(status.target, event.id).toMatch(/Raid|Dungeon|Endless dungeon/);
+    }
+  });
+
+  it('starts a raid-backed festival when launch requirements are met', () => {
+    const g = fullPartyGame('shadeshore');
+    const goldBefore = g.gold;
+    expect(g.festivalLaunchable('dark-reef-crawl')).toBe(true);
+    expect(g.runSeasonalEvent('dark-reef-crawl')).toBe(true);
+    expect(g.liveRaid?.def.id).toBe('renegade-marshal');
+    expect(g.gold).toBe(goldBefore);
+  });
+
+  it('starts a dungeon-backed festival in its target region with event modifiers', () => {
+    const g = fullPartyGame('vile-reaches');
+    expect(g.festivalLaunchable('crowns-fall')).toBe(true);
+    expect(g.runSeasonalEvent('crowns-fall')).toBe(true);
+    expect(g.liveDungeon?.def.id).toBe('worldstone-vault');
+    expect(g.liveDungeon?.selectedModifiers()).toEqual(['champion-sigil', 'deep-map']);
   });
 
   it('registers the full STORY §7 festival and legend roster', () => {

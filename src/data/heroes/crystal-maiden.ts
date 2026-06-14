@@ -19,8 +19,8 @@ export const CRYSTAL_MAIDEN: HeroDef = {
     attackProjectileSpeed: 900,
     moveSpeed: 280,
     turnRate: 0.5,
-    hpRegen: 1.0,
-    manaRegen: 1.2
+    hpRegen: 2.0,
+    manaRegen: 2.5
   },
   skillOrder: [0, 1, 2],
   abilities: [

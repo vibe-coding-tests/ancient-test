@@ -10,6 +10,7 @@ export interface HeroModelAsset {
 export interface HeroAssetManifestEntry {
   heroId: string;
   modelUrl: string;
+  weaponUrl?: string;
   clips: Partial<Record<'idle' | 'run' | 'attack' | 'cast' | 'channel' | 'death', string>>;
   sockets: ('weapon' | 'back' | 'shoulder')[];
   fallback: 'procedural';
@@ -114,6 +115,7 @@ export const PHASE5_STARTER_ASSETS: HeroAssetManifestEntry[] = (() => {
       out.push({
         heroId,
         modelUrl: `/assets/heroes/${heroId}.glb`,
+        weaponUrl: `/assets/weapons/heroes/${heroId}.glb`,
         clips: cohortClips(base),
         sockets: ['weapon', 'back', 'shoulder'],
         fallback: 'procedural'
@@ -211,6 +213,7 @@ export class HeroAssetLoader {
   // Vendored GLBs are meshopt-compressed, so the decoder must be wired or loads fail.
   private loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
   private cache = new Map<string, Promise<HeroModelAsset | null>>();
+  private weaponCache = new Map<string, Promise<HeroModelAsset | null>>();
   private baseCache = new Map<HeroBaseId, Promise<HeroModelAsset | null>>();
 
   /** Resolve a hero's authored scene + clips, or null to keep the procedural rig. */
@@ -221,6 +224,18 @@ export class HeroAssetLoader {
       .then((gltf) => ({ scene: gltf.scene, animations: gltf.animations ?? [] }))
       .catch(() => null);
     this.cache.set(entry.heroId, promise);
+    return promise;
+  }
+
+  /** Resolve a hero's generated held-weapon scene, or null to keep the procedural fallback. */
+  loadHeroWeapon(entry: HeroAssetManifestEntry): Promise<HeroModelAsset | null> {
+    if (!entry.weaponUrl) return Promise.resolve(null);
+    const cached = this.weaponCache.get(entry.heroId);
+    if (cached) return cached;
+    const promise = this.loader.loadAsync(entry.weaponUrl)
+      .then((gltf) => ({ scene: gltf.scene, animations: gltf.animations ?? [] }))
+      .catch(() => null);
+    this.weaponCache.set(entry.heroId, promise);
     return promise;
   }
 

@@ -16,6 +16,7 @@ export interface UnitRig {
   legL?: THREE.Object3D;
   legR?: THREE.Object3D;
   weapon?: THREE.Object3D;
+  defaultWeapon?: THREE.Object3D;
   rightHand?: THREE.Object3D;
   itemLayer: THREE.Group;
   height: number;
@@ -2396,8 +2397,52 @@ export function applyItemAppearances(rig: UnitRig, apps: ItemAppearanceSpec[]): 
   }
 }
 
+function hostWeapon(rig: UnitRig, next: THREE.Object3D): void {
+  const handSocket = rig.sockets?.weapon;
+  const onAuthoredHand = !!handSocket && rig.rightHand === handSocket;
+  const host = rig.rightHand ?? rig.itemLayer;
+  if (onAuthoredHand) {
+    const k = rig.authoredModel?.scale.x || 1;
+    next.scale.setScalar(1 / k);
+    next.position.set(0, 0, 0);
+    next.rotation.set(0, 0, 0);
+  } else {
+    next.scale.setScalar(1);
+    next.position.set(
+      rig.rightHand ? 0.15 * rig.scale : 0.42 * rig.scale,
+      rig.rightHand ? -0.72 * rig.scale : rig.height * 0.52,
+      rig.rightHand ? 0 : -0.56 * rig.scale
+    );
+    if (!rig.rightHand) next.rotation.z = -0.45;
+  }
+  host.add(next);
+}
+
+function restoreDefaultWeapon(rig: UnitRig): void {
+  if (!rig.defaultWeapon) return;
+  if (rig.weapon && rig.weapon !== rig.defaultWeapon && rig.weapon.parent) rig.weapon.parent.remove(rig.weapon);
+  if (!rig.defaultWeapon.parent) hostWeapon(rig, rig.defaultWeapon);
+  rig.weapon = rig.defaultWeapon;
+}
+
+export function attachHeroWeaponModel(rig: UnitRig, weapon: THREE.Object3D): void {
+  if (rig.defaultWeapon?.parent) rig.defaultWeapon.parent.remove(rig.defaultWeapon);
+  weapon.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh) return;
+    m.castShadow = true;
+    m.receiveShadow = true;
+  });
+  weapon.userData.heroWeapon = true;
+  rig.defaultWeapon = weapon;
+  restoreDefaultWeapon(rig);
+}
+
 function replaceWeapon(rig: UnitRig, weapon: ItemAppearanceSpec['weapon'] | undefined): void {
-  if (!weapon) return;
+  if (!weapon) {
+    restoreDefaultWeapon(rig);
+    return;
+  }
   if (rig.weapon?.parent) rig.weapon.parent.remove(rig.weapon);
   rig.attackWeapon = weapon.kind;
   const matS = lam(weapon.color ?? '#d8dce8', weapon.emissive ? 0x111111 : 0);
@@ -2408,22 +2453,7 @@ function replaceWeapon(rig: UnitRig, weapon: ItemAppearanceSpec['weapon'] | unde
   // socket lives inside the height-fitted model, so counter-scale by the fit factor
   // to keep the weapon at rig size. With no hand bone (procedural rig, or a base
   // that exposed none) the weapon rides the right hand / item layer as before.
-  const handSocket = rig.sockets?.weapon;
-  const onAuthoredHand = !!handSocket && rig.rightHand === handSocket;
-  const host = rig.rightHand ?? rig.itemLayer;
-  if (onAuthoredHand) {
-    const k = rig.authoredModel?.scale.x || 1;
-    next.scale.setScalar(1 / k);
-    next.position.set(0, 0, 0);
-  } else {
-    next.position.set(
-      rig.rightHand ? 0.15 * rig.scale : 0.42 * rig.scale,
-      rig.rightHand ? -0.72 * rig.scale : rig.height * 0.52,
-      rig.rightHand ? 0 : -0.56 * rig.scale
-    );
-    if (!rig.rightHand) next.rotation.z = -0.45;
-  }
-  host.add(next);
+  hostWeapon(rig, next);
   rig.weapon = next;
 }
 
