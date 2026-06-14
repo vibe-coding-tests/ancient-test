@@ -45,7 +45,7 @@ import { ELITE_DRAFT } from '../data/drafts';
 import { resonanceMods } from '../core/resonance';
 import { levelFromXp, xpForLevel } from '../core/stats';
 import { dist, fromAngle, norm, sub } from '../core/math2d';
-import type { ActiveElement, ArmoryLoadouts, BossDef, CreepTier, CreepInstanceSave, DifficultyTier, DraftDef, DropSource, DungeonDef, DungeonModifierDef, DungeonProgressSave, DungeonRoom, EchoProgress, GambitRule, GameSave, GraphicsSettings, HeroLoadoutSlots, HeroSave, ItemDropTable, ItemQuality, ItemRarity, ItemSave, LootBand, MacroHeroSetup, NeutralItemDef, Order, QuestProgress, RaidDef, RegionDef, RoomTemplate, RoomType, SimEvent, StingerId, Vec2 } from '../core/types';
+import type { ActiveElement, ArmoryLoadouts, BossDef, CreepTier, CreepInstanceSave, DifficultyTier, DraftDef, DropSource, DungeonDef, DungeonModifierDef, DungeonProgressSave, DungeonRoom, EchoProgress, GambitRule, GameSave, GraphicsSettings, HeroLoadoutSlots, HeroSave, ItemDropTable, ItemQuality, ItemRarity, ItemSave, LootBand, LoreEntryDef, MacroHeroSetup, NeutralItemDef, Order, QuestProgress, RaidDef, RegionDef, RoomTemplate, RoomType, SimEvent, StingerId, Vec2 } from '../core/types';
 import { ProceduralAudio } from '../engine/audio';
 import { GameScene } from '../engine/scene';
 import { LiveGymFight, runGymMatch, type GymMatchHero, type GymMatchResult } from './macro-session';
@@ -1787,10 +1787,32 @@ export class Game {
   private syncEncounterCodex(): void {
     for (const id of this.heldUniques) this.codexUnlocks.add('item:' + id);
     for (const r of this.party) this.codexUnlocks.add('hero:' + r.heroId);
+    this.syncStoryCodex();
+  }
+
+  private storyLoreUnlocked(entry: LoreEntryDef): boolean {
+    switch (entry.unlock.kind) {
+      case 'start':
+        return true;
+      case 'region':
+        return this.codexUnlocks.has('region:' + entry.unlock.regionId) || this.region.id === entry.unlock.regionId;
+      case 'badge':
+        return this.badges.has(entry.unlock.badgeId);
+      case 'champion':
+        return this.eliteFive.championDown;
+    }
+    return false;
+  }
+
+  private syncStoryCodex(): void {
+    for (const entry of REG.loreEntries.values()) {
+      if (this.storyLoreUnlocked(entry)) this.codexUnlocks.add('lore:' + entry.id);
+    }
   }
 
   /** Structured codex view-model — only entries unlocked on encounter (§3.14). */
   codexEntries(): {
+    lore: { id: string; thread: string; stage: string; title: string; summary: string; body: string }[];
     heroes: { id: string; name: string; sub: string; lore: string }[];
     regions: { id: string; name: string; lore: string }[];
     items: { id: string; name: string; lore: string }[];
@@ -1800,6 +1822,7 @@ export class Game {
     this.syncEncounterCodex();
     const has = (id: string): boolean => this.codexUnlocks.has(id);
     return {
+      lore: [...REG.loreEntries.values()].filter((l) => has('lore:' + l.id)).map((l) => ({ id: l.id, thread: l.thread, stage: l.stage, title: l.title, summary: l.summary, body: l.body })),
       heroes: [...REG.heroes.values()].filter((h) => has('hero:' + h.id)).map((h) => ({ id: h.id, name: h.name, sub: `${h.attribute.toUpperCase()} · ${h.roles.slice(0, 2).join(' / ')}`, lore: h.lore })),
       regions: [...REG.regions.values()].filter((r) => has('region:' + r.id)).map((r) => ({ id: r.id, name: r.name, lore: r.lore })),
       items: [...REG.items.values()].filter((i) => has('item:' + i.id)).map((i) => ({ id: i.id, name: i.name, lore: i.lore })),
@@ -3647,6 +3670,7 @@ export class Game {
     const benchSaves = [...this.benchRoster.values()]
       .filter((r) => !partyIds.has(r.heroId))
       .map(cloneHeroSave);
+    this.syncEncounterCodex();
     return {
       version: SAVE_VERSION,
       name: REG.hero(this.party[0].heroId).name,

@@ -47,6 +47,12 @@ const RAID_ITEM_RARITY: Partial<Record<string, ItemRarity>> = {
   'eye-of-skadi': 'immortal',
   'refresher-orb': 'immortal',
   'aghanims-scepter': 'immortal',
+  'abyssal-blade': 'immortal',
+  bloodthorn: 'immortal',
+  radiance: 'immortal',
+  satanic: 'immortal',
+  'octarine-core': 'immortal',
+  'aghanims-blessing': 'immortal',
   'aegis-of-the-immortal': 'arcana',
   'assault-cuirass': 'legendary',
   'black-king-bar': 'mythical',
@@ -95,7 +101,7 @@ export const ALL_RAIDS: RaidDef[] = [
     addWaves: [{ atHpPct: 75, summon: fallen, count: 4 }, { atHpPct: 35, summon: fallen, count: 5 }],
     zones: [{ atHpPct: 80, zone: fireZone }, { atHpPct: 45, zone: { ...fireZone, wall: true } }],
     enrageSec: 135,
-    loot: raidLoot(['reaver'], ['heart-of-tarrasque']),
+    loot: raidLoot(['reaver'], ['heart-of-tarrasque', 'satanic', 'radiance']),
     signatureExotic: 'terror-fear',
     dialogue: ['Your draft dies the moment I deign to look at it.', 'There is no buyback from the abyss.']
   },
@@ -123,7 +129,7 @@ export const ALL_RAIDS: RaidDef[] = [
     addWaves: [{ atHpPct: 85, summon: swarm, count: 4 }, { atHpPct: 55, summon: swarm, count: 5 }, { atHpPct: 25, summon: swarm, count: 6 }],
     zones: [{ atHpPct: 75, zone: { ...fireZone, radius: 300 } }, { atHpPct: 40, zone: { ...fireZone, radius: 420 } }],
     enrageSec: 135,
-    loot: raidLoot(['mystic-staff'], ['refresher-orb']),
+    loot: raidLoot(['mystic-staff'], ['refresher-orb', 'octarine-core']),
     signatureExotic: 'swarm-spread',
     dialogue: ['My children outnumber your cooldowns.', 'The crater is a web — and you already walked in.']
   },
@@ -155,7 +161,7 @@ export const ALL_RAIDS: RaidDef[] = [
     addWaves: [{ atHpPct: 70, summon: swarm, count: 3 }, { atHpPct: 35, summon: swarm, count: 4 }],
     zones: [{ atHpPct: 80, zone: { ...frostZone, radius: 300 } }],
     enrageSec: 130,
-    loot: raidLoot(['eaglesong'], ['butterfly', 'diffusal-blade', 'eye-of-skadi']),
+    loot: raidLoot(['eaglesong'], ['butterfly', 'bloodthorn', 'abyssal-blade', 'diffusal-blade', 'eye-of-skadi']),
     dialogue: ['You see the blade only after it has already chosen you.', 'The dark between the stars remembers every name.']
   },
   {
@@ -181,7 +187,7 @@ export const ALL_RAIDS: RaidDef[] = [
     addWaves: [{ atHpPct: 75, summon: fallen, count: 4 }, { atHpPct: 35, summon: fallen, count: 5 }],
     zones: [{ atHpPct: 80, zone: fireZone }, { atHpPct: 40, zone: { ...fireZone, wall: true } }],
     enrageSec: 135,
-    loot: raidLoot(['reaver'], ['heart-of-tarrasque', 'assault-cuirass', 'black-king-bar']),
+    loot: raidLoot(['reaver'], ['heart-of-tarrasque', 'satanic', 'radiance', 'assault-cuirass', 'black-king-bar']),
     dialogue: ['The last of my brothers fell. I did not.', 'Your world keeps a stone at its heart. I came down for it.']
   },
   {
@@ -194,7 +200,7 @@ export const ALL_RAIDS: RaidDef[] = [
     addWaves: [{ atHpPct: 60, summon: swarm, count: 4 }],
     zones: [{ atHpPct: 80, zone: fireZone }, { atHpPct: 45, zone: { ...fireZone, radius: 400 } }],
     enrageSec: 135,
-    loot: raidLoot(['mystic-staff'], ['scythe-of-vyse', 'refresher-orb', 'aghanims-scepter']),
+    loot: raidLoot(['mystic-staff'], ['scythe-of-vyse', 'refresher-orb', 'octarine-core', 'aghanims-scepter', 'aghanims-blessing']),
     dialogue: ['Every hatred in this world borrows my voice.', 'Speak my name aloud and the hall goes dark.']
   },
   {
@@ -207,7 +213,7 @@ export const ALL_RAIDS: RaidDef[] = [
     addWaves: [{ atHpPct: 70, summon: swarm, count: 3 }, { atHpPct: 35, summon: fallen, count: 4 }],
     zones: [{ atHpPct: 80, zone: fireZone }, { atHpPct: 40, zone: { ...fireZone, radius: 420, wall: true } }],
     enrageSec: 140,
-    loot: raidLoot(['reaver'], ['heart-of-tarrasque', 'aghanims-scepter', 'assault-cuirass']),
+    loot: raidLoot(['reaver'], ['heart-of-tarrasque', 'radiance', 'satanic', 'aghanims-scepter', 'assault-cuirass']),
     dialogue: ['The last of the dragons does not flee a falling moon.', 'Embers older than your gods wait beneath my wings.']
   }
 ];

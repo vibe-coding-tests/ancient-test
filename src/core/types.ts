@@ -603,6 +603,24 @@ export interface RaidDef {
   dialogue: string[];          // in-character boss lines (§3.13), original
 }
 
+// ---------- Lore codex ----------
+export type LoreThreadId = 'loop';
+export type LoreUnlock =
+  | { kind: 'start' }
+  | { kind: 'region'; regionId: string }
+  | { kind: 'badge'; badgeId: string }
+  | { kind: 'champion' };
+
+export interface LoreEntryDef {
+  id: string;
+  thread: LoreThreadId;
+  stage: string;
+  title: string;
+  summary: string;
+  body: string;
+  unlock: LoreUnlock;
+}
+
 // ---------- Dungeons ----------
 export type RoomType = 'entrance' | 'combat' | 'elite' | 'treasure' | 'shrine' | 'rest' | 'boss';
 export type MonsterRarity = 'normal' | 'champion' | 'rare';
@@ -846,6 +864,7 @@ export interface RegionDef {
   size: number;                // square side, dota units
   seed: number;
   lore: string;
+  arrivalBeat?: string;         // first-entry cinematic hook; interpreted outside core
   town: { name: string; pos: Vec2; radius: number };
   shrine: { pos: Vec2 };
   shopInventory: string[];

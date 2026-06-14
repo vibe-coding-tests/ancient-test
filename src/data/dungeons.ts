@@ -7,6 +7,12 @@ const DUNGEON_ITEM_RARITY: Partial<Record<string, ItemRarity>> = {
   'eye-of-skadi': 'immortal',
   'refresher-orb': 'immortal',
   'aghanims-scepter': 'immortal',
+  'abyssal-blade': 'immortal',
+  bloodthorn: 'immortal',
+  radiance: 'immortal',
+  satanic: 'immortal',
+  'octarine-core': 'immortal',
+  'aghanims-blessing': 'immortal',
   'assault-cuirass': 'legendary',
   'diffusal-blade': 'mythical'
 };
@@ -257,7 +263,7 @@ export const SEVERED_DARK: DungeonDef = {
   affixes: dungeonAffixes(['jailer', 'vortex', 'fast', 'waller', 'shielding', 'health-link', 'molten']),
   modifiers: MARQUEE_MODIFIERS,
   guardian: 'marquee-void-prelate',
-  loot: marqueeRoomLoot({ id: 'severed-dark', elitePool: ['demon-edge', 'eaglesong', 'ultimate-orb', 'point-booster'], guardianGuaranteed: 'eaglesong', guardianAnchors: ['butterfly', 'eye-of-skadi', 'diffusal-blade'] }),
+  loot: marqueeRoomLoot({ id: 'severed-dark', elitePool: ['demon-edge', 'eaglesong', 'ultimate-orb', 'point-booster'], guardianGuaranteed: 'eaglesong', guardianAnchors: ['butterfly', 'eye-of-skadi', 'bloodthorn', 'abyssal-blade', 'diffusal-blade'] }),
   budget: { base: 44, perDepth: 14 },
   tiers: ['normal', 'nightmare', 'hell']
 };
@@ -280,7 +286,7 @@ export const WORLDSTONE_VAULT: DungeonDef = {
   affixes: dungeonAffixes(['jailer', 'molten', 'vortex', 'fast', 'waller', 'shielding', 'health-link']),
   modifiers: MARQUEE_MODIFIERS,
   guardian: 'boss-wraith-king',
-  loot: marqueeRoomLoot({ id: 'worldstone-vault', elitePool: ['reaver', 'demon-edge', 'point-booster', 'ultimate-orb'], guardianGuaranteed: 'reaver', guardianAnchors: ['heart-of-tarrasque', 'assault-cuirass'] }),
+  loot: marqueeRoomLoot({ id: 'worldstone-vault', elitePool: ['reaver', 'demon-edge', 'point-booster', 'ultimate-orb'], guardianGuaranteed: 'reaver', guardianAnchors: ['heart-of-tarrasque', 'satanic', 'radiance', 'assault-cuirass'] }),
   budget: { base: 46, perDepth: 15 },
   tiers: ['normal', 'nightmare', 'hell']
 };
@@ -303,7 +309,7 @@ export const EMBER_CALDERA: DungeonDef = {
   affixes: dungeonAffixes(['molten', 'jailer', 'vortex', 'fast', 'waller', 'shielding', 'health-link']),
   modifiers: MARQUEE_MODIFIERS,
   guardian: 'marquee-last-eldwurm',
-  loot: marqueeRoomLoot({ id: 'ember-caldera', elitePool: ['mystic-staff', 'reaver', 'sacred-relic', 'demon-edge'], guardianGuaranteed: 'reaver', guardianAnchors: ['heart-of-tarrasque', 'aghanims-scepter'] }),
+  loot: marqueeRoomLoot({ id: 'ember-caldera', elitePool: ['mystic-staff', 'reaver', 'sacred-relic', 'demon-edge'], guardianGuaranteed: 'reaver', guardianAnchors: ['heart-of-tarrasque', 'radiance', 'octarine-core', 'aghanims-scepter', 'aghanims-blessing'] }),
   budget: { base: 48, perDepth: 16 },
   tiers: ['normal', 'nightmare', 'hell']
 };

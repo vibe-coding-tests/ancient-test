@@ -57,6 +57,17 @@ describe('codex/journal state (test 24)', () => {
     expect(reloaded.codexEntries().raids.map((r) => r.id)).toContain('lord-of-terror');
   });
 
+  it('the Loop lore thread unlocks from story milestones', () => {
+    const g = freshGame();
+    expect(g.codexEntries().lore.map((l) => l.id)).toEqual(['loop-sundering']);
+
+    g.badges.add('lunar-badge');
+    expect(g.codexEntries().lore.map((l) => l.id)).toContain('loop-echoes');
+
+    g.eliteFive.championDown = true;
+    expect(g.codexEntries().lore.map((l) => l.id)).toContain('loop-tower');
+  });
+
   it('the journal reflects raids, factions, reputation, and elite progress', () => {
     const g = freshGame();
     g.reputation = 12;

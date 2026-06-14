@@ -779,6 +779,17 @@ button:disabled { opacity: 0.45; cursor: default; }
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   font-size: 13px;
 }
+.codex-thread {
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 216, 106, 0.14);
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(255, 216, 106, 0.07), rgba(89, 192, 224, 0.04));
+}
+.codex-thread-note p strong {
+  color: #e7d18f;
+  font-weight: 600;
+}
 
 /* compendium — heroes + atlas tabs */
 .compendium-single { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 22px; }

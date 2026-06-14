@@ -23,6 +23,7 @@ import { ALL_QUESTS, ALL_TRIALS } from './quests';
 import { ALL_NEUTRAL_ITEMS } from './neutral-items';
 import { ALL_BOSSES } from './bosses';
 import { ALL_RAIDS } from './raids';
+import { ALL_LORE_ENTRIES } from './lore';
 import { ALL_DUNGEONS } from './dungeons';
 import { ALL_ROOM_TEMPLATES } from './room-templates';
 import { ALL_DRAFTS } from './drafts';
@@ -65,6 +66,7 @@ export function registerAllContent(): void {
   for (const n of ALL_NEUTRAL_ITEMS) REG.registerNeutralItem(n);
   for (const b of ALL_BOSSES) REG.registerBoss(b);
   for (const r of ALL_RAIDS) REG.registerRaid(r);
+  for (const l of ALL_LORE_ENTRIES) REG.registerLoreEntry(l);
   for (const t of ALL_ROOM_TEMPLATES) REG.registerRoomTemplate(t);
   for (const d of ALL_DUNGEONS) REG.registerDungeon(d);
   for (const d of ALL_DRAFTS) REG.registerDraft(d);

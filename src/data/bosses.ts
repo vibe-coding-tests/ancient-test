@@ -20,6 +20,12 @@ const BOSS_ITEM_RARITY: Partial<Record<string, ItemRarity>> = {
   'eye-of-skadi': 'immortal',
   'refresher-orb': 'immortal',
   'aghanims-scepter': 'immortal',
+  'abyssal-blade': 'immortal',
+  bloodthorn: 'immortal',
+  radiance: 'immortal',
+  satanic: 'immortal',
+  'octarine-core': 'immortal',
+  'aghanims-blessing': 'immortal',
   'assault-cuirass': 'legendary',
   'black-king-bar': 'mythical',
   'diffusal-blade': 'mythical'
@@ -40,13 +46,13 @@ function themedLoot(heroId: string, rank: BossDef['rank']): LootTable {
   let assembledPool = ['aghanims-scepter', 'refresher-orb'];
   if (AGILITY_CARRIES.has(heroId)) {
     guaranteed = ['eaglesong'];
-    assembledPool = ['butterfly', 'eye-of-skadi', 'diffusal-blade'];
+    assembledPool = ['butterfly', 'eye-of-skadi', 'abyssal-blade', 'bloodthorn', 'diffusal-blade'];
   } else if (STRENGTH_TITANS.has(heroId)) {
     guaranteed = ['reaver'];
-    assembledPool = ['heart-of-tarrasque', 'assault-cuirass', 'black-king-bar'];
+    assembledPool = ['heart-of-tarrasque', 'satanic', 'radiance', 'assault-cuirass', 'black-king-bar'];
   } else if (INTELLIGENCE_BOSSES.has(heroId)) {
     guaranteed = ['mystic-staff'];
-    assembledPool = ['scythe-of-vyse', 'refresher-orb', 'aghanims-scepter'];
+    assembledPool = ['scythe-of-vyse', 'refresher-orb', 'octarine-core', 'aghanims-scepter', 'aghanims-blessing'];
   }
   const dropPct = isMini
     ? {

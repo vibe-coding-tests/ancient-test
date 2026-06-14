@@ -7,6 +7,7 @@ import { ALL_CREEPS } from '../data/creeps/index';
 import { ALL_NEUTRAL_ITEMS } from '../data/neutral-items';
 import { ALL_BOSSES } from '../data/bosses';
 import { ALL_RAIDS } from '../data/raids';
+import { ALL_LORE_ENTRIES } from '../data/lore';
 import { ALL_DRAFTS } from '../data/drafts';
 import { ALL_TRAINERS } from '../data/trainers';
 import { ESPORTS_DENYLIST, denylistHit } from '../data/denylist';
@@ -15,7 +16,7 @@ import { ACTIVE_ELEMENTS, elementForAbility, elementForHero, elementForItemHit }
 import { PHASE5_STARTER_ASSETS } from '../engine/assets';
 import { HERO_LIKENESS_PROFILES } from '../engine/models';
 import { PERFORMANCE_BUDGET } from '../engine/performance';
-import type { AbilityDef, AnimGesture, AttackVisualKind, EffectNode, ItemAppearancePart, ItemWeaponVisualKind, SoundArchetype, ValueRef, VfxArchetype } from '../core/types';
+import type { AbilityDef, AnimGesture, AttackVisualKind, DropSource, EffectNode, ItemAppearancePart, ItemWeaponVisualKind, SoundArchetype, ValueRef, VfxArchetype } from '../core/types';
 import { abilityMaxLevel } from '../core/values';
 import { gestureForAbility, soundForAbility } from '../core/gestures';
 
@@ -40,9 +41,33 @@ const STATUS_IDS = [
 const ANIM_GESTURES: AnimGesture[] = ['melee-swing', 'ranged-shot', 'staff-cast', 'ground-slam', 'dash', 'channel-loop', 'summon-gesture', 'item-use', 'global-cast'];
 const SOUND_ARCHETYPES: SoundArchetype[] = ['blade', 'bow', 'impact', 'frost', 'fire', 'storm', 'void', 'heal', 'summon', 'item', 'roar'];
 const GATED_TOP_TIER = ['divine-rapier', 'butterfly', 'scythe-of-vyse', 'heart-of-tarrasque', 'eye-of-skadi', 'refresher-orb', 'aghanims-scepter', 'abyssal-blade', 'bloodthorn', 'radiance', 'satanic', 'octarine-core', 'aghanims-blessing', 'aghanims-shard', 'aegis-of-the-immortal', 'refresher-shard', 'cheese'];
+const RARITY_RANK = { common: 0, uncommon: 1, rare: 2, mythical: 3, legendary: 4, immortal: 5, arcana: 6 } as const;
+const RESERVED_DROP_SOURCES: DropSource[] = ['boss', 'raid', 'dungeon', 'special-battle'];
+const CODED_DROP_HOMES: Record<string, DropSource[]> = {
+  // Roshan repeat rewards are delivered by `Game.deliverRaidLoot` after the
+  // configured repeat clear, not by the base raid table every clear.
+  'refresher-shard': ['raid'],
+  cheese: ['raid']
+};
 const ITEM_WEAPON_VISUALS: ItemWeaponVisualKind[] = ['none', 'sword', 'staff', 'hook', 'totem', 'rifle', 'cleaver', 'broad-cleaver', 'glowing-blade', 'long-pole', 'storm-haft'];
 const ITEM_APPEARANCE_PARTS: ItemAppearancePart[] = ['pauldrons', 'heart-core', 'frost-shards', 'boot-trail', 'wing-blades', 'crystal-edge', 'mana-orb', 'hex-sigil', 'cloak', 'halo'];
 const ATTACK_VISUALS: AttackVisualKind[] = ['cleave-sweep', 'ranged-conversion', 'lightning-bounce', 'tinted-impact', 'crit-lunge', 'armor-shred-flash'];
+
+function dropHomesForItem(itemId: string): Set<DropSource> {
+  const homes = new Set<DropSource>(CODED_DROP_HOMES[itemId] ?? []);
+  for (const boss of ALL_BOSSES) {
+    if ([...boss.loot.guaranteed, ...boss.loot.assembledPool].includes(itemId)) homes.add('boss');
+  }
+  for (const raid of ALL_RAIDS) {
+    if ([...raid.loot.guaranteed, ...raid.loot.assembledPool].includes(itemId)) homes.add('raid');
+  }
+  for (const dungeon of ALL_DUNGEONS) {
+    for (const table of Object.values(dungeon.loot)) {
+      if (table.guaranteed.includes(itemId) || table.slots.some((slot) => slot.pool.some((entry) => entry.id === itemId))) homes.add('dungeon');
+    }
+  }
+  return homes;
+}
 
 function expectHex(color: string, where: string): void {
   expect(color, where).toMatch(/^#[0-9a-fA-F]{6}$/);
@@ -283,6 +308,19 @@ describe('data lint: items', () => {
     for (const id of GATED_TOP_TIER) expect(normalShopItems.has(id), `${id} should not be purchasable`).toBe(false);
   });
 
+  it('reserved Legendary+ items have at least one matching combat drop home', () => {
+    for (const item of ALL_ITEMS) {
+      const rarity = item.rarity ?? 'common';
+      if (RARITY_RANK[rarity] < RARITY_RANK.legendary) continue;
+      const reservedSources = (item.exclusiveTo ?? []).filter((source) => RESERVED_DROP_SOURCES.includes(source));
+      if (reservedSources.length === 0) continue;
+
+      const homes = dropHomesForItem(item.id);
+      const matchingHomes = reservedSources.filter((source) => homes.has(source));
+      expect(matchingHomes, `${item.id} is reserved for ${reservedSources.join('/')} but has homes ${[...homes].join('/') || 'none'}`).not.toHaveLength(0);
+    }
+  });
+
   it('has asset-plan item appearance and attack override coverage', () => {
     expect(ALL_ITEMS.filter((i) => i.appearance).length).toBeGreaterThanOrEqual(65);
     expect(ALL_ITEMS.filter((i) => (i.attackVisual?.length ?? 0) > 0).length).toBeGreaterThanOrEqual(25);
@@ -448,6 +486,7 @@ describe('data lint: regions', () => {
       for (const raidId of region.raids ?? []) {
         expect(REG.raids.has(raidId), `${region.id}: raid ${raidId}`).toBe(true);
       }
+      expect(region.arrivalBeat, `${region.id}: arrival beat`).toMatch(/^arrival-/);
       const poiIds = new Set<string>([
         ...(region.chests ?? []).map((c) => c.id),
         ...(region.waypoints ?? []).map((w) => w.id),
@@ -574,6 +613,15 @@ describe('data lint: Phase 3 registries', () => {
     expect(ALL_DRAFTS.length).toBeGreaterThanOrEqual(1);
     for (const draft of ALL_DRAFTS) {
       for (const member of draft.members) for (const heroId of member.pool) expect(REG.heroes.has(heroId), `${draft.id}: pool ${heroId}`).toBe(true);
+    }
+    expect(ALL_LORE_ENTRIES.length).toBeGreaterThanOrEqual(8);
+    for (const entry of ALL_LORE_ENTRIES) {
+      expect(REG.loreEntries.has(entry.id), `${entry.id}: registered`).toBe(true);
+      if (entry.unlock.kind === 'region') expect(REG.regions.has(entry.unlock.regionId), `${entry.id}: region unlock`).toBe(true);
+      if (entry.unlock.kind === 'badge') {
+        const { badgeId } = entry.unlock;
+        expect(ALL_GYMS.some((g) => g.badgeId === badgeId), `${entry.id}: badge unlock`).toBe(true);
+      }
     }
     expect(ALL_NEUTRAL_ITEMS.length).toBeGreaterThanOrEqual(15);
     for (const item of ALL_NEUTRAL_ITEMS) {

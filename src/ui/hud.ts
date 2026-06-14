@@ -1784,6 +1784,15 @@ export class Hud {
 
   private compendiumLoreBody(): string {
     const cx = this.game.codexEntries();
+    const loop = cx.lore
+      .filter((l) => l.thread === 'loop')
+      .map((l) => `
+        <div class="codex-note codex-thread-note">
+          <b>${l.title}</b> <em>${l.stage}</em>
+          <p><strong>${l.summary}</strong></p>
+          <p>${l.body}</p>
+        </div>`)
+      .join('') || '<p class="dim">Follow badges and the Tower to reconstruct the Loop.</p>';
     const heroes = [...cx.heroes]
       .sort((a, b) => a.name.localeCompare(b.name))
       .map((h) => `
@@ -1811,6 +1820,7 @@ export class Hud {
       .map((r) => `<div class="codex-note"><b>${r.name}</b> <em>${r.title}</em><p>${r.lore}</p></div>`)
       .join('') || '<p class="dim">Clear raids to reveal their lords.</p>';
     return `
+      <section class="codex-thread"><h3>The Loop</h3>${loop}</section>
       <div class="codex-grid">
         <section><h3>Known Heroes</h3>${heroes}</section>
         <section><h3>Regions</h3>${regions}</section>

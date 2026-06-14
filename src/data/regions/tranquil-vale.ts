@@ -8,7 +8,8 @@ export const TRANQUIL_VALE: RegionDef = {
   biome: 'grass',
   size: 12000,
   seed: 8123,
-  lore: 'A green shelf of the old Radiant lands, where shepherds trade rumors about the shards that fell when the Mad Moon broke.',
+  lore: 'A green shelf of the old Radiant lands, where shepherds trade rumors about the shards that fell when the Mad Moon broke. The first shard you touch hums with Radiant Ore, patient enough to become a champion instead of a command.',
+  arrivalBeat: 'arrival-tranquil-vale',
   town: { name: 'Dawnshade', pos: { x: 6000, y: 6400 }, radius: 850 },
   shrine: { pos: { x: 6000, y: 6150 } },
   shopInventory: [

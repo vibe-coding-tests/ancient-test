@@ -6,7 +6,8 @@ export const NIGHTSILVER_WOODS: RegionDef = {
   biome: 'forest',
   size: 12000,
   seed: 23017,
-  lore: 'A moonlit forest where Selemene’s hunters track the Mad Moon shards by the shadows they refuse to cast.',
+  lore: 'A moonlit forest where Selemene’s hunters track the Mad Moon shards by the shadows they refuse to cast. The moon-cult reads every bound Echo as an omen: either the Mad Moon is being mourned, or it is being gathered.',
+  arrivalBeat: 'arrival-nightsilver-woods',
   town: { name: 'Moonwake', pos: { x: 5600, y: 6500 }, radius: 820 },
   shrine: { pos: { x: 5600, y: 6200 } },
   shopInventory: [

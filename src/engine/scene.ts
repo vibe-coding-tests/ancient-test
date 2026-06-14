@@ -4,8 +4,8 @@ import type { Sim } from '../core/sim';
 import type { Unit } from '../core/unit';
 import { REG } from '../core/registry';
 import { buildTerrain, type TerrainInfo } from './terrain';
-import { applyHeroLikeness, applyItemAppearances, buildUnitRig, buildSelectionRing, mountHeroModel, type UnitRig } from './models';
-import { HeroAssetLoader, heroAssetEntry, creepCreatureUrl } from './assets';
+import { applyHeroLikeness, applyItemAppearances, buildUnitRig, buildSelectionRing, mountHeroModel, recolorToPalette, type UnitRig } from './models';
+import { HeroAssetLoader, heroAssetEntry, creepCreatureUrl, heroBaseId } from './assets';
 import { animateRig, newAnimState, type AnimState } from './animator';
 import { loadVfxTextureAtlas, VfxManager } from './vfx';
 import { lodForDistance, shouldAnimateAtLod } from './lod';
@@ -904,8 +904,21 @@ export class GameScene {
     this.scene.add(rig.root);
     const token = this.sceneToken;
 
-    // Pluggable rig (Phase 5): if an authored glTF is shipped for this hero, swap it
-    // in once it loads; otherwise the procedural rig above stays as the fallback.
+    // Pluggable rig (Phase 5): prefer a dedicated hero GLB; otherwise try the
+    // shared-base cohort path. If neither asset exists, the procedural rig stays.
+    const mountSharedBase = (): void => {
+      if (u.kind !== 'hero' || !u.heroId) return;
+      const base = heroBaseId(u.heroId);
+      if (base === 'procedural') return;
+      void this.heroAssets.loadBase(base).then((asset) => {
+        if (asset && this.isLive() && token === this.sceneToken && this.views.get(u.uid)?.rig === rig) {
+          const model = cloneModel(asset.scene);
+          recolorToPalette(model, palette);
+          mountHeroModel(rig, model, asset.animations);
+          applyItemAppearances(rig, this.itemAppearancesFor(u));
+        }
+      });
+    };
     const assetEntry = u.kind === 'hero' ? heroAssetEntry(u.heroId) : null;
     if (assetEntry) {
       void this.heroAssets.loadHero(assetEntry).then((asset) => {
@@ -914,8 +927,12 @@ export class GameScene {
           // WS-B: re-apply worn items now that sockets resolved, so the weapon hangs
           // off the authored hand bone instead of the hidden procedural one.
           applyItemAppearances(rig, this.itemAppearancesFor(u));
+        } else if (!asset) {
+          mountSharedBase();
         }
       });
+    } else {
+      mountSharedBase();
     }
 
     // Phase 3 (GRAPHICS_SPEC §13): mount an authored Quaternius creature (CC0)

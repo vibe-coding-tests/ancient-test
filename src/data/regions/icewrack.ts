@@ -6,7 +6,8 @@ export const ICEWRACK: RegionDef = {
   biome: 'snow',
   size: 12000,
   seed: 44190,
-  lore: 'Blue-white cliffs and frozen rivers where every shard impact still rings like a cracked bell.',
+  lore: 'Blue-white cliffs and frozen rivers where every shard impact still rings like a cracked bell. The Blueheart wardens hear the notes crowding closer together and know the Loop is tightening, not fading.',
+  arrivalBeat: 'arrival-icewrack',
   town: { name: 'Frostford', pos: { x: 6200, y: 6200 }, radius: 820 },
   shrine: { pos: { x: 6200, y: 5900 } },
   shopInventory: [
