@@ -645,7 +645,7 @@ export const ASSEMBLED: ItemDef[] = [
   },
   {
     id: 'aegis-of-the-immortal', name: 'Aegis of the Immortal', tier: 'core', cost: 0,
-    lore: 'A held promise: die once, stand once.',
+    lore: 'A held promise: die once, stand once. Its rim is inscribed with the line of champions who carried it before — and a blank space, waiting for the next.',
     glyph: 'shield'
   },
   {

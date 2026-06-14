@@ -8,7 +8,8 @@ import { ALL_NEUTRAL_ITEMS } from '../data/neutral-items';
 import { ALL_BOSSES } from '../data/bosses';
 import { ALL_RAIDS } from '../data/raids';
 import { ALL_LORE_ENTRIES } from '../data/lore';
-import { ALL_CUTSCENES } from '../data/cutscenes';
+import { ALL_CUTSCENES, OUTWORLD_CLAIMANT_RAID_IDS } from '../data/cutscenes';
+import { ALL_LEGENDS, ALL_SEASONAL_EVENTS } from '../data/events';
 import { ALL_DRAFTS } from '../data/drafts';
 import { ALL_TRAINERS } from '../data/trainers';
 import { ESPORTS_DENYLIST, denylistHit } from '../data/denylist';
@@ -649,6 +650,15 @@ describe('data lint: Phase 3 registries', () => {
       if (scene.trigger.kind === 'raid-intro' || scene.trigger.kind === 'raid-clear') {
         if (scene.trigger.raidId) expect(REG.raids.has(scene.trigger.raidId), `${scene.id}: raid trigger`).toBe(true);
       }
+      if (scene.trigger.kind === 'item-first-hold') expect(REG.items.has(scene.trigger.itemId), `${scene.id}: item trigger`).toBe(true);
+      if (scene.trigger.kind === 'seasonal-event') {
+        const { eventId } = scene.trigger;
+        expect(ALL_SEASONAL_EVENTS.some((e) => e.id === eventId), `${scene.id}: seasonal trigger`).toBe(true);
+      }
+      if (scene.trigger.kind === 'legend-callout') {
+        const { legendId } = scene.trigger;
+        expect(ALL_LEGENDS.some((l) => l.id === legendId), `${scene.id}: legend trigger`).toBe(true);
+      }
       if (scene.trigger.kind === 'elite-persona') expect(ALL_DRAFTS[0].members[scene.trigger.index], `${scene.id}: elite trigger`).toBeDefined();
       for (const beat of scene.beats) {
         expect(CUTSCENE_SHOT_ANGLES, `${scene.id}: shot angle`).toContain(beat.shot.angle);
@@ -663,6 +673,19 @@ describe('data lint: Phase 3 registries', () => {
         }
         if (beat.line?.portraitHeroId && !beat.line.portraitHeroId.includes('{')) expect(REG.heroes.has(beat.line.portraitHeroId), `${scene.id}: portrait`).toBe(true);
       }
+    }
+    expect(OUTWORLD_CLAIMANT_RAID_IDS.length).toBeGreaterThanOrEqual(6);
+    for (const raidId of OUTWORLD_CLAIMANT_RAID_IDS) expect(REG.raids.has(raidId), `claimant ${raidId}`).toBe(true);
+    expect(ALL_SEASONAL_EVENTS.length).toBeGreaterThanOrEqual(3);
+    for (const event of ALL_SEASONAL_EVENTS) {
+      expect(REG.seasonalEvents.has(event.id), `${event.id}: registered`).toBe(true);
+      expect(REG.regions.has(event.regionId), `${event.id}: region`).toBe(true);
+      expect(REG.cutscenes.has(event.cutsceneId), `${event.id}: cutscene`).toBe(true);
+    }
+    expect(ALL_LEGENDS.length).toBeGreaterThanOrEqual(2);
+    for (const legend of ALL_LEGENDS) {
+      expect(REG.legends.has(legend.id), `${legend.id}: registered`).toBe(true);
+      expect(REG.cutscenes.has(legend.cutsceneId), `${legend.id}: cutscene`).toBe(true);
     }
     expect(ALL_NEUTRAL_ITEMS.length).toBeGreaterThanOrEqual(15);
     for (const item of ALL_NEUTRAL_ITEMS) {

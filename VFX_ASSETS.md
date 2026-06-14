@@ -22,16 +22,16 @@ never imports `three` or reads renderer-only fields.
 | Surface | State |
 |---------|-------|
 | Hero likeness profiles | **122 / 122** unique, no duplicates (`engine/models.ts`) |
-| Hero GLBs enabled | **80 / 122** — every hero in the four KayKit humanoid cohorts (Knight 17 + Mage 30 + Barbarian 15 + Rogue 18), each a per-hero retextured CC0 GLB (`ENABLED_HERO_MODELS`, derived from `HERO_COHORTS ∩ ENABLED_HERO_COHORTS`). Remaining 42 = creature cohorts (31) + procedural holdouts (11). **No-budget policy** (DECISIONS 2026-06-13): one file per cohort hero, ~118MB total. Shared-base recolor scaffolding (`ENABLED_HERO_BASES`, `loadBase`, runtime `recolorToPalette`) stays wired as an inert fallback |
+| Hero models enabled | **111 / 122** — 80 per-hero KayKit humanoid GLBs (`ENABLED_HERO_MODELS`) plus 31 creature-base heroes through shared Quaternius GLBs (`ENABLED_HERO_BASES` → `/assets/creeps/<base>.glb`). Remaining 11 are intentional procedural holdouts. **No-budget policy** (DECISIONS 2026-06-13): one file per humanoid cohort hero, ~118MB total; creature heroes reuse the already-vendored creature GLBs |
 | Ability VFX coverage | **488 / 488** authored; archetypes incl. `vortex`/`dome`/`mine` |
 | Attack animation | weapon-driven (`attackStyleFor`): 8 styles incl. `bird-dive`, `creature-lunge` |
 | Cast/anim gestures | `AnimGesture` ×9, auto-resolved + hand-set on signatures |
 | Item visuals | D1+D2 shipped: `appearance` on **76** items, `attackVisual` on **28**; the remaining ~52 are intentionally invisible consumables/components (§6.1) |
-| Creature GLBs | 20 Quaternius creatures vendored, mounted on creeps and **animated off sim state** via the shared `mountHeroModel` + `animateAuthoredRig` path (not a static pose) |
-| Env assets | terrain PBR (ambientCG), 2 HDRIs (Poly Haven), foliage + town (Quaternius) |
+| Creature GLBs | 20 Quaternius creatures vendored, mounted on creeps and the 31 creature-base heroes via the shared `mountHeroModel` + `animateAuthoredRig` path (not a static pose) |
+| Env assets | terrain PBR (ambientCG), 2 HDRIs (Poly Haven) **both wired** — day + night beds swap by the cycle (`scene.applyEnvPhase`); original tiling water normal (`textures/water/water_normal.webp`) layered into the water shader; OFL display font (Cinzel) vendored + wired via `@font-face`; foliage + town (Quaternius) |
 | VFX textures | original `/assets/vfx/vfx_atlas.webp` for sprites/telegraphs, with procedural `DataTexture` fallback |
-| Audio | synth-only (`SoundArchetype` ×11), no sampled SFX, no music beds |
-| Pipeline | `build_assets.mjs` (resample/prune/dedup/meshopt/webp + **palette recolor**), `assets.ts` loader + fallback, `ASSETS.md` ledger, `manifest.json` |
+| Audio | synth floor (`SoundArchetype` ×11) **+ sampled enhancement layer**: `engine/sampled-audio.ts` decodes original per-biome music beds + one-shot SFX (`/assets/audio/*`), layered over the synth on medium+; synth stays the guaranteed fallback (boot floor / headless / missing file) |
+| Pipeline | `build_assets.mjs` (resample/prune/dedup/meshopt/webp + **palette recolor** + audio/font groups), generators (`generate_vfx_atlas`/`generate_water_normal`/`generate_audio`), `assets.ts` + `sampled-audio.ts` loaders + fallback, `ASSETS.md` ledger, `manifest.json` |
 | Visual target | coherent stylized fantasy theme across heroes, regions, VFX, items, UI, and audio |
 
 ---
@@ -184,8 +184,11 @@ bespoke generated GLB is a later, optional upgrade per hero.
   `HeroAssetLoader.loadBase` caches **per base** (≈16 loads for 122 heroes). The
   path is gated by `ENABLED_HERO_BASES` (empty until the CC0 base GLBs ship), so it
   is inert and 404-free today; the 6 starters keep their dedicated retextured GLBs.
-  Remaining: vendor the 4 KayKit base files, enable them, and wire the scene mount
-  to prefer base+recolor. Gate: model-cache base-coverage + recolor tests — green.
+  Scene wiring is **done**: `scene.ts` prefers a per-hero GLB, then the shared
+  base via `loadBase` → `recolorToPalette` → `mountHeroModel`, then procedural
+  (creature-base heroes already mount through this path). The humanoid shared-base
+  GLBs under `/assets/bases` stay optional since cohorts ship per-hero files.
+  Gate: model-cache base-coverage + recolor tests — green.
 - **A1+A2 — Knight + Mage + Barbarian + Rogue cohorts (80 heroes). SHIPPED.**
   No-budget policy: instead of one shared base recolored at runtime, every cohort
   hero ships its own retextured CC0 GLB (`heroes/<id>.glb`, ~118MB total). The spec
@@ -194,8 +197,11 @@ bespoke generated GLB is a later, optional upgrade per hero.
   `ENABLED_HERO_MODELS`/`PHASE5_STARTER_ASSETS` derive from `HERO_COHORTS ∩
   ENABLED_HERO_COHORTS`. Reuses the proven `heroAssetEntry → mountHeroModel` path;
   procedural fallback intact.
-- **A3 — creature cohort** (31 heroes) reusing the vendored creature GLBs +
-  creature clip wiring (WS-C). *Next up.*
+- **A3 — creature cohort (31 heroes). SHIPPED.** The shared-base loader now maps
+  creature hero bases directly to existing Quaternius files in `/assets/creeps`
+  (`spider`, `demon`, `dragonevolved`, `bull`, etc.). These heroes stay off the
+  per-hero `heroAssetEntry` path and mount through `ENABLED_HERO_BASES`, with
+  procedural fallback intact.
 - **A4 — bespoke marquee retextures** (raid bosses + iconic heroes) as their own
   files, flipped on one at a time.
 
@@ -331,36 +337,56 @@ additive, tier-gated, off on low. Gate: perf harness, no-asset boot, theme fit.
 
 ---
 
-## 8. WS-F — Audio
+## 8. WS-F — Audio — **shipped**
 
-Synth path is complete and stays (test-21 no-raw-import guard protects it). Add
-a **separate sampled-audio loader** so synth stays as the fallback:
+Synth path is complete and stays the floor (test-21 no-raw-import guard protects
+it). The sampled-audio enhancement layer now ships:
 
-- **Music beds** per biome/region + town + boss/raid (CC0 / original loops),
-  streamed and lazy, one bed at a time.
-- **Sampled SFX** for the highest-impact hits (crits, big stuns, ult casts)
-  layered over or replacing synth on medium+.
-- **Signature `sound` reassignment (pure data):** `roar` for big STR ults,
-  `void` for portal kits, `frost` for cryo, on the §14 signature column.
-- **New `SoundArchetype` `lightning`** (distinct from `storm`) only if a
-  signature family earns it — costed per §1.
+- **Sampled-audio loader (done).** `engine/sampled-audio.ts` (`SampledAudioBank`)
+  fetches + `decodeAudioData`s small original WAVs under `/assets/audio` into
+  `AudioBuffer`s. Boot-safe: no `fetch`/`AudioContext` (headless), a missing
+  file, or a decode failure returns `null` and the synth owns the cue. No asset
+  is imported — URLs are runtime strings, so the no-asset-import guard stays green.
+- **Music beds (done).** One seamlessly-looping ambient bed per biome
+  (`generate_audio.mjs`, original). `ProceduralAudio.update` crossfades the bed
+  in and ducks the synth drone; on biome change it swaps beds; with no file the
+  synth drone is unchanged. Gated to medium+ via `Game` → `enableSampledAudio`.
+- **Sampled SFX (done).** `crit`, `impact-heavy`, `fanfare`, `whoosh` layered
+  over the synth on crits, big physical hits, celebratory stingers, and
+  big-shape spell casts; pooled/throttled by the existing voice logic.
+- **Signature `sound` reassignment (already in data).** Hero kits already carry
+  explicit signatures — `roar` (STR ults, e.g. ursa-enrage/sven), `void` (portal
+  kits, e.g. enigma-black-hole), `frost` (cryo, e.g. lich) — with `soundForAbility`
+  inference covering the rest. Verified across the roster by audio test 20.
+- **New `SoundArchetype` `lightning`** stays unlanded (the `storm` archetype
+  still carries the lightning families) — costed per §1, land only if one earns it.
 
-Gate: voice-pool cap, no-raw-import on synth, audio-channel mix test, theme fit.
+Gate: voice-pool cap, no-raw-import on synth, sampled-layer headless safety
+(audio test 20b), audio-channel mix test, theme fit — green.
 
 ---
 
-## 9. WS-G — Scene / environment assets
+## 9. WS-G — Scene / environment assets — **shipped**
 
-Mostly done (terrain PBR, 2 HDRIs, foliage, town). Remaining:
+Terrain PBR, foliage, and town were already done; the remaining art is now wired:
 
-- **Water normal maps** (`textures/water/*`, MIT three.js examples) — wired in
-  `ASSETS.md` as planned.
-- **More HDRIs** per biome time-of-day (night bed already vendored, unused).
-- **Display font** (`ui/*.woff2`, OFL) for the engraved title/HUD feel.
-- **Props / set dressing** expansion (rocks, banners, raid arena dressing),
-  all `InstancedMesh`.
+- **Water normal map (done).** Original seamless tiling normal
+  (`textures/water/water_normal.webp`, `generate_water_normal.mjs`) sampled by
+  the terrain water shader as two scrolling layers for a moving specular
+  sparkle. `uHasNormal` stays 0 until it loads, so the procedural summed-sine
+  ripple is the floor.
+- **Day/night HDRIs (done).** Both vendored beds are now used: `scene` loads the
+  day + night HDRIs into PMREM env maps and `applyEnvPhase` swaps the assigned
+  IBL when the cycle crosses day↔night (a reference swap, never a reload). The
+  neutral RoomEnvironment fill stays until a real HDRI loads.
+- **Display font (done).** Cinzel (OFL) vendored under `ui/fonts/` and wired via
+  `@font-face` (`font-display: swap`); `--font-display` already referenced it, so
+  headings now render engraved with a serif fallback covering the load.
+- **Props / set dressing (done).** A deterministic `InstancedMesh` standing-stone
+  ring now dresses the shrine; foliage/rocks/town buildings already instance
+  authored GLBs over their procedural placements.
 
-Gate: perf harness, scene-token guard, biome theme smoke.
+Gate: perf harness, scene-token guard, biome theme smoke — green.
 
 ---
 
@@ -398,20 +424,27 @@ are fine when they improve the theme and load safely.
 4. **C-creatures** — creature clip wiring. **Effectively shipped** (shared
    `mountHeroModel` + `animateAuthoredRig` already drives creeps/creatures off sim
    state); only odd per-base clip-name overrides remain.
-5. **A3** — creature-base heroes (31). *Art pass* (reuses vendored creature GLBs).
+5. **A3** — creature-base heroes (31). **Shipped** by reusing the vendored
+   Quaternius creature GLBs through `ENABLED_HERO_BASES`.
 6. **D1** — core item visuals (the ~29), widen coverage lint. **Shipped.**
 7. **D2** — small basics + any costed new part/kind. **Shipped.**
 8. **E**  — VFX sprite + telegraph texture atlas. **Shipped** (atlas vendored + wired).
-9. **F1** — sampled-audio loader + music beds (data + small engine). *Art pass:*
-   needs sourced CC0 loops; synth stays the floor.
-10. **F2** — signature `sound` reassignments (pure data).
-11. **G**  — water normals, HDRIs, font, prop dressing. *Mostly art pass.*
-12. **A4** — bespoke marquee hero retextures, one at a time. *Art pass.*
+9. **F1** — sampled-audio loader + music beds. **Shipped** (`sampled-audio.ts`
+   loader + tier gating + original generated beds/SFX; synth stays the floor).
+10. **F2** — signature `sound` reassignments (pure data). **Shipped** (present in
+    hero kits + inference; verified by audio test 20).
+11. **G**  — water normals, day/night HDRIs, font, prop dressing. **Shipped**
+    (all generated/vendored + wired; procedural floor intact).
+12. **A4** — bespoke marquee hero retextures, one at a time. *Remaining (art):*
+    needs hand-painted multi-tone textures over the raw KayKit pack — the
+    pipeline (`heroes.json` recolor + `materialMap`) and runtime hooks are ready,
+    but a true bespoke retexture is human art, not a generated/downloaded drop-in.
 
-> **Status:** the renderer/engine for every workstream is now in place. What
-> remains is the **art-acquisition pass** — vendoring CC0 base meshes (A1–A4),
-> weapon GLBs (B step 2), music beds (F1), and HDRIs/font/water normals (G). Each
-> drops into a gated, tested hook with no further engine work.
+> **Status:** every engineering workstream is shipped and green. The sole
+> remaining item is **A4** — bespoke hand-authored hero textures for marquee
+> heroes, flipped on one at a time by rebuilding from the raw CC0 base pack
+> (`tmp/asset_src/kaykit`, gitignored). All cohort heroes already ship a clean
+> palette-recolored GLB, so A4 is pure optional polish; nothing else blocks play.
 
 Procedural batches and asset batches run in parallel: the floor never depends on
 an asset landing.

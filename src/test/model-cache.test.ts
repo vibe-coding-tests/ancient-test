@@ -42,8 +42,8 @@ describe('pluggable hero rig (Phase 5)', () => {
       expect(ENABLED_HERO_MODELS.has(a.heroId), `${a.heroId} enabled`).toBe(true);
       expect(heroAssetEntry(a.heroId), `${a.heroId} entry`).not.toBeNull();
     }
-    // Creature-cohort + procedural-holdout heroes (and unknowns) never fire a load.
-    expect(heroAssetEntry('broodmother')).toBeNull(); // spider cohort, art not built yet
+    // Creature-cohort heroes mount through shared bases, not per-hero GLB entries.
+    expect(heroAssetEntry('broodmother')).toBeNull();
     expect(heroAssetEntry('io')).toBeNull(); // procedural holdout
     expect(heroAssetEntry('unknown-hero')).toBeNull();
     expect(heroAssetEntry(undefined)).toBeNull();
@@ -120,10 +120,13 @@ describe('shared hero bases (WS-A0)', () => {
     }
   });
 
-  it('keeps base loads gated until base files ship (no 404s)', () => {
-    // No base GLB has shipped yet, so every base resolves to the procedural floor.
-    for (const hero of ALL_HEROES) expect(heroBaseUrl(heroBaseId(hero.id))).toBeNull();
-    expect(ENABLED_HERO_BASES.size).toBe(0);
+  it('resolves shared base URLs only for shipped creature hero cohorts', () => {
+    expect(ENABLED_HERO_BASES.size).toBe(12);
+    expect(heroBaseUrl(heroBaseId('broodmother'))).toBe('/assets/creeps/spider.glb');
+    expect(heroBaseUrl(heroBaseId('doom'))).toBe('/assets/creeps/demon.glb');
+    expect(heroBaseUrl(heroBaseId('spirit-breaker'))).toBe('/assets/creeps/bull.glb');
+    expect(heroBaseUrl(heroBaseId('juggernaut'))).toBeNull(); // humanoids use per-hero GLBs.
+    expect(heroBaseUrl(heroBaseId('io'))).toBeNull(); // holdouts stay procedural.
   });
 
   it('recolors a cloned base to a palette without sharing tint across clones', () => {

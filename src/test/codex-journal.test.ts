@@ -78,8 +78,24 @@ describe('codex/journal state (test 24)', () => {
     expect(view?.text).toBe('The cold remembers.');
     expect(g.buildSave().journalSeen).toContain('cinematic:bind-stinger');
 
+    // §3.4: the first tap completes the typewriter, the next advances past the last beat.
+    g.cinematicAdvance();
     g.cinematicAdvance();
     expect(g.cinematic.active).toBe(false);
+  });
+
+  it('seasonal events and legend callouts unlock codex tracks', () => {
+    const g = freshGame();
+    while (g.cinematic.active) g.cinematicSkip();
+
+    expect(g.runSeasonalEvent('diretide-roshan-candy')).toBe(true);
+    expect(g.codexEntries().festivals.map((f) => f.id)).toContain('diretide-roshan-candy');
+    expect(g.cinematic.view()?.title).toBe('Roshan Wakes Hungry');
+    g.cinematicSkip();
+
+    expect(g.triggerLegendCallout('pit-remembers')).toBe(true);
+    expect(g.triggerLegendCallout('pit-remembers')).toBe(false);
+    expect(g.codexEntries().legends.map((l) => l.id)).toContain('pit-remembers');
   });
 
   it('the journal reflects raids, factions, reputation, and elite progress', () => {

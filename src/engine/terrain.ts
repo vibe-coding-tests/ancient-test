@@ -289,16 +289,22 @@ export function buildTerrain(region: RegionDef, isLive: SceneLiveCheck = () => t
       uTime: { value: 0 },
       uDeep: { value: new THREE.Color(0x123247) },
       uShallow: { value: new THREE.Color(0x3f86a8) },
-      uFoam: { value: new THREE.Color(0x9fd8e8) }
+      uFoam: { value: new THREE.Color(0x9fd8e8) },
+      // Optional tiling normal map (VFX_ASSETS WS-G). uHasNormal stays 0 until
+      // the texture loads, so the procedural summed-sine ripple is the floor.
+      uNormal: { value: null as THREE.Texture | null },
+      uHasNormal: { value: 0 }
     },
     vertexShader: /* glsl */ `
       uniform float uTime;
       varying float vWave;
+      varying vec2 vUv;
       void main() {
         float w = sin(position.x * 0.55 + uTime * 1.3) * 0.18
                 + sin(position.y * 0.5 - uTime * 1.05) * 0.15
                 + sin((position.x + position.y) * 0.3 + uTime * 0.7) * 0.11;
         vWave = w;
+        vUv = uv;
         vec3 p = position;
         p.z += w;
         gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
@@ -306,11 +312,25 @@ export function buildTerrain(region: RegionDef, isLive: SceneLiveCheck = () => t
     `,
     fragmentShader: /* glsl */ `
       uniform vec3 uDeep, uShallow, uFoam;
+      uniform sampler2D uNormal;
+      uniform float uHasNormal;
+      uniform float uTime;
       varying float vWave;
+      varying vec2 vUv;
       void main() {
         float t = clamp(vWave * 2.2 + 0.5, 0.0, 1.0);
         vec3 col = mix(uDeep, uShallow, t);
         col = mix(col, uFoam, smoothstep(0.2, 0.3, vWave));
+        if (uHasNormal > 0.5) {
+          // Two scrolling samples of the tiling normal break up the surface and
+          // add a moving specular sparkle the pure sine ripple can't.
+          vec2 uv = vUv * 9.0;
+          vec3 n1 = texture2D(uNormal, uv + vec2(uTime * 0.013, uTime * 0.008)).xyz * 2.0 - 1.0;
+          vec3 n2 = texture2D(uNormal, uv * 1.7 - vec2(uTime * 0.009, uTime * 0.011)).xyz * 2.0 - 1.0;
+          vec3 n = normalize(n1 + n2);
+          float spec = pow(clamp(n.z, 0.0, 1.0), 6.0);
+          col += uFoam * spec * 0.35;
+        }
         gl_FragColor = vec4(col, 0.94);
       }
     `
@@ -319,6 +339,12 @@ export function buildTerrain(region: RegionDef, isLive: SceneLiveCheck = () => t
   water.rotateX(-Math.PI / 2);
   water.position.set(sizeW / 2, -1.2, sizeW / 2);
   group.add(water);
+  void loadTex('/assets/textures/water/water_normal.webp', { repeat: 1 }).then((tex) => {
+    if (!tex || !isLive()) return;
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    waterMat.uniforms.uNormal.value = tex;
+    waterMat.uniforms.uHasNormal.value = 1;
+  });
 
   const heightAt = (simX: number, simY: number): number => {
     const u = simX / region.size;
@@ -465,6 +491,28 @@ function buildTown(region: RegionDef, heightAt: (x: number, y: number) => number
   crystal.position.set(sx, baseY + 2.4, sz);
   crystal.name = 'shrine-crystal';
   g.add(plinth, crystal);
+
+  // Standing-stone ring around the shrine (VFX_ASSETS WS-G set dressing): one
+  // InstancedMesh of weathered monoliths, deterministic + carved-world flavour.
+  const STONES = 7;
+  const stoneGeo = new THREE.DodecahedronGeometry(0.9, 0);
+  const stoneMat = new THREE.MeshStandardMaterial({ color: 0x6f6c75, flatShading: true, roughness: 0.82, metalness: 0.06 });
+  const stones = new THREE.InstancedMesh(stoneGeo, stoneMat, STONES);
+  const stoneRng = new Rng(region.seed + 4242);
+  const sm = new THREE.Matrix4();
+  for (let i = 0; i < STONES; i++) {
+    const ang = (i / STONES) * Math.PI * 2;
+    const rr = 4.2;
+    const px = sx + Math.cos(ang) * rr;
+    const pz = sz + Math.sin(ang) * rr;
+    const h = 2.0 + stoneRng.next() * 1.4;
+    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler((stoneRng.next() - 0.5) * 0.18, ang, (stoneRng.next() - 0.5) * 0.18));
+    sm.compose(new THREE.Vector3(px, baseY + h * 0.5, pz), q, new THREE.Vector3(0.7, h, 0.55));
+    stones.setMatrixAt(i, sm);
+  }
+  stones.castShadow = true;
+  stones.receiveShadow = true;
+  g.add(stones);
 
   // shop stall: counter + awning
   const shopX = wx + 3.5;

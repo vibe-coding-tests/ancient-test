@@ -8,6 +8,7 @@ import { REG } from '../core/registry';
 import { Sim } from '../core/sim';
 import { soundForAbility } from '../core/gestures';
 import { ProceduralAudio } from '../engine/audio';
+import { SampledAudioBank, MUSIC_BEDS, SFX_KEYS } from '../engine/sampled-audio';
 import { TUNING } from '../data/tuning';
 import type { GameSave, SimEvent, SoundArchetype } from '../core/types';
 
@@ -82,6 +83,43 @@ describe('test 20 — audio-coverage + safety', () => {
     audio.unlock();
     for (let i = 0; i < 30; i++) audio.handleEvent(castEvent(i));
     expect(audio.peakVoiceCount()).toBe(3);
+  });
+});
+
+// ---------- Test 20b: sampled-audio enhancement layer (synth stays the floor) ----------
+
+describe('test 20b — sampled-audio layer', () => {
+  it('the bank resolves null buffers headless (no fetch/decoder) without throwing', async () => {
+    const fakeCtx = { decodeAudioData: undefined } as unknown as BaseAudioContext;
+    const bank = new SampledAudioBank(fakeCtx);
+    expect(() => bank.prefetch('grass')).not.toThrow();
+    expect(bank.sfx('crit')).toBeNull();
+    expect(bank.music('grass')).toBeNull();
+    expect(bank.music('not-a-biome')).toBeNull(); // unknown bed → null, never a request
+  });
+
+  it('every shipped bed/sfx key is a distinct, non-empty identifier', () => {
+    expect(new Set(MUSIC_BEDS).size).toBe(MUSIC_BEDS.length);
+    expect(new Set(SFX_KEYS).size).toBe(SFX_KEYS.length);
+    expect(MUSIC_BEDS.every((b) => b.length > 0)).toBe(true);
+    expect(SFX_KEYS.every((k) => k.length > 0)).toBe(true);
+  });
+
+  it('enabling samples headless never opens a context or throws (synth floor intact)', () => {
+    const audio = new ProceduralAudio(settings());
+    expect(() => {
+      audio.enableSampledAudio(true);
+      audio.unlock();
+      audio.handleEvent({ t: 'damage', uid: 1, from: 2, amount: 600, dtype: 'physical', crit: true });
+      audio.handleEvent({ t: 'cast', uid: 1, abilityId: 'a1', vfx: { archetype: 'dome', color: '#fff' }, timbre: 'deep' });
+      audio.playStinger('raid-clear');
+      audio.update?.({ biome: 'snow', dayTime: 0.7, inCombat: true, dt: 0.05 });
+      audio.update?.({ biome: 'desert', dayTime: 0.1, inCombat: false, dt: 0.05 });
+      audio.enableSampledAudio(false);
+      audio.dispose();
+    }).not.toThrow();
+    // headless has no AudioContext, so nothing should have been allocated
+    expect((audio as unknown as { ctx: unknown }).ctx).toBeNull();
   });
 });
 

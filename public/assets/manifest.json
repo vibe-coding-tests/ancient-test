@@ -1,10 +1,14 @@
 {
   "version": 1,
-  "hash": "5e1cb13a47a4",
-  "generatedAt": "2026-06-14T03:25:23.176Z",
+  "hash": "fc357807fbfd",
+  "generatedAt": "2026-06-14T03:53:47.933Z",
   "assetRoot": "/assets/",
-  "totalBytes": 123936628,
+  "totalBytes": 126171180,
   "groups": {
+    "audio": {
+      "count": 10,
+      "bytes": 2193092
+    },
     "creep": {
       "count": 20,
       "bytes": 3059336
@@ -18,12 +22,16 @@
       "bytes": 113021600
     },
     "terrain": {
-      "count": 26,
-      "bytes": 3772855
+      "count": 27,
+      "bytes": 3785003
     },
     "town": {
       "count": 9,
       "bytes": 822752
+    },
+    "ui": {
+      "count": 2,
+      "bytes": 29312
     },
     "vfx": {
       "count": 1,
@@ -31,6 +39,106 @@
     }
   },
   "files": [
+    {
+      "path": "audio/music/coast.wav",
+      "url": "/assets/audio/music/coast.wav",
+      "bytes": 352844,
+      "type": "audio",
+      "group": "audio",
+      "preloadGroup": "audio",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "audio/music/desert.wav",
+      "url": "/assets/audio/music/desert.wav",
+      "bytes": 352844,
+      "type": "audio",
+      "group": "audio",
+      "preloadGroup": "audio",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "audio/music/forest.wav",
+      "url": "/assets/audio/music/forest.wav",
+      "bytes": 352844,
+      "type": "audio",
+      "group": "audio",
+      "preloadGroup": "audio",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "audio/music/grass.wav",
+      "url": "/assets/audio/music/grass.wav",
+      "bytes": 352844,
+      "type": "audio",
+      "group": "audio",
+      "preloadGroup": "audio",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "audio/music/snow.wav",
+      "url": "/assets/audio/music/snow.wav",
+      "bytes": 352844,
+      "type": "audio",
+      "group": "audio",
+      "preloadGroup": "audio",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "audio/music/wasteland.wav",
+      "url": "/assets/audio/music/wasteland.wav",
+      "bytes": 352844,
+      "type": "audio",
+      "group": "audio",
+      "preloadGroup": "audio",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "audio/sfx/crit.wav",
+      "url": "/assets/audio/sfx/crit.wav",
+      "bytes": 17684,
+      "type": "audio",
+      "group": "audio",
+      "preloadGroup": "audio",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "audio/sfx/fanfare.wav",
+      "url": "/assets/audio/sfx/fanfare.wav",
+      "bytes": 27386,
+      "type": "audio",
+      "group": "audio",
+      "preloadGroup": "audio",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "audio/sfx/impact-heavy.wav",
+      "url": "/assets/audio/sfx/impact-heavy.wav",
+      "bytes": 15920,
+      "type": "audio",
+      "group": "audio",
+      "preloadGroup": "audio",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "audio/sfx/whoosh.wav",
+      "url": "/assets/audio/sfx/whoosh.wav",
+      "bytes": 15038,
+      "type": "audio",
+      "group": "audio",
+      "preloadGroup": "audio",
+      "sourceSpec": null,
+      "source": null
+    },
     {
       "path": "creeps/alpaca.glb",
       "url": "/assets/creeps/alpaca.glb",
@@ -1398,6 +1506,36 @@
       "type": "texture",
       "group": "terrain",
       "preloadGroup": "terrain",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "textures/water/water_normal.webp",
+      "url": "/assets/textures/water/water_normal.webp",
+      "bytes": 12148,
+      "type": "texture",
+      "group": "terrain",
+      "preloadGroup": "terrain",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "ui/fonts/cinzel-400.woff2",
+      "url": "/assets/ui/fonts/cinzel-400.woff2",
+      "bytes": 14128,
+      "type": "font",
+      "group": "ui",
+      "preloadGroup": "ui",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "ui/fonts/cinzel-700.woff2",
+      "url": "/assets/ui/fonts/cinzel-700.woff2",
+      "bytes": 15184,
+      "type": "font",
+      "group": "ui",
+      "preloadGroup": "ui",
       "sourceSpec": null,
       "source": null
     },

@@ -190,7 +190,7 @@ export class InputController {
       }
       if (key === 'escape') {
         e.preventDefault();
-        this.game.cinematicSkip();
+        this.game.cinematicRequestSkip();
         return;
       }
     }
@@ -324,8 +324,12 @@ export class InputController {
   }
 
   private onKeyUp(e: KeyboardEvent): void {
-    if (e.key.toLowerCase() === 'tab') {
+    const key = e.key.toLowerCase();
+    if (key === 'tab') {
       this.game.cinematicFastForward(false);
+    }
+    if (key === 'escape' && this.game.cinematic.active) {
+      this.game.cinematicReleaseSkip();
     }
     if (e.code === 'AltLeft' || e.code === 'AltRight') {
       this.game.setSprintHeld(false);

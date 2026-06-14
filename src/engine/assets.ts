@@ -77,7 +77,7 @@ export function heroBaseId(heroId: string | undefined): HeroBaseId {
 }
 
 // ------------------------------------------------------------------
-// Shipped hero GLBs (VFX_ASSETS WS-A). Every hero in an enabled CC0 cohort gets
+// Shipped hero GLBs (VFX_ASSETS WS-A). Every hero in an enabled humanoid CC0 cohort gets
 // its own retextured KayKit Adventurers GLB built by scripts/assets/build_assets.mjs
 // (palette recolor + clip trim), so the manifest below is derived straight from the
 // cohort map rather than hand-listed. Storage is no longer a constraint (no-budget
@@ -90,6 +90,11 @@ export function heroBaseId(heroId: string | undefined): HeroBaseId {
 /** KayKit humanoid cohorts whose per-hero GLBs are actually built + shipped. */
 export const ENABLED_HERO_COHORTS: ReadonlySet<HeroBaseId> = new Set<HeroBaseId>([
   'knight', 'mage', 'barbarian', 'rogue'
+]);
+
+const CREATURE_HERO_BASES: ReadonlySet<HeroBaseId> = new Set<HeroBaseId>([
+  'spider', 'dragonevolved', 'demon', 'wolf', 'giant', 'golelingevolved',
+  'goblin', 'velociraptor', 'bull', 'fox', 'yeti', 'ghost'
 ]);
 
 // After the build renames KayKit's 76-clip universal rig down to our six logical
@@ -130,14 +135,15 @@ export function heroAssetEntry(heroId: string | undefined): HeroAssetManifestEnt
 }
 
 /**
- * Bases whose CC0 GLB has actually shipped to /public/assets/bases. Empty until
- * the base files land (A1+); gating here keeps the runtime from firing 404s while
- * the whole shared-base path stays wired and tested behind it.
+ * Shared bases whose CC0 GLB has actually shipped. Humanoid cohorts use per-hero
+ * GLBs above; creature-base heroes reuse the already-vendored Quaternius creature
+ * files under /assets/creeps. Gating keeps the runtime from firing 404s.
  */
-export const ENABLED_HERO_BASES: ReadonlySet<HeroBaseId> = new Set<HeroBaseId>([]);
+export const ENABLED_HERO_BASES: ReadonlySet<HeroBaseId> = CREATURE_HERO_BASES;
 
 export function heroBaseUrl(base: HeroBaseId): string | null {
   if (base === 'procedural' || !ENABLED_HERO_BASES.has(base)) return null;
+  if (CREATURE_HERO_BASES.has(base)) return `/assets/creeps/${base}.glb`;
   return `/assets/bases/${base}.glb`;
 }
 

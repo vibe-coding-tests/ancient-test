@@ -315,6 +315,13 @@ export interface GraphicsSettings {
   reducedMotion: boolean; // freezes ambient particle/water motion
 }
 
+// Cut-scene controls (STORY §3.4): the player is always in charge of staging.
+export interface CutsceneSettings {
+  length: 'full' | 'short' | 'off'; // tier degrade matrix (§4.3): setpiece→stinger→toast
+  defaultSpeed: 1 | 2 | 4;          // start fast-forwarded by default for impatient players
+  alwaysSkip: boolean;              // one switch: route the line as a toast, never stage
+}
+
 export type StingerId = 'capture' | 'merge' | 'levelup' | 'badge' | 'raid-clear';
 
 // ---------- Abilities ----------
@@ -629,6 +636,7 @@ export type CutsceneTrigger =
   | { kind: 'region-arrival'; regionId: string }
   | { kind: 'badge'; badgeId: string }
   | { kind: 'boss-clear' }
+  | { kind: 'boss-phase'; bossHeroId?: string }
   | { kind: 'raid-intro'; raidId: string }
   | { kind: 'raid-clear'; raidId?: string }
   | { kind: 'item-first-hold'; itemId: string }
@@ -1254,7 +1262,7 @@ export interface GameSave {
   explorationPct?: Record<string, number>;
   resin?: number;
   resinUpdatedAt?: number;
-  settings: { quickcast: boolean; resonance?: boolean; minimap?: boolean; audio: AudioSettings; graphics?: GraphicsSettings };
+  settings: { quickcast: boolean; resonance?: boolean; minimap?: boolean; audio: AudioSettings; graphics?: GraphicsSettings; cutscene?: CutsceneSettings };
 }
 
 // ---------- Sim interface available to effect interpreters ----------

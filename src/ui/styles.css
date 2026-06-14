@@ -2,6 +2,25 @@
    ANCIENTS — HUD & menus. Dark fantasy, readable at a glance.
    ============================================================ */
 
+/* Engraved display face (VFX_ASSETS WS-G). Cinzel is OFL-licensed (vendored
+   under public/assets/ui/fonts, logged in ASSETS.md). font-display: swap keeps
+   the serif fallback in --font-display until the file loads, so the UI never
+   blocks on the asset and looks intentional offline. */
+@font-face {
+  font-family: "Cinzel";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/assets/ui/fonts/cinzel-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Cinzel";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/assets/ui/fonts/cinzel-700.woff2") format("woff2");
+}
+
 :root {
   /* Dota-style brass-over-dark-stone command UI (GRAPHICS_SPEC §4.2). */
   --bg: #090b10;
@@ -867,6 +886,23 @@ button:disabled { opacity: 0.45; cursor: default; }
   font-size: 11px;
 }
 .cin-controls span { margin-right: auto; }
+.cin-skip-confirm {
+  margin-top: 8px;
+  height: 4px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+.cin-skip-confirm span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #ffd86a, #ff9d4d);
+  transition: width 60ms linear;
+}
+
+.cin-gallery-entry { display: flex; align-items: center; gap: 12px; justify-content: space-between; }
+.cin-gallery-entry > div { flex: 1; }
+.cin-gallery-entry.locked { opacity: 0.6; }
 
 /* compendium — heroes + atlas tabs */
 .compendium-single { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 22px; }

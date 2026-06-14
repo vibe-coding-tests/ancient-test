@@ -13,7 +13,7 @@ export const OUTWORLD_CLAIMANT_RAID_IDS = [
   'void-prelate',
   'queen-of-blades',
   'lord-of-terror',
-  'lord-of-destruction',
+  'prime-evil',
   'lord-of-hatred',
   'forsaken-queen'
 ];
@@ -207,6 +207,78 @@ const BOSS_CLEAR: CutsceneDef = {
       line: { speaker: 'Boss Clear', text: '{boss} breaks. The shard-road opens wider.' },
       sound: 'raid-clear',
       hold: 2.5
+    }
+  ]
+};
+
+const BOSS_PHASE_STINGER: CutsceneDef = {
+  id: 'boss-phase-stinger',
+  title: '{boss} Breaks',
+  tier: 'stinger',
+  trigger: { kind: 'boss-phase' },
+  skippable: true,
+  letterbox: false,
+  category: 'Bosses',
+  replayable: false,
+  beats: [
+    {
+      shot: { angle: 'low', move: 'push-in', palette: 'phase ember', mood: 'committing' },
+      stage: [{ kind: 'gesture', target: 'boss', gesture: 'ground-slam' }],
+      line: { speaker: '{boss}', text: 'You pushed it past something. Now it is serious.' },
+      sound: 'levelup',
+      hold: 1.8
+    }
+  ]
+};
+
+const VOID_PRELATE_PHASE: CutsceneDef = {
+  id: 'void-prelate-phase-break',
+  title: 'The Prelate Severs',
+  tier: 'setpiece',
+  trigger: { kind: 'boss-phase', bossHeroId: 'templar-assassin' },
+  skippable: true,
+  letterbox: true,
+  category: 'Bosses',
+  replayable: true,
+  beats: [
+    {
+      shot: { angle: 'close', move: 'snap', palette: 'desaturated void', mood: 'severed' },
+      stage: [{ kind: 'gesture', target: 'boss', gesture: 'dash' }],
+      line: { speaker: 'The Void Prelate', text: 'You see the blade only after it has already chosen you.' },
+      hold: 2.2
+    },
+    {
+      shot: { angle: 'low', move: 'push-in', palette: 'dark between stars', mood: 'hunting' },
+      stage: [{ kind: 'vfx', archetype: 'global-mark', color: '#7c6bff' }],
+      line: { speaker: 'The Void Prelate', text: 'The dark blinks closer. There is no angle left to you.' },
+      sound: 'raid-clear',
+      hold: 2.4
+    }
+  ]
+};
+
+const LAST_ELDWURM_PHASE: CutsceneDef = {
+  id: 'last-eldwurm-phase-break',
+  title: 'The Last Dragon Reignites',
+  tier: 'setpiece',
+  trigger: { kind: 'boss-phase', bossHeroId: 'dragon-knight' },
+  skippable: true,
+  letterbox: true,
+  category: 'Bosses',
+  replayable: true,
+  beats: [
+    {
+      shot: { angle: 'low', move: 'crane', palette: 'rekindled red', mood: 'refusal' },
+      stage: [{ kind: 'gesture', target: 'boss', gesture: 'ground-slam' }],
+      line: { speaker: 'The Last Eldwurm', text: 'The last of my brothers fell. I did not.' },
+      hold: 2.4
+    },
+    {
+      shot: { angle: 'high', move: 'push-in', palette: 'dragonfire', mood: 'hunting' },
+      stage: [{ kind: 'vfx', archetype: 'storm', color: '#ff7a2c' }],
+      line: { speaker: 'The Last Eldwurm', text: 'It stops dying now. It starts hunting.' },
+      sound: 'raid-clear',
+      hold: 2.6
     }
   ]
 };
@@ -496,6 +568,9 @@ export const ALL_CUTSCENES: CutsceneDef[] = [
   ...ALL_RAIDS.map(raidIntro),
   RAID_CLEAR,
   BOSS_CLEAR,
+  BOSS_PHASE_STINGER,
+  VOID_PRELATE_PHASE,
+  LAST_ELDWURM_PHASE,
   ECHO_MILESTONE,
   ELITE_OPEN,
   ...ELITE_PERSONAS,

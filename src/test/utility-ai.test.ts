@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { registerAllContent } from '../data';
+import { ALL_HEROES, registerAllContent } from '../data';
 import { setupMacroSim } from '../core/macro';
 import { chooseUtilityOrder, pickUtilityFocus } from '../core/utility';
 import { combatProfile } from '../core/combat-profile';
@@ -133,6 +133,27 @@ describe('utility scorer picks actions by value, not slot order', () => {
     hero.lastAbilityCastAt = sim.time;
     const afterSetup = chooseUtilityOrder(sim, hero, enemies[0]);
     expect(afterSetup).toMatchObject({ kind: 'cast', slot: finisher });
+  });
+
+  it('populates setup-to-ultimate combo data across the roster', () => {
+    const comboHeroes = ALL_HEROES.filter((hero) => (hero.combo?.length ?? 0) > 0);
+    expect(comboHeroes.length).toBeGreaterThan(30);
+
+    const lion = ALL_HEROES.find((hero) => hero.id === 'lion')!;
+    expect(lion.combo).toContainEqual(expect.objectContaining({ before: 'lion-earth-spike', after: 'lion-finger' }));
+    expect(lion.combo).toContainEqual(expect.objectContaining({ before: 'lion-hex', after: 'lion-finger' }));
+
+    const earthshaker = ALL_HEROES.find((hero) => hero.id === 'earthshaker')!;
+    expect(earthshaker.combo).toEqual([{ before: 'es-fissure', after: 'es-echo-slam', windowSec: 4, weight: 1.55 }]);
+
+    for (const hero of comboHeroes) {
+      const abilityIds = new Set(hero.abilities.map((ability) => ability.id));
+      for (const combo of hero.combo ?? []) {
+        expect(abilityIds.has(combo.before), `${hero.id}/${combo.before}`).toBe(true);
+        expect(abilityIds.has(combo.after), `${hero.id}/${combo.after}`).toBe(true);
+        expect(hero.abilities.find((ability) => ability.id === combo.after)?.ult, `${hero.id}/${combo.after}`).toBe(true);
+      }
+    }
   });
 
   it('heals the most wounded ally in range', () => {

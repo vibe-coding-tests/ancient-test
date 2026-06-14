@@ -1,5 +1,6 @@
 import type { DamageType, GameSave, SimEvent, SoundArchetype, StingerId } from '../core/types';
 import { TUNING } from '../data/tuning';
+import { SampledAudioBank, type SfxKey } from './sampled-audio';
 
 type AudioSettings = GameSave['settings'];
 type Channel = 'sfx' | 'voice' | 'stinger' | 'music';
@@ -42,6 +43,11 @@ export class ProceduralAudio {
   private reverb: ConvolverNode | null = null;
   private reverbGain: GainNode | null = null;
   private music: MusicNodes | null = null;
+  // Sampled-audio enhancement layer (VFX_ASSETS WS-F1). Off by default + on low
+  // tier, so headless/tests and the boot floor only ever hear the synth.
+  private samples: SampledAudioBank | null = null;
+  private samplesEnabled = false;
+  private sampleMusic: { biome: string; src: AudioBufferSourceNode; gain: GainNode } | null = null;
   private combatHotUntil = 0;
   // Damage-impact throttle (§2.4): cap how many hit sounds fire in a short window
   // so a big AoE reads as one crunch instead of a machine-gun wall of mush.
@@ -74,6 +80,25 @@ export class ProceduralAudio {
     this.ensure();
     if (this.ctx?.state === 'suspended') void this.ctx.resume();
     this.unlocked = true;
+    if (this.samplesEnabled) this.initSamples();
+  }
+
+  /**
+   * Toggle the sampled-audio layer (medium+ tiers). Synth stays the floor: a
+   * missing/undecoded file silently leaves the synth playing. No-op headless.
+   */
+  enableSampledAudio(on: boolean): void {
+    this.samplesEnabled = on;
+    if (on && this.unlocked) this.initSamples();
+    if (!on) this.stopSampleMusic();
+  }
+
+  private initSamples(): void {
+    if (this.samples || this.settings.audio.muted) return;
+    const ctx = this.ensure();
+    if (!ctx) return; // headless / unsupported: synth only
+    this.samples = new SampledAudioBank(ctx);
+    this.samples.prefetch();
   }
 
   /** Tear down listeners + the AudioContext. Never throws. */
@@ -83,6 +108,8 @@ export class ProceduralAudio {
       window.removeEventListener('keydown', this.unlockHandler);
       this.unlockHandler = null;
     }
+    this.stopSampleMusic();
+    this.samples = null;
     this.stopMusic();
     try {
       void this.ctx?.close();
@@ -101,7 +128,10 @@ export class ProceduralAudio {
 
   setSettings(settings: AudioSettings): void {
     this.settings = settings;
-    if (settings.audio.muted) this.stopMusic();
+    if (settings.audio.muted) {
+      this.stopMusic();
+      this.stopSampleMusic();
+    }
   }
 
   /** Live count of active pooled voices (for perf assertions). */
@@ -174,6 +204,7 @@ export class ProceduralAudio {
   update(env: AudioEnvironment): void {
     if (!this.unlocked || this.settings.audio.muted) {
       this.stopMusic();
+      this.stopSampleMusic();
       return;
     }
     const ctx = this.ensure();
@@ -184,10 +215,15 @@ export class ProceduralAudio {
     const now = ctx.currentTime;
     const night = env.dayTime >= 0.5;
     const combat = env.inCombat || now < this.combatHotUntil;
+    // When a sampled ambient bed is playing, duck the synth drone so the real
+    // bed leads and the synth just thickens it (synth stays the sole layer
+    // whenever the file is absent/undecoded).
+    const sampleActive = this.updateSampleMusic(env, ctx, now, night, combat);
+    const drone = sampleActive ? 0.28 : 1;
     const base = this.volume(0.11, 'music');
-    this.music.master.gain.setTargetAtTime(base * (night ? 0.78 : 1), now, 0.55);
+    this.music.master.gain.setTargetAtTime(base * (night ? 0.78 : 1) * drone, now, 0.55);
     this.music.combat.gain.setTargetAtTime(base * (combat ? 0.9 : 0.04), now, combat ? 0.08 : 0.9);
-    this.music.ambient.gain.setTargetAtTime(this.volume(night ? 0.055 : 0.038, 'music'), now, 0.8);
+    this.music.ambient.gain.setTargetAtTime(this.volume(night ? 0.055 : 0.038, 'music') * (sampleActive ? 0.5 : 1), now, 0.8);
 
     const filterTarget = ({ snow: 1700, desert: 900, wasteland: 720, forest: 1300, grass: 1250, coast: 1800 } as Record<string, number>)[env.biome] ?? 1200;
     this.music.ambientFilter.frequency.setTargetAtTime(filterTarget * (night ? 0.72 : 1), now, 1.2);
@@ -260,6 +296,11 @@ export class ProceduralAudio {
     const dur = 0.18;
     if (!this.requestVoice(dur)) return; // pool saturated; drop this voice
     const p = this.timbrePitch(timbre);
+    // Big-shape spells (zones, walls, vortices, domes, ground slams) get a
+    // sampled air-whoosh on medium+; pooled above so it never machine-guns.
+    if (archetype === 'ground-aoe' || archetype === 'wall' || archetype === 'vortex' || archetype === 'dome') {
+      this.playSample('whoosh', 0.3, 'voice');
+    }
     switch (sound) {
       case 'blade':
         this.sweep(900 * p, 1700 * p, 0.09, 'sawtooth', 0.13, 'voice');
@@ -342,6 +383,11 @@ export class ProceduralAudio {
 
   playStinger(id: StingerId): void {
     if (!this.unlocked || this.settings.audio.muted) return;
+    // Celebratory stingers get a sampled fanfare on medium+; the synth arpeggio
+    // below still plays so the cue survives when the sample is absent.
+    if (id === 'levelup' || id === 'merge' || id === 'badge' || id === 'capture' || id === 'raid-clear') {
+      this.playSample('fanfare', id === 'raid-clear' || id === 'badge' ? 0.5 : 0.36, 'stinger');
+    }
     switch (id) {
       case 'capture':
         this.arp([523, 784, 1047], 0.085, 0.16);
@@ -487,6 +533,57 @@ export class ProceduralAudio {
     ambientSource.start();
 
     this.music = { biome, master, combat, ambient, ambientFilter, oscillators, combatOscillators, ambientSource };
+  }
+
+  /** Crossfade the sampled ambient bed for the current biome. Returns true while
+   *  a real bed is playing (so the caller ducks the synth drone). */
+  private updateSampleMusic(env: AudioEnvironment, ctx: AudioContext, now: number, night: boolean, combat: boolean): boolean {
+    if (!this.samplesEnabled || !this.samples) return false;
+    const buf = this.samples.music(env.biome);
+    if (!buf) {
+      // Not decoded yet (or no file): keep an already-playing matching bed,
+      // otherwise let the synth own this biome.
+      if (this.sampleMusic && this.sampleMusic.biome !== env.biome) this.stopSampleMusic();
+      return this.sampleMusic?.biome === env.biome;
+    }
+    if (!this.sampleMusic || this.sampleMusic.biome !== env.biome) {
+      this.stopSampleMusic();
+      const src = ctx.createBufferSource();
+      const gain = ctx.createGain();
+      src.buffer = buf;
+      src.loop = true;
+      gain.gain.value = 0.0001;
+      src.connect(gain).connect(this.master ?? ctx.destination);
+      src.start();
+      this.sampleMusic = { biome: env.biome, src, gain };
+    }
+    const target = this.volume(0.5, 'music') * (night ? 0.8 : 1) * (combat ? 0.62 : 1);
+    this.sampleMusic.gain.gain.setTargetAtTime(Math.max(0.0001, target), now, 0.7);
+    return true;
+  }
+
+  private stopSampleMusic(): void {
+    if (!this.sampleMusic) return;
+    try { this.sampleMusic.src.stop(); } catch { /* already stopped */ }
+    this.sampleMusic.src.disconnect();
+    this.sampleMusic.gain.disconnect();
+    this.sampleMusic = null;
+  }
+
+  /** Layer a decoded one-shot over the synth. Returns false (synth covers it)
+   *  when samples are off/undecoded or headless. */
+  private playSample(key: SfxKey, vol: number, chan: Channel = 'sfx'): boolean {
+    if (!this.samplesEnabled || !this.samples) return false;
+    const buf = this.samples.sfx(key);
+    const ctx = this.ctx;
+    if (!buf || !ctx) return false;
+    const src = ctx.createBufferSource();
+    const gain = ctx.createGain();
+    src.buffer = buf;
+    gain.gain.value = this.volume(vol, chan);
+    src.connect(gain).connect(this.master ?? ctx.destination);
+    src.start();
+    return true;
   }
 
   private stopMusic(): void {
@@ -683,11 +780,15 @@ export class ProceduralAudio {
       default: // physical: punchy body thud + a little grit on bigger hits
         this.thump(0.045 + w * 0.03, 0.07 + w * 0.14, (520 - w * 200) * j);
         if (w > 0.4) this.noise(0.03, 0.03 + w * 0.04);
+        if (w > 0.72) this.playSample('impact-heavy', 0.32); // sampled crunch on the big ones
     }
   }
 
   private critImpact(amount: number): void {
     const weight = Math.min(1, Math.log2(Math.max(8, amount)) / 10);
+    // Medium+ tiers get a real sampled crit ring; the synth body still layers
+    // under it so a crit reads identically when the sample is absent.
+    this.playSample('crit', 0.42 + weight * 0.12);
     this.sweep(2200, 760, 0.08, 'sawtooth', 0.12 + weight * 0.08);
     this.tone(3100, 0.045, 'square', 0.08 + weight * 0.05);
     this.thump(0.04, 0.1 + weight * 0.08, 760);

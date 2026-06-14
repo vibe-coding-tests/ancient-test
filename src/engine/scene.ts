@@ -257,6 +257,12 @@ export class GameScene {
   private sun: THREE.DirectionalLight;
   private rim: THREE.DirectionalLight;
   private quality: QualityPreset;
+  // Day/night IBL (VFX_ASSETS WS-G): a daytime + a night HDRI, swapped by the
+  // cycle. Both cached so the swap is a reference change, never a reload.
+  private envDay: THREE.Texture | null = null;
+  private envNight: THREE.Texture | null = null;
+  private envPhase: 'day' | 'night' | null = null;
+  private lastNight = false;
   private readonly biome: string;
   private composer: EffectComposer | null = null;
   private bloomPass: UnrealBloomPass | null = null;
@@ -500,6 +506,7 @@ export class GameScene {
     }
     this.composer?.dispose();
     this.composer = null;
+    this.disposeHdrEnvs();
     this.scene.environment?.dispose();
     this.scene.environment = null;
     this.sun.shadow.map?.dispose();
@@ -561,6 +568,7 @@ export class GameScene {
       pmrem.dispose();
       this.installHdrEnvironment();
     } else if (!q.envMap && this.scene.environment) {
+      this.disposeHdrEnvs();
       this.scene.environment.dispose();
       this.scene.environment = null;
     }
@@ -600,15 +608,45 @@ export class GameScene {
   private installHdrEnvironment(): void {
     if (!this.quality.envMap) return;
     const token = this.sceneToken;
-    void loadHdr('/assets/env/vale_day_1k.hdr').then((hdr) => {
-      if (!hdr || !this.isLive() || token !== this.sceneToken || !this.quality.envMap) return;
+    const toEnv = (hdr: THREE.DataTexture): THREE.Texture => {
       const pmrem = new THREE.PMREMGenerator(this.renderer);
       const env = pmrem.fromEquirectangular(hdr).texture;
       pmrem.dispose();
       hdr.dispose();
-      this.scene.environment?.dispose();
-      this.scene.environment = env;
+      return env;
+    };
+    void loadHdr('/assets/env/vale_day_1k.hdr').then((hdr) => {
+      if (!hdr || !this.isLive() || token !== this.sceneToken || !this.quality.envMap) { hdr?.dispose(); return; }
+      this.envDay = toEnv(hdr);
+      this.applyEnvPhase(this.lastNight);
     });
+    // Night bed (vendored, previously unused): grounds reflections at night.
+    void loadHdr('/assets/env/night_1k.hdr').then((hdr) => {
+      if (!hdr || !this.isLive() || token !== this.sceneToken || !this.quality.envMap) { hdr?.dispose(); return; }
+      this.envNight = toEnv(hdr);
+      this.applyEnvPhase(this.lastNight);
+    });
+  }
+
+  /** Swap the assigned IBL between the cached day/night envs (no reload). The
+   *  neutral RoomEnvironment fill is disposed once a real HDRI takes over. */
+  private applyEnvPhase(night: boolean): void {
+    const next = night && this.envNight ? this.envNight : this.envDay;
+    if (!next) return;
+    const phase: 'day' | 'night' = night && this.envNight ? 'night' : 'day';
+    if (this.envPhase === phase && this.scene.environment === next) return;
+    const current = this.scene.environment;
+    if (current && current !== this.envDay && current !== this.envNight) current.dispose();
+    this.scene.environment = next;
+    this.envPhase = phase;
+  }
+
+  private disposeHdrEnvs(): void {
+    this.envDay?.dispose();
+    this.envNight?.dispose();
+    this.envDay = null;
+    this.envNight = null;
+    this.envPhase = null;
   }
 
   /** Wheel zoom: clamped per mode. */
@@ -1150,6 +1188,10 @@ export class GameScene {
   private updateDayNight(t01: number): void {
     // t in [0,1): 0 = dawn, 0.25 = noon, 0.5 = dusk, 0.5..1 = night
     const isDay = t01 < 0.5;
+    if (this.lastNight !== !isDay) {
+      this.lastNight = !isDay;
+      this.applyEnvPhase(this.lastNight);
+    }
     const sunT = isDay ? t01 / 0.5 : (t01 - 0.5) / 0.5;
     const elev = Math.sin(sunT * Math.PI); // 0..1..0
     const az = sunT * Math.PI; // east → west

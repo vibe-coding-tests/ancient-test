@@ -50,6 +50,7 @@ const DEFAULT_BUDGETS = {
     town: 1 * GB,
     hero: 2 * GB,
     env: 1 * GB,
+    audio: 512 * 1024 * 1024,
     ui: 256 * 1024 * 1024
   },
   maxFileBytesByGroup: {
@@ -58,6 +59,7 @@ const DEFAULT_BUDGETS = {
     town: 64 * 1024 * 1024,
     hero: 64 * 1024 * 1024,
     env: 128 * 1024 * 1024,
+    audio: 32 * 1024 * 1024,
     ui: 32 * 1024 * 1024
   }
 };
@@ -78,6 +80,7 @@ function assetGroup(rel) {
   if (rel.startsWith('creeps/')) return 'creep';
   if (rel.startsWith('heroes/')) return 'hero';
   if (rel.startsWith('env/')) return 'env';
+  if (rel.startsWith('audio/')) return 'audio';
   if (rel.startsWith('ui/')) return 'ui';
   if (rel.startsWith('vfx/')) return 'vfx';
   if (rel.startsWith('props/town/')) return 'town';
@@ -92,6 +95,7 @@ function assetType(rel) {
   if (ext === 'hdr') return 'hdr';
   if (['jpg', 'jpeg', 'png', 'webp', 'ktx2'].includes(ext)) return 'texture';
   if (['woff', 'woff2'].includes(ext)) return 'font';
+  if (['wav', 'ogg', 'mp3', 'm4a', 'flac'].includes(ext)) return 'audio';
   if (['json'].includes(ext)) return 'data';
   return ext || 'file';
 }

@@ -129,6 +129,7 @@ export class Hud {
     this.cinematicLayer.addEventListener('click', (e) => {
       const btn = (e.target as HTMLElement).closest('[data-cinematic]') as HTMLElement | null;
       if (btn?.dataset.cinematic === 'next') this.game.cinematicAdvance();
+      if (btn?.dataset.cinematic === 'ff') this.game.cinematicFastForward(true);
       if (btn?.dataset.cinematic === 'skip') this.game.cinematicSkip();
     });
     this.game.onOpenGymPrefight = (gymId) => this.openGymPrefight(gymId);
@@ -1436,6 +1437,14 @@ export class Hud {
         <div class="svc-actions"><button class="btn small accent" data-champion="1" ${fiveCleared && !champDown ? '' : 'disabled'}>Challenge</button></div>
       </div>`;
 
+    const festivalHtml = [...REG.seasonalEvents.values()].map((event) => `
+      <div class="svc-row">
+        <div class="svc-main"><b>${event.name}</b> <em>${event.realEvent}</em>
+          <div class="rr-sub">${event.summary}</div>
+        </div>
+        <div class="svc-actions"><button class="btn small accent" data-festival="${event.id}">Invoke</button></div>
+      </div>`).join('');
+
     // Gold sinks (§3.8)
     const downIdx = g.party.findIndex((r) => !r.unit || !r.unit.alive || r.respawnAt > g.sim.time);
     const buyLabel = downIdx >= 0
@@ -1456,6 +1465,7 @@ export class Hud {
         <section><h3>Boss Reruns</h3>${bossHtml}</section>
         <section><h3>Raids${aegisTag}</h3>${raidHtml}</section>
         <section><h3>Conquest — Tower of the Ancients</h3>${eliteHtml}</section>
+        <section><h3>Festivals — Turns of the Loop</h3>${festivalHtml}</section>
         <section><h3>Tinker's Bench <span class="gold">${Math.floor(g.gold)} g</span></h3>
           ${stashHtml}
           <div class="svc-sub">Neutral slots</div>${slotHtml}
@@ -1497,6 +1507,7 @@ export class Hud {
     }));
     this.modal.querySelector<HTMLElement>('[data-elite]')?.addEventListener('click', () => { g.runEliteMatch(); rerender(); });
     this.modal.querySelector<HTMLElement>('[data-champion]')?.addEventListener('click', () => { g.runChampion(); rerender(); });
+    this.modal.querySelectorAll<HTMLElement>('[data-festival]').forEach((el) => el.addEventListener('click', () => { g.runSeasonalEvent(el.dataset.festival!); rerender(); }));
     this.modal.querySelectorAll<HTMLElement>('[data-neq]').forEach((el) => el.addEventListener('click', () => { g.equipNeutral(g.activeIdx, el.dataset.neq!); rerender(); }));
     this.modal.querySelectorAll<HTMLElement>('[data-nrr]').forEach((el) => el.addEventListener('click', () => { g.tinkerReroll(el.dataset.nrr!); rerender(); }));
     this.modal.querySelectorAll<HTMLElement>('[data-nen]').forEach((el) => el.addEventListener('click', () => { g.tinkerEnchant(el.dataset.nen!); rerender(); }));
@@ -1634,11 +1645,13 @@ export class Hud {
         ${view.text ? `
           <div class="cin-line">
             <b>${view.speaker ?? 'Narration'}</b>
-            <p>${view.text}</p>
+            <p>${view.revealedText}</p>
           </div>` : ''}
+        ${view.skipProgress > 0 ? `<div class="cin-skip-confirm"><span style="width:${Math.round(view.skipProgress * 100)}%"></span></div>` : ''}
         <div class="cin-controls">
           <span>${view.controls}${view.speed > 1 ? ` · ${view.speed}x` : ''}</span>
           <button class="btn small" data-cinematic="next">Next</button>
+          <button class="btn small" data-cinematic="ff">Fast-fwd</button>
           <button class="btn small" data-cinematic="skip">Skip</button>
         </div>
       </div>
@@ -1649,7 +1662,7 @@ export class Hud {
   // --- shop ---
 
   private shopTab: 'consumable' | 'component' | 'assembled' = 'assembled';
-  private compendiumTab: 'lore' | 'heroes' | 'atlas' = 'lore';
+  private compendiumTab: 'lore' | 'heroes' | 'atlas' | 'cinematics' = 'lore';
 
   private renderShopModal(): void {
     const g = this.game;
@@ -1800,20 +1813,27 @@ export class Hud {
       <h3>Factions</h3>
       ${factionRows}
       <h3>Badges</h3>
-      <div class="journal-summary">${badges}</div>`
+      <div class="journal-summary">${badges}</div>
+      <h3>Titles</h3>
+      ${j.titles.length
+        ? j.titles.map((t) => `<div class="journal-row"><div class="jr-stage">Title</div><div class="jr-main"><p><b>${t.name}</b> — ${t.note}</p></div></div>`).join('')
+        : '<p class="dim">Earn titles through legendary feats — like holding Roshan\'s Pit at its hardest tier.</p>'}`
     );
   }
 
   private renderCodexModal(): void {
-    const tabs = (['lore', 'heroes', 'atlas'] as const)
-      .map((t) => `<button class="tab ${this.compendiumTab === t ? 'on' : ''}" data-ctab="${t}">${t === 'lore' ? 'Lore' : t === 'heroes' ? 'Heroes' : 'Atlas'}</button>`)
+    const labels = { lore: 'Lore', heroes: 'Heroes', atlas: 'Atlas', cinematics: 'Cinematics' } as const;
+    const tabs = (['lore', 'heroes', 'atlas', 'cinematics'] as const)
+      .map((t) => `<button class="tab ${this.compendiumTab === t ? 'on' : ''}" data-ctab="${t}">${labels[t]}</button>`)
       .join('');
     const body =
       this.compendiumTab === 'heroes'
         ? this.compendiumHeroesBody()
         : this.compendiumTab === 'atlas'
           ? this.compendiumAtlasBody()
-          : this.compendiumLoreBody();
+          : this.compendiumTab === 'cinematics'
+            ? this.compendiumCinematicsBody()
+            : this.compendiumLoreBody();
     this.modalShell('Compendium', `<div class="shop-tabs">${tabs}</div>${body}`);
     this.modal.querySelectorAll('[data-ctab]').forEach((el) => {
       el.addEventListener('click', () => {
@@ -1821,6 +1841,35 @@ export class Hud {
         this.renderCodexModal();
       });
     });
+    this.modal.querySelectorAll<HTMLElement>('[data-replay]').forEach((el) => {
+      el.addEventListener('click', () => {
+        if (this.game.replayCutscene(el.dataset.replay!)) this.closeModal();
+      });
+    });
+  }
+
+  private compendiumCinematicsBody(): string {
+    const groups = this.game.cinematicGallery();
+    const total = groups.reduce((n, g) => n + g.entries.length, 0);
+    const seen = groups.reduce((n, g) => n + g.entries.filter((e) => e.seen).length, 0);
+    const sections = groups
+      .map((group) => {
+        const entries = group.entries
+          .map((e) =>
+            e.seen
+              ? `<div class="codex-note cin-gallery-entry">
+                   <div><b>${e.title}</b> <em>${e.tier}</em><p>${e.caption}</p></div>
+                   <button class="btn small" data-replay="${e.id}">Replay</button>
+                 </div>`
+              : `<div class="codex-note cin-gallery-entry locked">
+                   <div><b>${e.title}</b> <em>${e.tier}</em><p class="dim">${e.caption}</p></div>
+                 </div>`
+          )
+          .join('');
+        return `<section class="codex-thread"><h3>${group.category}</h3>${entries}</section>`;
+      })
+      .join('');
+    return `<p class="dim">Cinematics recorded: ${seen}/${total}. Replay any you have seen; locked ones stay spoiler-safe.</p>${sections || '<p class="dim">No cinematics recorded yet.</p>'}`;
   }
 
   private compendiumLoreBody(): string {
@@ -1834,6 +1883,15 @@ export class Hud {
           <p>${l.body}</p>
         </div>`)
       .join('') || '<p class="dim">Follow badges and the Tower to reconstruct the Loop.</p>';
+    const claimants = cx.claimants
+      .map((c) => `<div class="codex-note"><b>${c.name}</b><p>${c.lore}</p></div>`)
+      .join('') || '<p class="dim">Defeat Outworld Claimants to record the worlds held at the seal.</p>';
+    const festivals = cx.festivals
+      .map((f) => `<div class="codex-note"><b>${f.name}</b><em>${f.summary}</em><p>${f.body}</p></div>`)
+      .join('') || '<p class="dim">Invoke festivals from Town Services to remember seasonal turns of the Loop.</p>';
+    const legends = cx.legends
+      .map((l) => `<div class="codex-note"><b>${l.name}</b><em>${l.summary}</em><p>${l.body}</p></div>`)
+      .join('') || '<p class="dim">Recreate famous plays to wake the Legends track.</p>';
     const heroes = [...cx.heroes]
       .sort((a, b) => a.name.localeCompare(b.name))
       .map((h) => `
@@ -1862,6 +1920,9 @@ export class Hud {
       .join('') || '<p class="dim">Clear raids to reveal their lords.</p>';
     return `
       <section class="codex-thread"><h3>The Loop</h3>${loop}</section>
+      <section class="codex-thread"><h3>Outworld Claimants</h3>${claimants}</section>
+      <section class="codex-thread"><h3>Festivals</h3>${festivals}</section>
+      <section class="codex-thread"><h3>Legends</h3>${legends}</section>
       <div class="codex-grid">
         <section><h3>Known Heroes</h3>${heroes}</section>
         <section><h3>Regions</h3>${regions}</section>
@@ -2015,6 +2076,22 @@ export class Hud {
           <label class="opt-row">Exposure <input type="range" id="opt-exposure" min="0.5" max="1.5" step="0.02" value="${g.settings.graphics?.exposure ?? 0.92}"></label>
           <label class="opt-row">Color grade <input type="range" id="opt-grade" min="0" max="1.5" step="0.05" value="${g.settings.graphics?.grade ?? 1}"></label>
           <label class="opt-row"><input type="checkbox" id="opt-reduced-motion" ${g.settings.graphics?.reducedMotion ? 'checked' : ''}> Reduced motion (ambient FX)</label>
+          <h3>Cut-scenes</h3>
+          <label class="opt-row">Length
+            <select id="opt-cutscene-length">
+              ${(['full', 'short', 'off'] as const)
+                .map((v) => `<option value="${v}"${(g.settings.cutscene?.length ?? 'full') === v ? ' selected' : ''}>${v[0].toUpperCase() + v.slice(1)}</option>`)
+                .join('')}
+            </select>
+          </label>
+          <label class="opt-row">Default speed
+            <select id="opt-cutscene-speed">
+              ${([1, 2, 4] as const)
+                .map((v) => `<option value="${v}"${(g.settings.cutscene?.defaultSpeed ?? 1) === v ? ' selected' : ''}>${v}x</option>`)
+                .join('')}
+            </select>
+          </label>
+          <label class="opt-row"><input type="checkbox" id="opt-cutscene-skip" ${g.settings.cutscene?.alwaysSkip ? 'checked' : ''}> Always skip cut-scenes</label>
           <button class="btn" id="open-journal">Quest Journal</button>
           <button class="btn" id="open-codex">Codex</button>
           <button class="btn" id="export-save">Export save (JSON)</button>
@@ -2080,6 +2157,19 @@ export class Hud {
     this.modal.querySelector('#opt-reduced-motion')?.addEventListener('change', (e) => {
       if (g.settings.graphics) g.settings.graphics.reducedMotion = (e.target as HTMLInputElement).checked;
       g.applyGraphics();
+      g.applyCutsceneSettings();
+    });
+    this.modal.querySelector('#opt-cutscene-length')?.addEventListener('change', (e) => {
+      if (g.settings.cutscene) g.settings.cutscene.length = (e.target as HTMLSelectElement).value as 'full' | 'short' | 'off';
+      g.applyCutsceneSettings();
+    });
+    this.modal.querySelector('#opt-cutscene-speed')?.addEventListener('change', (e) => {
+      if (g.settings.cutscene) g.settings.cutscene.defaultSpeed = Number((e.target as HTMLSelectElement).value) as 1 | 2 | 4;
+      g.applyCutsceneSettings();
+    });
+    this.modal.querySelector('#opt-cutscene-skip')?.addEventListener('change', (e) => {
+      if (g.settings.cutscene) g.settings.cutscene.alwaysSkip = (e.target as HTMLInputElement).checked;
+      g.applyCutsceneSettings();
     });
     this.modal.querySelector('#export-save')?.addEventListener('click', () => g.exportSave());
     this.modal.querySelector('#open-journal')?.addEventListener('click', () => this.toggleModal('journal'));

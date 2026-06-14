@@ -61,6 +61,31 @@ function simulateDrops(opts: {
   return drops;
 }
 
+function simulateRouteDrops(opts: {
+  minutes: number;
+  band: LootBand;
+  tier: DifficultyTier;
+  route: { name: string; table: ItemDropTable; clearMin: number; seedSalt: number }[];
+}): number {
+  const dryBySource: Record<string, Record<string, number>> = {};
+  const clearsBySource: Record<string, number> = {};
+  let drops = 0;
+  let elapsed = 0;
+  let step = 0;
+  while (elapsed < opts.minutes) {
+    const source = opts.route[step % opts.route.length];
+    if (elapsed + source.clearMin > opts.minutes) break;
+    const clears = clearsBySource[source.name] ?? 0;
+    const roll = rollItemDrops(source.table, opts.tier, dryBySource[source.name] ?? {}, new Rng(source.seedSalt + clears * 17), opts.band);
+    dryBySource[source.name] = roll.dryStreaks;
+    clearsBySource[source.name] = clears + 1;
+    drops += egDropCount(roll.items);
+    elapsed += source.clearMin;
+    step++;
+  }
+  return drops;
+}
+
 describe('Gameplay 2.0 loot pacing', () => {
   it('rolls chase rarity inside a split-aware EG event by loot band', () => {
     const table: ItemDropTable = {
@@ -173,5 +198,36 @@ describe('Gameplay 2.0 loot pacing', () => {
       expect(rate, source.name).toBeGreaterThanOrEqual(source.min);
       expect(rate, source.name).toBeLessThanOrEqual(source.max);
     }
+  });
+
+  it('keeps mixed late-game routes and compounded faucets below the loot-rain ceiling', () => {
+    const minutes = 60_000;
+    const floor = 1 / TUNING.loot.egCadenceMinByBand.late;
+    const sources = {
+      ancient: { name: 'ancient', table: DEFAULT_CREEP_DROP_TABLES.ancient, clearMin: 0.75, seedSalt: 9_000_000 },
+      boss: { name: 'boss', table: lootTableToDropTable(REG.boss('boss-phantom-assassin').loot), clearMin: 5, seedSalt: 10_000_000 },
+      raid: { name: 'raid', table: lootTableToDropTable(REG.raid('lord-of-terror').loot), clearMin: 8, seedSalt: 11_000_000 },
+      dungeon: { name: 'dungeon', table: REG.dungeon('frost-hollow').loot.boss, clearMin: 16, seedSalt: 12_000_000 }
+    };
+
+    const mixedRoute = [
+      sources.ancient, sources.ancient, sources.ancient,
+      sources.boss,
+      sources.ancient, sources.ancient,
+      sources.raid,
+      sources.ancient, sources.ancient, sources.ancient,
+      sources.dungeon
+    ];
+    const routeRate = simulateRouteDrops({ minutes, band: 'late', tier: 'hell', route: mixedRoute }) / minutes;
+    expect(routeRate).toBeGreaterThan(floor * 0.25);
+    expect(routeRate).toBeLessThanOrEqual(floor * 2.4);
+
+    const compoundedRate = simulateDrops({
+      minutes,
+      band: 'late',
+      tier: 'hell',
+      sources: [sources.ancient, sources.boss, sources.raid, sources.dungeon]
+    }) / minutes;
+    expect(compoundedRate).toBeLessThanOrEqual(floor * 4);
   });
 });

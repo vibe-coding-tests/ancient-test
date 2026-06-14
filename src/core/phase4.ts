@@ -1,4 +1,4 @@
-import type { AudioSettings, GameSave, GraphicsSettings } from './types';
+import type { AudioSettings, CutsceneSettings, GameSave, GraphicsSettings } from './types';
 import type { GameSaveV3, LegacySettings } from './phase3';
 
 // ------------------------------------------------------------------
@@ -15,16 +15,22 @@ export function defaultGraphicsSettings(): GraphicsSettings {
   return { quality: 'auto', exposure: 0.92, grade: 1, reducedMotion: false };
 }
 
+export function defaultCutsceneSettings(): CutsceneSettings {
+  return { length: 'full', defaultSpeed: 1, alwaysSkip: false };
+}
+
 /**
  * Fold legacy loose volumes into the v4 audio channel object.
  * masterVolume -> master, sfxVolume -> sfx, musicVolume -> stinger (stingers are
  * the musical layer); voice has no v3 analogue, so it defaults. (DECISIONS.md)
  */
-export function migrateAudioSettings(old: (LegacySettings & { audio?: AudioSettings; graphics?: GraphicsSettings }) | undefined): GameSave['settings'] {
+export function migrateAudioSettings(old: (LegacySettings & { audio?: AudioSettings; graphics?: GraphicsSettings; cutscene?: CutsceneSettings }) | undefined): GameSave['settings'] {
   const d = defaultAudioSettings();
   const existing = old?.audio;
   const gd = defaultGraphicsSettings();
   const gx = old?.graphics;
+  const cd = defaultCutsceneSettings();
+  const cx = old?.cutscene;
   return {
     quickcast: old?.quickcast ?? true,
     resonance: old?.resonance ?? false,
@@ -34,6 +40,11 @@ export function migrateAudioSettings(old: (LegacySettings & { audio?: AudioSetti
       exposure: gx?.exposure ?? gd.exposure,
       grade: gx?.grade ?? gd.grade,
       reducedMotion: gx?.reducedMotion ?? gd.reducedMotion
+    },
+    cutscene: {
+      length: cx?.length ?? cd.length,
+      defaultSpeed: cx?.defaultSpeed ?? cd.defaultSpeed,
+      alwaysSkip: cx?.alwaysSkip ?? cd.alwaysSkip
     },
     audio: existing
       ? {

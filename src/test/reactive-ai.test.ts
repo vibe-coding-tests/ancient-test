@@ -168,21 +168,32 @@ describe('item-active considers', () => {
     if (order?.kind === 'item') expect(hero.items[order.invSlot]?.defId).toBe('black-king-bar');
   });
 
-  it('uses non-whitelisted offensive item actives via intent fallback', () => {
-    const sim = macro([{ heroId: 'crystal-maiden', level: 18, items: ['rod-of-atos'] }], [{ heroId: 'sniper', level: 18 }]);
-    const hero = sim.unitsArr.find((u) => u.team === 0)!;
-    const enemy = sim.unitsArr.find((u) => u.team === 1)!;
-    hero.abilities.forEach((a) => (a.level = 0)); // isolate item scoring
-    hero.mana = hero.stats.maxMana;
-    hero.pos = { x: 2000, y: 2000 };
-    enemy.pos = { x: 2500, y: 2000 };
-    sim.rebuildSpatial();
+  it('uses representative non-whitelisted item actives via intent fallback', () => {
+    const cases = [
+      { itemId: 'rod-of-atos', target: 'enemy', pressured: false },
+      { itemId: 'diffusal-blade', target: 'enemy', pressured: false },
+      { itemId: 'scythe-of-vyse', target: 'enemy', pressured: false },
+      { itemId: 'blink-dagger', target: 'point', pressured: true }
+    ] as const;
 
-    const order = chooseUtilityOrder(sim, hero, enemy);
-    expect(order?.kind).toBe('item');
-    if (order?.kind === 'item') {
-      expect(hero.items[order.invSlot]?.defId).toBe('rod-of-atos');
-      expect(order.uid).toBe(enemy.uid);
+    for (const c of cases) {
+      const sim = macro([{ heroId: 'crystal-maiden', level: 18, items: [c.itemId] }], [{ heroId: 'sniper', level: 18 }], 9000 + c.itemId.length);
+      const hero = sim.unitsArr.find((u) => u.team === 0)!;
+      const enemy = sim.unitsArr.find((u) => u.team === 1)!;
+      hero.abilities.forEach((a) => (a.level = 0)); // isolate item scoring
+      hero.mana = hero.stats.maxMana;
+      hero.pos = { x: 2000, y: 2000 };
+      enemy.pos = c.pressured ? { x: 2200, y: 2000 } : { x: 2500, y: 2000 };
+      if (c.pressured) hero.hp = hero.stats.maxHp * 0.2;
+      sim.rebuildSpatial();
+
+      const order = chooseUtilityOrder(sim, hero, enemy);
+      expect(order?.kind, c.itemId).toBe('item');
+      if (order?.kind === 'item') {
+        expect(hero.items[order.invSlot]?.defId).toBe(c.itemId);
+        if (c.target === 'enemy') expect(order.uid).toBe(enemy.uid);
+        else expect(order.point).toBeDefined();
+      }
     }
   });
 });

@@ -33,7 +33,7 @@ import {
   type LootRoll
 } from '../core/phase3';
 import { Rng } from '../core/rng';
-import { defaultAudioSettings, defaultGraphicsSettings, defaultPhase4SaveFields } from '../core/phase4';
+import { defaultAudioSettings, defaultCutsceneSettings, defaultGraphicsSettings, defaultPhase4SaveFields } from '../core/phase4';
 import { defaultPhase5SaveFields } from '../core/phase5';
 import { higherDungeonTier, migratePhase6Save } from '../core/phase6';
 import { dungeonDailySeed, dungeonWeeklySeed } from '../core/dungeon';
@@ -45,9 +45,10 @@ import { ELITE_DRAFT } from '../data/drafts';
 import { resonanceMods } from '../core/resonance';
 import { levelFromXp, xpForLevel } from '../core/stats';
 import { dist, fromAngle, norm, sub } from '../core/math2d';
-import type { ActiveElement, ArmoryLoadouts, BossDef, CreepTier, CreepInstanceSave, DifficultyTier, DraftDef, DropSource, DungeonDef, DungeonModifierDef, DungeonProgressSave, DungeonRoom, EchoProgress, GambitRule, GameSave, GraphicsSettings, HeroLoadoutSlots, HeroSave, ItemDropTable, ItemQuality, ItemRarity, ItemSave, LootBand, LoreEntryDef, MacroHeroSetup, NeutralItemDef, Order, QuestProgress, RaidDef, RegionDef, RoomTemplate, RoomType, SimEvent, StingerId, Vec2 } from '../core/types';
+import type { ActiveElement, ArmoryLoadouts, BossDef, CreepTier, CreepInstanceSave, DifficultyTier, DraftDef, DropSource, DungeonDef, DungeonModifierDef, DungeonProgressSave, DungeonRoom, EchoProgress, GambitRule, GameSave, GraphicsSettings, HeroLoadoutSlots, HeroSave, ItemDropTable, ItemQuality, ItemRarity, ItemSave, LootBand, LoreEntryDef, MacroHeroSetup, NeutralItemDef, Order, QuestProgress, RaidDef, RegionDef, RoomTemplate, RoomType, SeasonalEventDef, SimEvent, StingerId, Vec2 } from '../core/types';
 import { ProceduralAudio } from '../engine/audio';
 import { CinematicDirector, type CutsceneContext } from '../engine/cinematic';
+import { StoryDetector, type StoryObserveCtx, type StoryTrigger } from '../engine/story-detectors';
 import { GameScene } from '../engine/scene';
 import { LiveGymFight, runGymMatch, type GymMatchHero, type GymMatchResult } from './macro-session';
 import { LiveRaid } from './raid-session';
@@ -60,7 +61,7 @@ const OUTWORLD_CLAIMANT_RAIDS = new Set([
   'void-prelate',
   'queen-of-blades',
   'lord-of-terror',
-  'lord-of-destruction',
+  'prime-evil',
   'lord-of-hatred',
   'forsaken-queen'
 ]);
@@ -313,6 +314,8 @@ export interface AudioLike {
   handleEvent(ev: SimEvent): void;
   playStinger(id: StingerId): void;
   update?(env: { biome: string; dayTime: number; inCombat: boolean; dt: number }): void;
+  /** Toggle the sampled-audio enhancement layer (medium+ tiers). */
+  enableSampledAudio?(on: boolean): void;
   dispose?(): void;
 }
 
@@ -429,6 +432,7 @@ export class Game {
   private liveDungeonTier: DifficultyTier = 'normal';
   private liveDungeonModifiers: string[] = [];
   cinematic = new CinematicDirector();
+  private story = new StoryDetector();
   /** HUD hook: open the gym pre-fight screen (§3.5). Null in headless. */
   onOpenGymPrefight: ((gymId: string) => void) | null = null;
   onOpenDungeonEntry: ((dungeonId: string) => void) | null = null;
@@ -559,17 +563,20 @@ export class Game {
       resonance: save.settings.resonance ?? false,
       minimap: save.settings.minimap ?? true,
       audio: { ...defaultAudioSettings(), ...save.settings.audio },
-      graphics: { ...defaultGraphicsSettings(), ...save.settings.graphics }
+      graphics: { ...defaultGraphicsSettings(), ...save.settings.graphics },
+      cutscene: { ...defaultCutsceneSettings(), ...save.settings.cutscene }
     };
     this.sim.resonanceEnabled = this.settings.resonance ?? false;
     this.audio.setSettings(this.settings);
+    this.audio.enableSampledAudio?.(resolveQuality(this.settings.graphics?.quality) !== 'low');
     this.refreshResonanceMods(true);
     this.applyGraphics();
+    this.applyCutsceneSettings();
     if (save.playtimeSec === 0 && this.region.id === 'tranquil-vale') this.playCutscene('prologue-moon-breaks');
     this.playRegionArrival();
   }
 
-  settings: GameSave['settings'] = { quickcast: true, resonance: true, minimap: true, audio: defaultAudioSettings(), graphics: defaultGraphicsSettings() };
+  settings: GameSave['settings'] = { quickcast: true, resonance: true, minimap: true, audio: defaultAudioSettings(), graphics: defaultGraphicsSettings(), cutscene: defaultCutsceneSettings() };
 
   // ---------- helpers ----------
 
@@ -841,7 +848,9 @@ export class Game {
     const seenKey = `cinematic:${id}`;
     const seen = this.journalSeen.has(seenKey);
     this.journalSeen.add(seenKey);
-    if (def.tier === 'bark') {
+    // §4.3: a bark, or any tier fully suppressed by settings, routes its line as a toast so
+    // the information still reaches the player; only the staging is withheld.
+    if (def.tier === 'bark' || this.cinematic.routesToToast(def)) {
       const line = def.beats[0]?.line?.text;
       if (line) this.msg(line.replace(/\{([a-zA-Z0-9_-]+)\}/g, (_, key: string) => String(ctx[key] ?? '')), 'bark');
       return true;
@@ -850,8 +859,28 @@ export class Game {
     return true;
   }
 
+  /** Push the live cut-scene controls (length/speed/always-skip + reduced-motion) to the director. */
+  applyCutsceneSettings(): void {
+    const c = this.settings.cutscene ?? defaultCutsceneSettings();
+    const reducedMotion = this.settings.graphics?.reducedMotion ?? false;
+    this.cinematic.setSettings({
+      length: c.length,
+      defaultSpeed: c.defaultSpeed,
+      alwaysSkip: c.alwaysSkip,
+      reducedMotion
+    });
+  }
+
   cinematicAdvance(): void {
     this.cinematic.advance();
+  }
+
+  cinematicRequestSkip(): void {
+    this.cinematic.requestSkip();
+  }
+
+  cinematicReleaseSkip(): void {
+    this.cinematic.releaseSkip();
   }
 
   cinematicSkip(): void {
@@ -862,8 +891,180 @@ export class Game {
     this.cinematic.setFastForward(active);
   }
 
+  /**
+   * STORY §6.6 + §7.3 — feed a live combat event batch to the story detectors and fire any
+   * matched beats. Pure read of the sim; never writes sim state (determinism-safe).
+   */
+  private observeStory(events: readonly SimEvent[], ctx: Omit<StoryObserveCtx, 'nowSec' | 'playerTeam'>): void {
+    const triggers = this.story.observe(events, { ...ctx, nowSec: this.playtime, playerTeam: 0 });
+    for (const trig of triggers) this.fireStoryTrigger(trig);
+  }
+
+  private fireStoryTrigger(trig: StoryTrigger): void {
+    if (trig.kind === 'legend') {
+      this.triggerLegendCallout(trig.legendId);
+      return;
+    }
+    // §6.6 boss phase break. Marquee guardians get a bespoke set-piece on their first break,
+    // then fall back to the templated stinger; everyone else always gets the stinger.
+    const bossName = trig.bossHeroId ? REG.hero(trig.bossHeroId).name : 'The boss';
+    if (trig.marqueeRaidId) {
+      const marqueeId = trig.marqueeRaidId === 'void-prelate' ? 'void-prelate-phase-break' : 'last-eldwurm-phase-break';
+      if (!this.journalSeen.has(`cinematic:${marqueeId}`)) {
+        this.playCutscene(marqueeId, { boss: bossName });
+        return;
+      }
+    }
+    this.playCutscene('boss-phase-stinger', { boss: bossName });
+  }
+
   private playRegionArrival(): void {
     if (this.region.arrivalBeat) this.playCutscene(this.region.arrivalBeat);
+  }
+
+  private playItemFirstHold(itemId: string): void {
+    if (itemId !== 'aegis-of-the-immortal' && itemId !== 'divine-rapier') return;
+    const seenKey = `story:item-first-hold:${itemId}`;
+    if (this.journalSeen.has(seenKey)) return;
+    this.journalSeen.add(seenKey);
+    const item = REG.item(itemId);
+    this.codexUnlock('item:' + itemId);
+    this.playCutscene(`item-${itemId}-first-hold`, { item: item.name, itemLore: item.lore });
+  }
+
+  private playRaidIntroSetpieces(raidId: string, raidName: string): void {
+    if (OUTWORLD_CLAIMANT_RAIDS.has(raidId) && !this.journalSeen.has('story:outworld-first-contact')) {
+      this.journalSeen.add('story:outworld-first-contact');
+      this.playCutscene('outworld-first-contact', { claimant: raidName });
+    }
+    this.playCutscene(`raid-intro-${raidId}`, { raid: raidName });
+  }
+
+  private recordOutworldClaimantClear(raidId: string): void {
+    if (!OUTWORLD_CLAIMANT_RAIDS.has(raidId)) return;
+    this.codexUnlock('claimant:' + raidId);
+    const allCleared = [...OUTWORLD_CLAIMANT_RAIDS].every((id) => this.codexUnlocks.has('claimant:' + id) || id === raidId);
+    if (allCleared && !this.codexUnlocks.has('claimants:all')) {
+      this.codexUnlock('claimants:all');
+      this.playCutscene('outworld-all-clear');
+    }
+  }
+
+  private activeFestival: string | null = null;
+
+  /** True if this festival's underlying mode can launch right now (full party, in region, not busy). */
+  festivalLaunchable(eventId: string): boolean {
+    const event = REG.seasonalEvents.get(eventId);
+    if (!event || this.liveGym || this.liveRaid || this.liveDungeon || this.party.length < 5) return false;
+    const map = this.seasonalModeTarget(event);
+    if (!map) return false;
+    if (map.kind === 'raid') return map.id !== ROSHAN_RAID_ID || (this.raidProgress[map.id]?.roshanRespawnAt ?? 0) <= this.playtime;
+    return REG.dungeon(map.id).regionId === this.region.id;
+  }
+
+  private seasonalModeTarget(event: SeasonalEventDef): { kind: 'raid' | 'dungeon'; id: string; endless?: boolean } | null {
+    switch (event.mode) {
+      case 'roshan-candy': return { kind: 'raid', id: 'roshan-pit' };
+      case 'wave-defense': return { kind: 'dungeon', id: 'frost-hollow' };
+      case 'endless-descent': return { kind: 'dungeon', id: 'frost-hollow', endless: true };
+      default: return null;
+    }
+  }
+
+  private grantFestivalReward(event: SeasonalEventDef): void {
+    if (event.reward.kind === 'gold') this.awardGold(event.reward.amount ?? 0, 'festival', this.activeUnit()?.pos ?? this.region.town.pos, true);
+    else if (event.reward.kind === 'loot-mark') this.awardLootMarks(event.reward.amount ?? 1);
+  }
+
+  /** Launch the festival's existing-system session driver (raid/dungeon) when playable. */
+  private launchSeasonalMode(event: SeasonalEventDef): boolean {
+    const map = this.seasonalModeTarget(event);
+    if (!map || !this.festivalLaunchable(event.id)) return false;
+    const ok = map.kind === 'raid'
+      ? this.startLiveRaid(map.id)
+      : this.startDungeon(map.id, 'normal', map.endless ? { endless: true } : {});
+    return ok;
+  }
+
+  /** A festival reward pays out on completing its mode; clears the active-festival flag. */
+  private completeActiveFestival(cleared: boolean): void {
+    if (!this.activeFestival) return;
+    const event = REG.seasonalEvents.get(this.activeFestival);
+    this.activeFestival = null;
+    if (!event || !cleared) return;
+    this.grantFestivalReward(event);
+    this.msg(`${event.name}: ${event.reward.label} earned`, 'good');
+  }
+
+  runSeasonalEvent(eventId: string): boolean {
+    const event = REG.seasonalEvents.get(eventId);
+    if (!event) return false;
+    this.codexUnlock('festival:' + event.id);
+    this.playCutscene(event.cutsceneId, { event: event.name });
+    // §7.5: festivals are new drivers over the existing raid/dungeon session machinery. Launch
+    // the mode when playable (reward pays out on clear); otherwise remember it now with its purse.
+    if (this.launchSeasonalMode(event)) {
+      this.activeFestival = event.id;
+      this.msg(`${event.name} begins — clear it to earn the ${event.reward.label}.`, 'info');
+    } else {
+      this.grantFestivalReward(event);
+      this.msg(`${event.name}: ${event.reward.label} earned`, 'good');
+    }
+    this.autosave('festival');
+    return true;
+  }
+
+  triggerLegendCallout(legendId: string): boolean {
+    const legend = REG.legends.get(legendId);
+    if (!legend || this.codexUnlocks.has('legend:' + legend.id)) return false;
+    this.codexUnlock('legend:' + legend.id);
+    this.playCutscene(legend.cutsceneId, { legend: legend.name });
+    this.msg(`Legend remembered: ${legend.name}`, 'good');
+    return true;
+  }
+
+  // ---------- STORY §8: the cinematics gallery ----------
+
+  /** Readable fallback tokens so a gallery replay never renders a half-empty `{token}`. */
+  private replayContext(def: { id: string }): CutsceneContext {
+    const rapier = REG.items.get('divine-rapier');
+    return {
+      hero: 'Your champion', heroId: undefined, bark: 'It remembers you now.',
+      badge: 'an act', boss: 'The guardian', raid: 'The claimant',
+      claimant: 'The claimant', item: 'the relic', itemLore: rapier?.lore ?? '',
+      echoLine: 'The war you carry deepens.', event: def.id, legend: 'a legend'
+    };
+  }
+
+  /** Replay a seen, replayable cut-scene at full length from the gallery. */
+  replayCutscene(id: string): boolean {
+    const def = REG.cutscenes.get(id);
+    if (!def || !def.replayable) return false;
+    if (!this.journalSeen.has(`cinematic:${id}`)) return false;
+    this.cinematic.replay(def, this.replayContext(def));
+    return true;
+  }
+
+  /** Spoiler-safe gallery view-model: seen replayable scenes are replayable; the rest show locked. */
+  cinematicGallery(): { category: string; entries: { id: string; title: string; tier: string; seen: boolean; caption: string }[] }[] {
+    const groups = new Map<string, { id: string; title: string; tier: string; seen: boolean; caption: string }[]>();
+    for (const def of REG.cutscenes.values()) {
+      if (!def.replayable) continue;
+      const category = def.category ?? 'Other';
+      const seen = this.journalSeen.has(`cinematic:${def.id}`);
+      const beat = def.beats[0];
+      const caption = seen
+        ? `${beat.shot.palette} · ${beat.shot.mood}${beat.line ? ` — “${beat.line.text.replace(/\{[^}]+\}/g, '…')}”` : ''}`
+        : 'Locked — reach this moment to record it.';
+      const title = seen ? def.title.replace(/\{[^}]+\}/g, '…') : `??? (${category})`;
+      const list = groups.get(category) ?? [];
+      list.push({ id: def.id, title, tier: def.tier, seen, caption });
+      groups.set(category, list);
+    }
+    const order = ['Prologue', 'Binds', 'Regions', 'Bosses', 'Raids', 'Items', 'Endgame', 'Claimants', 'Festivals', 'Legends'];
+    return [...groups.entries()]
+      .sort((a, b) => (order.indexOf(a[0]) + 1 || 99) - (order.indexOf(b[0]) + 1 || 99))
+      .map(([category, entries]) => ({ category, entries }));
   }
 
   /** The Valve rarity color of the richest item in a drop (LOOT L6). */
@@ -901,6 +1102,7 @@ export class Game {
   setQualityTier(quality: GraphicsSettings['quality']): void {
     if (this.settings.graphics) this.settings.graphics.quality = quality;
     this.scene.setQuality?.(resolveQuality(quality));
+    this.audio.enableSampledAudio?.(resolveQuality(quality) !== 'low');
     this.applyGraphics();
   }
 
@@ -1303,12 +1505,16 @@ export class Game {
   }
 
   private deliverLoot(loot: LootRoll): void {
-    for (const it of loot.guaranteed) this.inventoryStash.push(bindIfNeeded(it));
+    for (const it of loot.guaranteed) {
+      this.inventoryStash.push(bindIfNeeded(it));
+      this.playItemFirstHold(it.id);
+    }
     this.awardLootMarksForItems(loot.guaranteed);
     if (loot.assembled) {
       this.inventoryStash.push(bindIfNeeded(loot.assembled));
       this.awardLootMarksForItems([loot.assembled]);
       if (!this.heldUniques.includes(loot.assembled.id)) this.heldUniques.push(loot.assembled.id);
+      this.playItemFirstHold(loot.assembled.id);
     }
   }
 
@@ -1356,7 +1562,7 @@ export class Game {
     const prog = this.raidProgress[raidId];
     const clears = prog?.clears ?? 0;
     const aegis = this.aegisReady();
-    this.playCutscene(`raid-intro-${raidId}`, { raid: def.name });
+    this.playRaidIntroSetpieces(raidId, def.name);
     const result = runRaidEncounter({
       def,
       party: this.gymPlayerTeam(),
@@ -1375,6 +1581,7 @@ export class Game {
     }
     this.deliverRaidLoot(def, tier, raidId, clears);
     this.codexUnlock('raid:' + raidId); // killing the raid boss is the encounter (§3.14)
+    this.recordOutworldClaimantClear(raidId);
     this.msg(`${def.name} cleared! (clear #${clears + 1})`, 'good');
     this.playCutscene('raid-clear-stinger', { raid: def.name });
     this.audio.playStinger('raid-clear');
@@ -1402,7 +1609,8 @@ export class Game {
     this.liveRaidClears = prog?.clears ?? 0;
     this.liveRaidAegis = this.aegisReady();
     this.liveRaid = new LiveRaid(def, this.gymPlayerTeam(), tier, stableContentSeed(`${raidId}:${tier}`, this.liveRaidClears) + Math.round(this.playtime), { aegis: this.liveRaidAegis });
-    this.playCutscene(`raid-intro-${raidId}`, { raid: def.name });
+    this.story.beginEncounter();
+    this.playRaidIntroSetpieces(raidId, def.name);
     this.queuedOrders = [];
     this.scene.resetUnitViews();
     const u = this.liveRaid.drivenUnit();
@@ -1420,6 +1628,9 @@ export class Game {
     for (const ev of this.frameEvents) {
       this.scene.pushEvent(ev, raid.sim);
       this.audio.handleEvent(ev);
+    }
+    if (this.liveRaidId) {
+      this.observeStory(this.frameEvents, { sim: raid.sim, raidId: this.liveRaidId, bossHeroId: REG.raid(this.liveRaidId).boss.heroId });
     }
     this.scene.update(raid.sim, raid.cameraFollow(), dt, 0.5);
     if (raid.done && raid.result) {
@@ -1449,12 +1660,15 @@ export class Game {
       this.msg('The Aegis stands a fallen hero back up — and is spent.', 'info');
     }
     if (!result.cleared) {
+      this.completeActiveFestival(false);
       this.msg(`${def.name} holds the deep. Regroup and return.`, 'bad');
       this.autosave('raid');
       return;
     }
     this.deliverRaidLoot(def, tier, raidId, clears);
     this.codexUnlock('raid:' + raidId);
+    this.recordOutworldClaimantClear(raidId);
+    this.completeActiveFestival(true);
     this.msg(`${def.name} cleared! (clear #${clears + 1})`, 'good');
     this.playCutscene('raid-clear-stinger', { raid: def.name });
     this.audio.playStinger('raid-clear');
@@ -1517,6 +1731,7 @@ export class Game {
     this.liveDungeonTier = tier;
     this.liveDungeonModifiers = modifiers;
     this.liveDungeon = new DungeonSession(def, this.gymPlayerTeam(), tier, seed, { maxSec: opts.maxSec, modifiers, endless, endlessLevel });
+    this.story.beginEncounter();
     this.queuedOrders = [];
     this.scene.resetUnitViews();
     this.syncDungeonSceneRoom();
@@ -1548,6 +1763,7 @@ export class Game {
         if (victim?.kind === 'creep' && victim.tier) this.rollItemDropsForCreep(victim.creepId, victim.tier, ev.victimUid, dungeon.tier);
       }
     }
+    this.observeStory(this.frameEvents, { sim: dungeon.sim, bossHeroId: REG.heroes.has(dungeon.def.guardian) ? dungeon.def.guardian : undefined });
     for (const room of dungeon.drainCompletedRooms()) {
       this.grantDungeonRoomReward(dungeon.def, dungeon.tier, room, dungeon.selectedModifiers());
     }
@@ -1666,6 +1882,7 @@ export class Game {
   private applyDungeonResult(dungeonId: string, tier: DifficultyTier, cleared: boolean, clearedRooms: { index: number; type: RoomType }[], depth: number, modifiers: string[] = [], endlessLevel?: number): void {
     const def = REG.dungeon(dungeonId);
     this.recordDungeonProgress(dungeonId, tier, cleared, clearedRooms.length, depth, modifiers, endlessLevel);
+    this.completeActiveFestival(cleared);
     if (!cleared) {
       this.msg(`${def.name} ejects the party at the portal. Regroup and return.`, 'bad');
       this.autosave('dungeon');
@@ -1682,6 +1899,11 @@ export class Game {
 
   /** Deliver a raid clear's loot + pity; Roshan also grants the Aegis, sets the respawn timer, and re-drops cheese. */
   private deliverRaidLoot(def: RaidDef, tier: DifficultyTier, raidId: string, clears: number): void {
+    // STORY §7.4 — the Aegis of Champions thread: hold the Pit at its hardest, earn the title.
+    if (raidId === ROSHAN_RAID_ID && tier === 'hell' && !this.codexUnlocks.has('title:true-champion')) {
+      this.codexUnlock('title:true-champion');
+      this.msg('Title earned: True Champion — you held the Pit at its hardest.', 'good');
+    }
     const dryStreak = this.raidProgress[raidId]?.dryStreak ?? 0;
     const loot = rollLoot(def.loot, tier, dryStreak, stableContentSeed(`${raidId}:loot:${tier}`, clears), this.currentLootBand());
     const next = { ...(this.raidProgress[raidId] ?? { clears: 0, dryStreak: 0 }) };
@@ -1694,14 +1916,20 @@ export class Game {
       this.msg(`Moonflow dry: raid loot converted to ${gold}g`, 'info');
     } else {
       for (const it of loot.guaranteed) {
-        if (it.id === 'aegis-of-the-immortal') next.aegisHeld = true; // the held one-use charge
-        else this.inventoryStash.push(bindIfNeeded(it));
+        if (it.id === 'aegis-of-the-immortal') {
+          next.aegisHeld = true; // the held one-use charge
+          this.playItemFirstHold(it.id);
+        } else {
+          this.inventoryStash.push(bindIfNeeded(it));
+          this.playItemFirstHold(it.id);
+        }
       }
       this.awardLootMarksForItems(loot.guaranteed);
       if (loot.assembled) {
         this.inventoryStash.push(bindIfNeeded(loot.assembled));
         this.awardLootMarksForItems([loot.assembled]);
         if (!this.heldUniques.includes(loot.assembled.id)) this.heldUniques.push(loot.assembled.id);
+        this.playItemFirstHold(loot.assembled.id);
         this.msg(`Raid drop: ${REG.item(loot.assembled.id).name}${loot.pityUsed ? ' (pity!)' : ''}`, 'good', this.dropAccent([loot.assembled]));
       }
     }
@@ -1710,6 +1938,7 @@ export class Game {
       if (fullLoot) {
         next.aegisHeld = true;
         this.msg('Roshan falls — the Aegis of the Immortal is yours.', 'good');
+        this.playItemFirstHold('aegis-of-the-immortal');
         if (next.clears >= TUNING.roshanRepeatDropFromClear) {
           this.inventoryStash.push(bindIfNeeded({ id: 'refresher-shard' }));
           this.inventoryStash.push(bindIfNeeded({ id: 'cheese', charges: 1 }));
@@ -1871,6 +2100,9 @@ export class Game {
     items: { id: string; name: string; lore: string }[];
     creeps: { id: string; name: string; lore: string }[];
     raids: { id: string; name: string; title: string; lore: string }[];
+    claimants: { id: string; name: string; lore: string }[];
+    festivals: { id: string; name: string; summary: string; body: string }[];
+    legends: { id: string; name: string; summary: string; body: string }[];
   } {
     this.syncEncounterCodex();
     const has = (id: string): boolean => this.codexUnlocks.has(id);
@@ -1880,7 +2112,12 @@ export class Game {
       regions: [...REG.regions.values()].filter((r) => has('region:' + r.id)).map((r) => ({ id: r.id, name: r.name, lore: r.lore })),
       items: [...REG.items.values()].filter((i) => has('item:' + i.id)).map((i) => ({ id: i.id, name: i.name, lore: i.lore })),
       creeps: [...REG.creeps.values()].filter((c) => has('creep:' + c.id)).map((c) => ({ id: c.id, name: c.name, lore: `A ${c.tier}-tier denizen of the wilds.` })),
-      raids: [...REG.raids.values()].filter((r) => has('raid:' + r.id)).map((r) => ({ id: r.id, name: r.name, title: r.title, lore: `${r.location}. “${r.dialogue[0]}”` }))
+      raids: [...REG.raids.values()].filter((r) => has('raid:' + r.id)).map((r) => ({ id: r.id, name: r.name, title: r.title, lore: `${r.location}. “${r.dialogue[0]}”` })),
+      claimants: [...REG.raids.values()]
+        .filter((r) => has('claimant:' + r.id))
+        .map((r) => ({ id: r.id, name: r.name, lore: `${r.title}. ${r.location}. The Outworld Claimants came for the Ancients' power and were turned back.` })),
+      festivals: [...REG.seasonalEvents.values()].filter((e) => has('festival:' + e.id)).map((e) => ({ id: e.id, name: e.name, summary: e.summary, body: e.codexBody })),
+      legends: [...REG.legends.values()].filter((l) => has('legend:' + l.id)).map((l) => ({ id: l.id, name: l.name, summary: l.triggerSummary, body: l.codexBody }))
     };
   }
 
@@ -1891,6 +2128,7 @@ export class Game {
     factions: { regionId: string; regionName: string; heroId: string; heroName: string }[];
     raids: { id: string; name: string; clears: number }[];
     elite: { defeated: number; championDown: boolean };
+    titles: { id: string; name: string; note: string }[];
   } {
     const factions = Object.entries(this.factionChoices).map(([regionId, heroId]) => ({
       regionId,
@@ -1901,12 +2139,17 @@ export class Game {
     const raids = Object.entries(this.raidProgress)
       .filter(([, p]) => (p?.clears ?? 0) > 0)
       .map(([id, p]) => ({ id, name: REG.raids.get(id)?.name ?? id, clears: p.clears }));
+    const titles: { id: string; name: string; note: string }[] = [];
+    if (this.codexUnlocks.has('title:true-champion')) {
+      titles.push({ id: 'true-champion', name: 'True Champion', note: "Cleared Roshan's Pit at its hardest — the Aegis is yours by right." });
+    }
     return {
       reputation: this.reputation,
       badges: [...this.badges],
       factions,
       raids,
-      elite: { defeated: this.eliteFive.defeated, championDown: this.eliteFive.championDown }
+      elite: { defeated: this.eliteFive.defeated, championDown: this.eliteFive.championDown },
+      titles
     };
   }
 
@@ -3787,7 +4030,7 @@ export class Game {
       explorationPct: { ...this.explorationPct },
       resin: this.resin,
       resinUpdatedAt: this.resinUpdatedAt,
-      settings: { ...this.settings, audio: { ...this.settings.audio }, graphics: { ...defaultGraphicsSettings(), ...this.settings.graphics } }
+      settings: { ...this.settings, audio: { ...this.settings.audio }, graphics: { ...defaultGraphicsSettings(), ...this.settings.graphics }, cutscene: { ...defaultCutsceneSettings(), ...this.settings.cutscene } }
     };
   }
 
@@ -4405,6 +4648,13 @@ export class Game {
           break;
       }
     }
+
+    // STORY §7.3 — esports legend Easter-eggs read the overworld stream (Hooked Home, etc.)
+    this.observeStory(this.frameEvents, {
+      sim: this.sim,
+      townPos: this.region.town.pos,
+      townRadius: this.region.town.radius
+    });
 
     // recruitment trial (§3.1): evaluate after events are observed
     if (this.activeTrial) {
