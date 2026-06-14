@@ -1,6 +1,7 @@
 // Asset build pipeline (GRAPHICS_SPEC §13.5 Phase 0).
 //
-// Turns raw, downloaded CC0/CC-BY packs (kept out of git under tmp/asset_src/)
+// Turns raw, downloaded Creative Commons packs — CC0/CC-BY and, since this is a
+// non-commercial project, NC/SA too (DECISIONS 2026-06-14) — (kept out of git under tmp/asset_src/)
 // into small, shipping files under public/assets/. Only the optimized output is
 // committed; the raw packs never are. This mirrors the proven gltf-transform +
 // meshopt + sharp flow and keeps the repo light enough to boot instantly.
@@ -124,7 +125,7 @@ function inferredSource(rel) {
     return 'KayKit Adventurers base, tri-tone palette retexture by us — CC0';
   }
   if (rel === 'creeps/serpent.glb') return 'Quaternius snake via Poly Pizza — CC0';
-  if (['creeps/flier.glb', 'creeps/bear.glb', 'creeps/treant.glb'].includes(rel)) return 'generated in-repo: generate_creature_families.mjs';
+  if (['creeps/flier.glb', 'creeps/bear.glb', 'creeps/treant.glb', 'creeps/scorpion.glb', 'creeps/centaur.glb', 'creeps/gnoll.glb'].includes(rel)) return 'generated in-repo: generate_creature_families.mjs';
   if (rel.startsWith('creeps/')) return 'Quaternius creature pack — CC0';
   if (rel.startsWith('holdouts/')) return 'generated in-repo: generate_holdout_signatures.mjs';
   if (rel.startsWith('weapons/heroes/')) return 'generated in-repo: generate_hero_weapons.mjs';

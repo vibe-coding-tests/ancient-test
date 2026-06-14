@@ -8,10 +8,16 @@ import { makeItemState } from './items';
 import { raidSetupFromDef } from './phase3';
 import { applyElementAura } from './combat';
 import type { EffectCtx } from './effects';
-import type { ActiveElement, DifficultyTier, MacroHeroSetup, RaidBossSetup, RaidDef, StatModMap, Vec2, ZoneSpec } from './types';
+import type { ActiveElement, BossDef, DifficultyTier, HeroDef, MacroHeroSetup, RaidBossSetup, RaidDef, StatModMap, Vec2, ZoneSpec } from './types';
 import type { Unit } from './unit';
 
 const RAPIER_ID = 'divine-rapier';
+const HERO_HEIGHT_M = 1.8;
+const BOSS_RANK_HEIGHT_FLOOR_M: Record<BossDef['rank'], number> = {
+  'mini-boss': 2.2,
+  boss: 3.5,
+  'world-boss': 6
+};
 
 // ------------------------------------------------------------------
 // Macro layer (SPEC §7): 5v5 on a small arena, auto-resolving on the
@@ -29,6 +35,7 @@ export interface RaidSetup {
   seed: number;
   party: MacroHeroSetup[];
   boss: RaidBossSetup;
+  bossRank?: RaidDef['bossRank'];
   maxSec?: number;
 }
 
@@ -161,7 +168,20 @@ export function setupRaidSim(setup: RaidSetup): Sim {
   boss.externalMods.maxHp = (boss.externalMods.maxHp ?? 0) + boss.stats.maxHp * (hpScale - 1);
   boss.externalMods.damagePct = (boss.externalMods.damagePct ?? 0) + (damageScale - 1) * 100;
   boss.externalMods.armor = (boss.externalMods.armor ?? 0) + boss.base.baseArmor * (armorScale - 1);
+  const sourceHero = REG.hero(setup.boss.heroId);
+  const visualScale = setup.bossRank
+    ? bossVisualScaleForRank(setup.bossRank, sourceHero)
+    : TUNING.bossVisualScale;
+  const visualFootprintRadius = setup.bossRank
+    ? visualFootprintRadiusForBoss(sourceHero, visualScale)
+    : TUNING.unitRadiusHero * TUNING.bossVisualScale;
   boss.radius = TUNING.unitRadiusHero * TUNING.raidBossRadiusScale;
+  boss.visualScale = visualScale;
+  boss.footprintDecoupled = true;
+  boss.visualFootprintRadius = visualFootprintRadius;
+  boss.hitRadius = Math.max(boss.radius, boss.visualFootprintRadius);
+  boss.targetRadius = boss.hitRadius;
+  boss.pickRadius = boss.hitRadius;
   boss.markStatsDirty();
   boss.refresh(0);
   boss.hp = boss.stats.maxHp;
@@ -206,6 +226,23 @@ function formationDepth(roles: string[], attackRange: number): number {
   if (roles.includes('initiator') || roles.includes('durable')) return depth;
   if (roles.includes('support') || attackRange >= 550) return -depth;
   return 0;
+}
+
+function heroHeightM(hero: HeroDef): number {
+  return hero.worldSize?.heightM ?? HERO_HEIGHT_M * hero.silhouette.scale;
+}
+
+function heroFootprintM(hero: HeroDef): number {
+  return hero.worldSize?.footprintM ?? TUNING.unitRadiusHero / 100;
+}
+
+function bossVisualScaleForRank(rank: BossDef['rank'], hero: HeroDef): number {
+  const heightM = heroHeightM(hero);
+  return +(Math.max(heightM, BOSS_RANK_HEIGHT_FLOOR_M[rank]) / heightM).toFixed(4);
+}
+
+function visualFootprintRadiusForBoss(hero: HeroDef, visualScale: number): number {
+  return Math.round(heroFootprintM(hero) * visualScale * 100);
 }
 
 export function heroesAlive(sim: Sim, team: number): Unit[] {
@@ -342,7 +379,7 @@ export function runRaidEncounter(setup: RaidEncounterSetup): RaidEncounterResult
   const { def } = setup;
   const rs = raidSetupFromDef(def, setup.party, setup.tier, setup.seed);
   const maxSec = setup.maxSec ?? rs.maxSec;
-  const sim = setupRaidSim({ seed: rs.seed, party: rs.party, boss: rs.boss, maxSec });
+  const sim = setupRaidSim({ seed: rs.seed, party: rs.party, boss: rs.boss, bossRank: def.bossRank ?? 'boss', maxSec });
   if (setup.captureEvents) sim.events.captureAll = true;
   const boss = sim.unitsArr.find((u) => u.team === 1 && u.ctrl.kind === 'boss')!;
   const mechanics = createRaidMechanicRunner(def, sim, boss);

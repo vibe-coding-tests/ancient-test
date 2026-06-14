@@ -1,8 +1,12 @@
 # Credits
 
-ANCIENTS ships only original, generated, or permissively-licensed assets. The full
-per-file license record is in [`ASSETS.md`](./ASSETS.md). This file is the human-readable
-attribution required by the licenses that ask for it.
+ANCIENTS ships only original/generated assets or assets under a Creative Commons or
+permissive license. This is a non-commercial project, so that includes NonCommercial
+and ShareAlike licenses (CC-BY-NC / CC-BY-SA / CC-BY-NC-SA) as well as CC0 and CC-BY;
+NoDerivatives is avoided because every asset is retextured/retrimmed, and Valve's and
+Blizzard's own files are never used (DECISIONS 2026-06-14). The full per-file license
+record is in [`ASSETS.md`](./ASSETS.md). This file is the human-readable attribution
+required by the licenses that ask for it.
 
 ## Item icons — CC BY 3.0 (attribution required)
 
@@ -12,6 +16,16 @@ contributors**, available at <https://game-icons.net> under the
 
 We use a curated subset, recolored per item tier. No icons were altered beyond tinting
 and scaling. See `scripts/assets/generate_item_icons.mjs` for the exact mapping.
+
+## Status icons — CC BY 3.0 (attribution required)
+
+HUD status-effect icons (buff/debuff/aura pips) are likewise from **game-icons.net**, made
+by **Lorc, Delapouite, and contributors**, available at <https://game-icons.net> under the
+[Creative Commons Attribution 3.0](https://creativecommons.org/licenses/by/3.0/) license.
+
+We use a curated subset, recolored per status category (debuff/buff/aura). No icons were
+altered beyond tinting and scaling. See `scripts/assets/generate_status_icons.mjs` for the
+exact mapping.
 
 ## Other vendored assets — CC0 (no attribution required, credited as courtesy)
 

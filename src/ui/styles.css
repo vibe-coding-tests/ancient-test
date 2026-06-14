@@ -353,6 +353,70 @@ button:disabled { opacity: 0.45; cursor: default; }
   opacity: var(--minimap-opacity);
 }
 
+/* ---------- minimap legend / filter (§8) ---------- */
+
+#minimap-legend {
+  position: absolute;
+  right: 14px;
+  bottom: calc(118px + var(--minimap-size) + 6px);
+  width: var(--minimap-size);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  justify-content: flex-end;
+  pointer-events: auto;
+  opacity: var(--minimap-opacity);
+}
+
+#minimap-legend.hidden { display: none; }
+
+.mm-legend-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 5px;
+  font-size: 9px;
+  line-height: 1.5;
+  color: var(--ink-2, #d8d2bf);
+  background: rgba(8, 10, 15, 0.78);
+  border: 1px solid var(--brass-dark);
+  border-radius: 5px;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.mm-legend-chip i {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+.mm-legend-chip.off {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+
+/* ---------- low-HP danger vignette (§11) ---------- */
+
+#ui-root.low-hp::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  box-shadow: inset 0 0 120px 30px rgba(220, 40, 40, 0.42);
+  animation: low-hp-pulse 0.22s ease-out;
+}
+
+@keyframes low-hp-pulse {
+  from { opacity: 0; }
+  50% { opacity: 1; }
+  to { opacity: 0.6; }
+}
+
+#ui-root.reduced-motion.low-hp::after { animation: none; }
+
 /* ---------- quest tracker ---------- */
 
 #quest-tracker {
@@ -691,6 +755,19 @@ button:disabled { opacity: 0.45; cursor: default; }
   position: relative;
   z-index: 1;
   text-shadow: 0 1px 2px #000;
+}
+.status-pip .status-ico {
+  position: relative;
+  z-index: 1;
+  width: 68%;
+  height: 68%;
+  fill: var(--status-color);
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.8));
+}
+.status-strip.party .status-pip .status-ico,
+.status-strip.world .status-pip .status-ico {
+  width: 82%;
+  height: 82%;
 }
 .status-pip em {
   position: absolute;
@@ -1032,7 +1109,17 @@ button:disabled { opacity: 0.45; cursor: default; }
   font-size: 16px;
   letter-spacing: 0.04em;
 }
-.floater.immunef, .floater.missf { color: #c8c8d8; font-size: 12px; }
+.floater.immunef, .floater.missf, .floater.blockedf, .floater.evadef, .floater.rangef {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+.floater.immunef { color: #d8f4ff; }
+.floater.missf, .floater.evadef { color: #c8c8d8; }
+.floater.blockedf {
+  color: #ffe27d;
+  text-shadow: 0 0 7px rgba(255, 226, 125, 0.55), 0 2px 4px #000;
+}
+.floater.rangef { color: #ff9a7a; }
 .coin-fx {
   position: absolute;
   top: 0; left: 0;

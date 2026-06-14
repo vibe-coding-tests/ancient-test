@@ -192,6 +192,12 @@ export class Unit {
   prevPos: Vec2;
   facing = 0;
   radius: number;
+  /** Optional gameplay contact policy for visuals whose footprint is wider than pathing. */
+  visualFootprintRadius?: number;
+  footprintDecoupled?: boolean;
+  hitRadius?: number;
+  targetRadius?: number;
+  pickRadius?: number;
 
   hp: number;
   mana: number;

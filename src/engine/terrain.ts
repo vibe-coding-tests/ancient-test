@@ -4,7 +4,7 @@ import { staticCircleObstacle } from '../core/collision';
 import type { CollisionObstacleInput, RegionDef } from '../core/types';
 import { WORLD_SCALE } from './scale';
 import { loadTex, loadModel, instancedFromModel } from './asset-loaders';
-import { TOWN_BUILDING_SIZE, TOWN_LANDMARK_SIZE, DRESSING_PROP_SIZES, FOLIAGE_COLLISION, FOLIAGE_SIZES } from '../data/world/props';
+import { TOWN_BUILDING_COLLISION, TOWN_BUILDING_SIZE, TOWN_LANDMARK_SIZE, DRESSING_PROP_SIZES, FOLIAGE_COLLISION, FOLIAGE_SIZES } from '../data/world/props';
 
 // ------------------------------------------------------------------
 // Procedural low-poly terrain: vertex-jittered plane, painted height
@@ -986,7 +986,7 @@ export function buildTerrain(region: RegionDef, isLive: SceneLiveCheck = () => t
   if (grass) group.add(grass);
 
   // town: stone circle + simple huts + shrine crystal
-  const town = buildTown(region, heightAt, isLive, staticPropShadows);
+  const town = buildTown(region, heightAt, isLive, staticPropShadows, obstacles);
   group.add(town);
 
   const dungeonPortals = buildDungeonPortals(region, heightAt, staticPropShadows);
@@ -1007,7 +1007,13 @@ export function buildTerrain(region: RegionDef, isLive: SceneLiveCheck = () => t
   };
 }
 
-function buildTown(region: RegionDef, heightAt: (x: number, y: number) => number, isLive: SceneLiveCheck, staticPropShadows: boolean): THREE.Group {
+function buildTown(
+  region: RegionDef,
+  heightAt: (x: number, y: number) => number,
+  isLive: SceneLiveCheck,
+  staticPropShadows: boolean,
+  obstacles?: CollisionObstacleInput[]
+): THREE.Group {
   const g = new THREE.Group();
   const t = region.town.pos;
   const baseY = heightAt(t.x, t.y);
@@ -1051,6 +1057,18 @@ function buildTown(region: RegionDef, heightAt: (x: number, y: number) => number
     roof.rotation.y = ang + Math.PI / 4;
     g.add(hut, roof);
     hutMeshes.push(hut, roof);
+    obstacles?.push(staticCircleObstacle({
+      pos: {
+        x: t.x + Math.cos(ang) * (buildingRadius * WORLD_SCALE),
+        y: t.y + Math.sin(ang) * (buildingRadius * WORLD_SCALE)
+      },
+      radius: TOWN_BUILDING_COLLISION.radius,
+      id: `town-building:${i}`,
+      source: 'terrain:town',
+      layer: TOWN_BUILDING_COLLISION.layer,
+      blocksProjectiles: TOWN_BUILDING_COLLISION.blocksProjectiles,
+      feedbackLabel: TOWN_BUILDING_COLLISION.label
+    }));
     // Buildings face the plaza centre.
     townPlacements.push({ x: hx, z: hz, baseY: hutBaseY, rotY: ang + Math.PI });
   }

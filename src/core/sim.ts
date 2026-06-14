@@ -12,7 +12,7 @@ import { soundForAbility } from './gestures';
 import { thinkUnit } from './controllers';
 import { computeTeamMind } from './utility';
 import { itemReady } from './items';
-import { homingProjectileHitRadius, normalizeCollisionObstacle, projectileSegmentHitsUnit, radiusContainsUnit, zoneContainsUnit } from './collision';
+import { homingProjectileHitRadius, normalizeCollisionObstacle, projectileSegmentHitsObstacle, projectileSegmentHitsUnit, radiusContainsUnit, zoneContainsUnit } from './collision';
 import { makeCreepUnit, makeSummonUnit, Unit, type ItemState } from './unit';
 import { abilityMaxLevel, levelArr } from './values';
 import type {
@@ -604,8 +604,15 @@ export class Sim {
         // first unit hit along the swept segment
         let hit: Unit | null = null;
         let hitD = Infinity;
+        let blocked: { distance: number; pos: Vec2; obstacle: CollisionObstacle } | null = null;
         const mid = v2((from.x + p.pos.x) / 2, (from.y + p.pos.y) / 2);
         const broadRadius = dist(from, p.pos) / 2 + p.width / 2 + 72;
+        for (const obstacle of this.obstacles) {
+          const impact = projectileSegmentHitsObstacle(from, p.pos, p.width, obstacle);
+          if (impact && impact.distance < (blocked?.distance ?? Infinity)) {
+            blocked = { distance: impact.distance, pos: impact.pos, obstacle };
+          }
+        }
         this.forEachNearbyUnit(mid, broadRadius, (u) => {
           if (!u.alive || u.uid === p.casterUid || u.kind === 'npc') return;
           if (!p.hitsAllies && u.team === p.team) return;
@@ -619,7 +626,17 @@ export class Sim {
             }
           }
         });
-        if (hit) {
+        if (blocked && blocked.distance <= hitD) {
+          p.pos = { ...blocked.pos };
+          p.dead = true;
+          this.events.emit({
+            t: 'projectile-block',
+            pid: p.pid,
+            pos: { ...blocked.pos },
+            obstacleId: blocked.obstacle.id,
+            feedback: blocked.obstacle.body.feedback
+          });
+        } else if (hit) {
           const impactTarget = hit as Unit;
           p.pos = { ...impactTarget.pos };
           this.projectileImpact(p, impactTarget, caster);

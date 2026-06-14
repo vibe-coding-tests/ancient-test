@@ -25,6 +25,7 @@ const STYLE_BY_HERO = {
   bristleback: 'quill-club',
   'chaos-knight': 'greatsword',
   chen: 'staff',
+  clinkz: 'bow',
   clockwerk: 'wrench',
   'crystal-maiden': 'frost-staff',
   'dark-seer': 'orb-staff',
@@ -217,7 +218,8 @@ function cone(name, mat, radius, length, axis = 'x', opts = {}, sides = 8) {
     normals.push(...n, ...n, ...n);
     indices.push(base, base + 1, base + 2);
     const cb = positions.length / 3;
-    for (const p of [[-length / 2, 0, 0], base1, base0].map((v) => transformPoint(axis === 'x' ? v : v, opts))) positions.push(p[0], p[1], p[2]);
+    const baseCenter = axis === 'x' ? [-length / 2, 0, 0] : axis === 'z' ? [0, 0, -length / 2] : [0, -length / 2, 0];
+    for (const p of [baseCenter, base1, base0].map((v) => transformPoint(v, opts))) positions.push(p[0], p[1], p[2]);
     const cn = transformNormal(axis === 'x' ? [-1, 0, 0] : axis === 'y' ? [0, -1, 0] : [0, 0, -1], opts);
     normals.push(...cn, ...cn, ...cn);
     indices.push(cb, cb + 1, cb + 2);
@@ -240,12 +242,54 @@ function partsFor(style, palette) {
     case 'branch-staff':
     case 'brush-staff':
     case 'wing-staff':
-    case 'orb-staff':
+    case 'orb-staff': {
+      // Shared haft + focus gem, then a per-style topper so the 28-strong mage
+      // cohort diverges by recognizable silhouette, not palette alone (Phase 4 A).
       add(cylinder('shaft', 'secondary', 0.035, 1.45, 'y', { y: 0.15 }));
       add(box('head-gem', glow, 0.22, 0.22, 0.22, { y: 0.95, rz: Math.PI / 4 }));
-      if (style === 'orb-staff' || style === 'lightning-staff') add(cylinder('halo', 'accent', 0.13, 0.035, 'z', { y: 0.95 }, 12));
-      if (style === 'brush-staff') add(box('brush', 'primary', 0.16, 0.36, 0.12, { y: 0.92, rz: -0.25 }));
+      switch (style) {
+        case 'orb-staff':
+          add(cylinder('halo', 'accent', 0.13, 0.035, 'z', { y: 0.95 }, 12));
+          add(box('node-l', 'accent', 0.06, 0.06, 0.06, { x: 0.16, y: 0.95 }));
+          add(box('node-r', 'accent', 0.06, 0.06, 0.06, { x: -0.16, y: 0.95 }));
+          break;
+        case 'lightning-staff':
+          add(cone('prong-l', 'accent', 0.05, 0.4, 'y', { x: 0.1, y: 1.2, rz: -0.4 }, 6));
+          add(cone('prong-r', 'accent', 0.05, 0.4, 'y', { x: -0.1, y: 1.2, rz: 0.4 }, 6));
+          add(cone('prong-c', 'accent', 0.05, 0.34, 'y', { y: 1.24 }, 6));
+          break;
+        case 'frost-staff':
+          for (const a of [0.5, -0.5, 1.4, -1.4]) add(cone(`shard${a}`, 'accent', 0.05, 0.34, 'y', { x: Math.sin(a) * 0.16, y: 1.06, rz: a }, 6));
+          break;
+        case 'flame-staff':
+          add(cylinder('bowl', 'secondary', 0.16, 0.12, 'y', { y: 0.92 }, 10));
+          for (const x of [0, 0.08, -0.08]) add(cone(`flame${x}`, 'primary', 0.06, 0.38, 'y', { x, y: 1.22 }, 6));
+          break;
+        case 'spirit-staff':
+          add(box('skull', 'primary', 0.2, 0.2, 0.18, { y: 1.18 }));
+          add(box('jaw', 'secondary', 0.16, 0.07, 0.14, { y: 1.06 }));
+          break;
+        case 'lantern-staff':
+          add(box('cage', 'secondary', 0.22, 0.3, 0.22, { y: 1.18 }));
+          add(box('lamp-glow', 'accent', 0.1, 0.16, 0.1, { y: 1.18 }));
+          break;
+        case 'branch-staff':
+          add(cylinder('twig-l', 'secondary', 0.025, 0.42, 'y', { x: 0.08, y: 1.16, rz: -0.8 }, 6));
+          add(cylinder('twig-r', 'secondary', 0.025, 0.36, 'y', { x: -0.08, y: 1.12, rz: 0.8 }, 6));
+          add(cone('leaf', 'primary', 0.16, 0.3, 'y', { y: 1.34 }, 8));
+          break;
+        case 'wing-staff':
+          add(box('wing-l', 'accent', 0.06, 0.4, 0.28, { x: 0.18, y: 1.06, rz: 0.5 }));
+          add(box('wing-r', 'accent', 0.06, 0.4, 0.28, { x: -0.18, y: 1.06, rz: -0.5 }));
+          break;
+        case 'brush-staff':
+          add(box('brush', 'primary', 0.16, 0.36, 0.12, { y: 0.92, rz: -0.25 }));
+          break;
+        default:
+          add(cylinder('cap', 'accent', 0.07, 0.06, 'y', { y: 1.12 }, 10));
+      }
       break;
+    }
     case 'bow':
       add(box('upper-bow', 'secondary', 0.08, 0.9, 0.07, { x: 0.12, y: 0.28, rz: -0.32 }));
       add(box('lower-bow', 'secondary', 0.08, 0.9, 0.07, { x: 0.12, y: -0.28, rz: 0.32 }));
@@ -308,6 +352,11 @@ function partsFor(style, palette) {
       add(cone('tip', blade, style === 'rapier' ? 0.055 : 0.08, 0.24, 'x', { x: style === 'greatsword' ? 1.32 : 1.05 }));
       if (style === 'glaive') add(box('crescent', 'accent', 0.34, 0.55, 0.05, { x: 0.82, rz: 0.25 }));
       if (style === 'psi-blade') add(box('glow', 'accent', 0.72, 0.22, 0.04, { x: 0.64 }));
+      // Per-style toppers so same-cohort blades read apart (Phase 4 A).
+      if (style === 'flame-sword') for (const y of [0.1, -0.1]) add(box('flame-fin', 'primary', 0.5, 0.07, 0.03, { x: 0.6, y, rz: y > 0 ? 0.2 : -0.2 }));
+      if (style === 'blood-blade') for (const x of [0.42, 0.7]) add(cone(`barb${x}`, 'accent', 0.05, 0.16, 'y', { x, y: 0.1, rz: -0.6 }, 5));
+      if (style === 'katana') add(box('tsuba', 'dark', 0.04, 0.2, 0.2, { x: 0.13 }));
+      if (style === 'cutlass') add(box('knuckle', 'secondary', 0.12, 0.26, 0.06, { x: 0.12, y: -0.12, rz: 0.3 }));
       break;
     case 'dagger':
     case 'claws':

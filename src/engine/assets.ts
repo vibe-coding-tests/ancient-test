@@ -28,29 +28,39 @@ export type HeroBaseId =
   | 'knight' | 'mage' | 'barbarian' | 'rogue'
   | 'spider' | 'dragonevolved' | 'demon' | 'wolf' | 'giant' | 'golelingevolved'
   | 'goblin' | 'velociraptor' | 'bull' | 'fox' | 'yeti' | 'crab' | 'ghost'
-  | 'bear' | 'treant' | 'flier' | 'serpent'
+  | 'bear' | 'treant' | 'flier' | 'serpent' | 'scorpion' | 'centaur'
   | 'procedural';
 
 const HERO_COHORTS: Record<Exclude<HeroBaseId, 'procedural'>, string[]> = {
-  // §3.1 KayKit Knight base — armored melee (17)
-  knight: ['juggernaut', 'sven', 'abaddon', 'dragon-knight', 'chaos-knight', 'legion-commander', 'omniknight', 'dawnbreaker', 'kunkka', 'mars', 'wraith-king', 'chen', 'clockwerk', 'timbersaw', 'slardar', 'faceless-void', 'pangolier'],
-  // §3.2 KayKit Mage base — robed caster (29)
-  mage: ['crystal-maiden', 'lich', 'lina', 'zeus', 'witch-doctor', 'invoker', 'lion', 'rubick', 'pugna', 'necrophos', 'death-prophet', 'disruptor', 'grimstroke', 'keeper-of-the-light', 'shadow-shaman', 'silencer', 'skywrath-mage', 'outworld-destroyer', 'warlock', 'dark-seer', 'dark-willow', 'enchantress', 'natures-prophet', 'queen-of-pain', 'storm-spirit', 'vengeful-spirit', 'dazzle', 'arc-warden', 'razor'],
+  // §3.1 KayKit Knight base — armored melee (15). Phase 4 Tier B moved the two
+  // mech offenders (clockwerk, timbersaw) off this humanoid base to the goblin family.
+  knight: ['juggernaut', 'sven', 'abaddon', 'dragon-knight', 'chaos-knight', 'legion-commander', 'omniknight', 'dawnbreaker', 'kunkka', 'mars', 'wraith-king', 'chen', 'slardar', 'faceless-void', 'pangolier'],
+  // §3.2 KayKit Mage base — robed caster (28). Phase 4 Tier B moved death-prophet
+  // (a legless floating banshee) off this standing humanoid base to the ghost family.
+  mage: ['crystal-maiden', 'lich', 'lina', 'zeus', 'witch-doctor', 'invoker', 'lion', 'rubick', 'pugna', 'necrophos', 'disruptor', 'grimstroke', 'keeper-of-the-light', 'shadow-shaman', 'silencer', 'skywrath-mage', 'outworld-destroyer', 'warlock', 'dark-seer', 'dark-willow', 'enchantress', 'natures-prophet', 'queen-of-pain', 'storm-spirit', 'vengeful-spirit', 'dazzle', 'arc-warden', 'razor'],
   // §3.3 KayKit Barbarian base — brute (15)
   barbarian: ['pudge', 'earthshaker', 'lifestealer', 'undying', 'ogre-magi', 'bristleback', 'troll-warlord', 'axe', 'magnus', 'brewmaster', 'alchemist', 'huskar', 'beastmaster', 'slark', 'underlord'],
   // §3.4 KayKit Rogue base — agile / ranged (18)
   rogue: ['sniper', 'mirana', 'drow-ranger', 'windranger', 'phantom-assassin', 'riki', 'bounty-hunter', 'anti-mage', 'templar-assassin', 'clinkz', 'meepo', 'void-spirit', 'ember-spirit', 'marci', 'phantom-lancer', 'monkey-king', 'luna', 'bloodseeker'],
-  // §3.5 Quaternius/generated creature bases (39)
-  spider: ['broodmother', 'weaver', 'nyx-assassin', 'sand-king'],
+  // §3.5 Quaternius/generated creature bases (42)
+  spider: ['broodmother', 'weaver', 'nyx-assassin'],
+  // sand-king is a scorpion: the generated scorpion family (pincers + arched stinger)
+  // reads truer than the arachnid `spider` base it used to share.
+  scorpion: ['sand-king'],
   dragonevolved: ['jakiro', 'viper', 'puck', 'winter-wyvern'],
   demon: ['doom', 'shadow-demon', 'shadow-fiend', 'night-stalker', 'terrorblade', 'visage', 'bane', 'leshrac'],
   wolf: ['lycan'],
   // Primal Beast wants a huge brute body; giant is the closest shipped base.
   giant: ['primal-beast'],
   golelingevolved: ['tiny', 'elder-titan', 'earth-spirit'],
-  goblin: ['techies', 'gyrocopter', 'tinker'],
+  // Keen tinkerers + mech suits. Phase 4 Tier B: clockwerk (goblin in a clockwork
+  // mech) and timbersaw (sawblade mech) read truer here than on the knight body.
+  goblin: ['techies', 'gyrocopter', 'tinker', 'clockwerk', 'timbersaw'],
   velociraptor: ['venomancer', 'snapfire'],
-  bull: ['spirit-breaker', 'centaur-warrunner'],
+  bull: ['spirit-breaker'],
+  // centaur-warrunner regains its humanoid horse-torso on the generated centaur family
+  // (the `bull` quadruped dropped it); shared with the centaur creeps.
+  centaur: ['centaur-warrunner'],
   fox: ['hoodwink'],
   yeti: ['tusk'],
   crab: ['tidehunter'],
@@ -59,7 +69,9 @@ const HERO_COHORTS: Record<Exclude<HeroBaseId, 'procedural'>, string[]> = {
   flier: ['phoenix', 'batrider'],
   serpent: ['naga-siren', 'medusa'],
   treant: ['treant-protector'],
-  ghost: ['spectre']
+  // Spectral, legless floaters. Phase 4 Tier B: death-prophet (a hovering banshee)
+  // reads truer on the wraith body than as a standing robed mage.
+  ghost: ['spectre', 'death-prophet']
 };
 
 // §3.6 procedural-only holdouts: genuinely abstract forms where an existing
@@ -92,7 +104,8 @@ export function heroBaseId(heroId: string | undefined): HeroBaseId {
 // policy, DECISIONS 2026-06-13): we ship a per-hero file for every cohort member.
 // Gating still keeps the runtime from firing 404s for cohorts whose art hasn't been
 // built, while the whole pipeline + procedural fallback stays wired and tested.
-// Asset policy: original + generated + CC0/CC-BY only, never Valve.
+// Asset policy: original/generated or any Creative Commons license incl. NC/SA
+// (DECISIONS 2026-06-14), never Valve/Blizzard files, no NoDerivatives.
 // ------------------------------------------------------------------
 
 /** KayKit humanoid cohorts whose per-hero GLBs are actually built + shipped. */
@@ -103,7 +116,7 @@ export const ENABLED_HERO_COHORTS: ReadonlySet<HeroBaseId> = new Set<HeroBaseId>
 const CREATURE_HERO_BASES: ReadonlySet<HeroBaseId> = new Set<HeroBaseId>([
   'spider', 'dragonevolved', 'demon', 'wolf', 'giant', 'golelingevolved',
   'goblin', 'velociraptor', 'bull', 'fox', 'yeti', 'crab', 'bear', 'treant',
-  'flier', 'serpent', 'ghost'
+  'flier', 'serpent', 'ghost', 'scorpion', 'centaur'
 ]);
 
 // A few creature bases reuse a vendored creep GLB whose filename differs from the
@@ -235,8 +248,12 @@ const CREATURE_BY_ID: Record<string, string> = {
   'hill-troll': 'tribal',
   kobold: 'goblin',
   'kobold-foreman': 'goblin',
-  'gnoll-assassin': 'goblin',
-  'vhoul-assassin': 'goblin',
+  // gnolls are hyena-folk; the generated gnoll family (hyena head + mane) reads
+  // feral where the small-humanoid `goblin` did not (no CC0 hyena/gnoll GLB exists).
+  'gnoll-assassin': 'gnoll',
+  // vhoul are desert undead → the CC0 skeleton (idle/run/attack/death) reads far
+  // closer than the goblin it replaced.
+  'vhoul-assassin': 'skeleton',
   'satyr-banisher': 'demon',
   'satyr-mindstealer': 'demon',
   // Harpies are fliers; the winged family (P1.3) reads airborne, not ground-bound.
@@ -254,8 +271,10 @@ const CREATURE_BY_ID: Record<string, string> = {
   'dark-troll-summoner': 'tribal',
   'dark-troll-summoner-minion': 'tribal',
   'prowler-shaman-minion': 'demon',
-  'centaur-courser': 'bull',
-  'centaur-conqueror': 'bull',
+  // Centaurs regain the humanoid torso on the generated centaur family (the `bull`
+  // quadruped dropped it); shared with the centaur-warrunner hero.
+  'centaur-courser': 'centaur',
+  'centaur-conqueror': 'centaur',
   thunderhide: 'bull',
   'ancient-thunderhide': 'bull',
   'elder-jungle-stalker': 'wolf',

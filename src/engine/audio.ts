@@ -323,6 +323,10 @@ export class ProceduralAudio {
         // hit reads as one event, not a double-thwack.
         this.projectileHit();
         break;
+      case 'projectile-block':
+        this.sweep(420, 150, 0.1, 'square', 0.08, 'sfx', 0.2);
+        this.noise(0.04, 0.06, 0.2);
+        break;
       case 'miss':
         this.missWhoosh();
         break;
@@ -387,6 +391,9 @@ export class ProceduralAudio {
         break;
       case 'projectile-expire':
         this.projectileFizzle();
+        break;
+      case 'movement-blocked':
+        this.sweep(180, 110, 0.08, 'triangle', 0.045, 'sfx', 0.25);
         break;
       case 'zone-spawn':
         this.zoneSpawn(ev.zid, ev.spec);

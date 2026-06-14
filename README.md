@@ -157,4 +157,4 @@ Content is data-driven. Adding heroes, items, creeps, or regions mostly means ad
 
 ## Credits
 
-Assets are original, generated, or permissively licensed. Item icons come from [game-icons.net](https://game-icons.net) (Lorc, Delapouite, and contributors) under CC BY 3.0. See [`CREDITS.md`](./CREDITS.md) for attributions and [`ASSETS.md`](./ASSETS.md) for the per-file license record.
+Assets are either made in-repo or licensed under Creative Commons. This is a non-commercial project, so that includes NonCommercial and ShareAlike licenses as well as CC0 and CC BY. We credit every downloaded asset and never use Valve or Blizzard files. Item icons come from [game-icons.net](https://game-icons.net) (Lorc, Delapouite, and contributors) under CC BY 3.0. See [`CREDITS.md`](./CREDITS.md) for attributions and [`ASSETS.md`](./ASSETS.md) for the per-file license record.

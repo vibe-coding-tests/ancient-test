@@ -1,10 +1,13 @@
 {
+  "_comment": "OVERWORLD_PLANNING §5.6: each item carries its declared fit target (targetHeightM + sizeClass) so the build stamps post-fit dimsM and the asset is sized against its band. Targets mirror world-sizes.generated.json (the resolver bridge); if they drift, refresh that map and update here.",
   "items": [
     {
       "src": "tmp/asset_src/poly-pizza/velociraptor_q.glb",
       "out": "heroes/snapfire.glb",
       "type": "model",
       "source": "Quaternius velociraptor via Poly Pizza — CC0",
+      "sizeClass": "human",
+      "targetHeightM": 1.8,
       "keepClips": ["idle", "run", "attack", "death"],
       "renameClips": {
         "Velociraptor_Idle": "idle",
@@ -19,11 +22,29 @@
       "out": "creeps/serpent.glb",
       "type": "model",
       "source": "Quaternius snake via Poly Pizza — CC0",
+      "sizeClass": "human",
+      "targetHeightM": 2.016,
       "keepClips": ["idle", "run", "attack"],
       "renameClips": {
         "Snake_Idle": "idle",
         "Snake_Walk": "run",
         "Snake_Attack": "attack"
+      },
+      "maxTex": 512
+    },
+    {
+      "src": "tmp/asset_src/poly-pizza/skeleton_q.glb",
+      "out": "creeps/skeleton.glb",
+      "type": "model",
+      "source": "Quaternius skeleton via Poly Pizza — CC0",
+      "sizeClass": "human",
+      "targetHeightM": 1.8,
+      "keepClips": ["idle", "run", "attack", "death"],
+      "renameClips": {
+        "Skeleton_Idle": "idle",
+        "Skeleton_Running": "run",
+        "Skeleton_Attack": "attack",
+        "Skeleton_Death": "death"
       },
       "maxTex": 512
     }

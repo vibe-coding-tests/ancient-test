@@ -1,6 +1,6 @@
 import { TUNING } from '../data/tuning';
-import { dist2 } from './math2d';
 import { REG } from './registry';
+import { radiusContainsUnit } from './collision';
 import { elementForItemHit, isActiveElement, reactionFor, type ActiveElement } from './resonance';
 import { armorMultiplier } from './stats';
 import { creditDamageThreat, creditHealingThreat } from './threat';
@@ -264,7 +264,7 @@ export function attackImpact(sim: Sim, attacker: Unit, victim: Unit): void {
     sim.forEachNearbyUnit(victim.pos, cleaveRadius + 64, (o) => {
       if (!o.alive || o === victim || o.team === attacker.team) return;
       if (o.summary.untargetable) return;
-      if (dist2(o.pos, victim.pos) <= cleaveRadius * cleaveRadius) {
+      if (radiusContainsUnit(victim.pos, cleaveRadius, o)) {
         applyDamage(sim, attacker, o, cleaveDmg, 'physical', { fromAttack: false, ignoreArmor: TUNING.cleaveIgnoresArmor });
       }
     });

@@ -8,6 +8,7 @@ import { itemSetDef } from '../data/sets';
 import { xpProgress } from '../core/progression';
 import { armorMultiplier } from '../core/stats';
 import { STATUS_META, type StatusInstance } from '../core/status';
+import { STATUS_ICON_PATHS, STATUS_ICON_VIEWBOX } from '../engine/status-glyphs.generated';
 import { itemReady, sellValue, computeBuyPlan } from '../core/items';
 import { buybackCost } from '../core/phase3';
 import { defaultInterfaceSettings } from '../core/phase4';
@@ -20,7 +21,7 @@ import { Game } from '../systems/game';
 import { ACTION_META, INPUT_ACTIONS, canRebindAction, glyphForAction, keyEventToBinding, rebindAction, resetKeyBindings } from '../systems/keybindings';
 import type { InputController } from '../systems/input';
 import type { Unit } from '../core/unit';
-import type { DifficultyTier, GambitAction, GambitCondition, GambitRule, GambitTargetMode, GraphicsSettings, HeroDef, InputAction, ItemDef, ItemRarity, ItemSave, SimEvent, StatModMap, StatusId, TalentDef } from '../core/types';
+import type { DifficultyTier, GambitAction, GambitCondition, GambitRule, GambitTargetMode, GraphicsSettings, HeroDef, InputAction, ItemDef, ItemRarity, ItemSave, SimEvent, StatModMap, StatusId, TalentDef, Vec2 } from '../core/types';
 import * as THREE from 'three';
 
 // ------------------------------------------------------------------
@@ -289,6 +290,7 @@ interface StatusView {
   instance: StatusInstance;
   label: string;
   glyph: string;
+  icon: string;
   cls: 'buff' | 'debuff' | 'aura';
   urgent: boolean;
   remaining: number;
@@ -317,6 +319,7 @@ export class Hud {
   private statusLayer: HTMLElement;
   private minimap: HTMLCanvasElement;
   private minimapCtx: CanvasRenderingContext2D;
+  private minimapLegend!: HTMLElement;
   private modal: HTMLElement;
   private hint: HTMLElement;
   private trialChoice: HTMLElement;
@@ -354,6 +357,7 @@ export class Hud {
   private dungeonEntryId: string | null = null;
 
   private floaters: Floater[] = [];
+  private contactFloaterAt = new Map<string, number>();
   private coinFx: CoinFx[] = [];
   private shownToasts = 0;
   private modalKind: 'none' | 'party' | 'shop' | 'menu' | 'talents' | 'journal' | 'codex' | 'character' | 'help' | 'gambit' | 'prefight' | 'dungeon-entry' | 'services' = 'none';
@@ -377,6 +381,11 @@ export class Hud {
   private killfeed: KillfeedEntry[] = [];
   private abilityCooldowns = new Map<string, number>();
   private abilityReadyUntil = new Map<string, number>();
+  private lastUiHoverEl: Element | null = null;
+  private heartbeatNextAt = 0;
+  private minimapPings: { x: number; y: number; at: number }[] = [];
+  private minimapHidden = new Set<string>();
+  private lastMinimapLegendKey = '';
 
   constructor(
     private game: Game,
@@ -389,6 +398,7 @@ export class Hud {
       <div id="party-col"></div>
       <div id="quest-tracker"></div>
       <canvas id="minimap" width="160" height="160"></canvas>
+      <div id="minimap-legend" class="hidden"></div>
       <div id="toast-col"></div>
       <div id="killfeed-lane"></div>
       <div id="floater-layer"></div>
@@ -414,6 +424,7 @@ export class Hud {
     this.statusLayer = this.root.querySelector('#status-layer')!;
     this.minimap = this.root.querySelector('#minimap')!;
     this.minimapCtx = this.minimap.getContext('2d')!;
+    this.minimapLegend = this.root.querySelector('#minimap-legend')!;
     this.modal = this.root.querySelector('#modal-root')!;
     this.hint = this.root.querySelector('#hud-hint')!;
     this.trialChoice = this.root.querySelector('#trial-choice')!;
@@ -478,6 +489,90 @@ export class Hud {
     });
     this.hoverCard = this.root.querySelector('#hover-card')!;
     this.setupHoverCard();
+    this.setupUiAudio();
+    this.setupMinimapInput();
+  }
+
+  // ---------- UI audio (§11) ----------
+
+  /** Interface cues: a hover tick on entering interactive elements and a click
+   *  on actionable presses. Open/close whooshes are owned by the modal methods,
+   *  and the error buzz lives in Game.msg('…','bad'). The synth path is the
+   *  guaranteed floor; muting/volume is handled inside the audio bus. */
+  private playUi(kind: 'hover' | 'click' | 'open' | 'close' | 'error' | 'ready' | 'heartbeat' | 'tab'): void {
+    this.game.audio.playUi?.(kind);
+  }
+
+  private static readonly UI_HOVER_SELECTOR =
+    'button, .top-btn, .help-btn, .ab-slot:not(.empty), .item-slot:not(.empty), .party-frame, ' +
+    '[data-open], [data-pin], [data-rebind], [data-choice], [data-livegym], [data-replay], [data-track], ' +
+    '.modal-tab, .close-x, .quest-track-row, select, input[type="checkbox"], input[type="range"]';
+
+  private static readonly UI_CLICK_SELECTOR =
+    'button, .top-btn, .help-btn, [data-open], [data-pin], [data-rebind], [data-choice], [data-livegym], ' +
+    '[data-replay], [data-track], .modal-tab, .close-x, .quest-track-row, select, input[type="checkbox"]';
+
+  private setupUiAudio(): void {
+    this.root.addEventListener('mouseover', (e) => {
+      const el = (e.target as HTMLElement | null)?.closest?.(Hud.UI_HOVER_SELECTOR) ?? null;
+      if (el && el !== this.lastUiHoverEl && !(el as HTMLButtonElement).disabled) {
+        this.lastUiHoverEl = el;
+        this.playUi('hover');
+      } else if (!el) {
+        this.lastUiHoverEl = null;
+      }
+    });
+    this.root.addEventListener('click', (e) => {
+      const el = (e.target as HTMLElement | null)?.closest?.(Hud.UI_CLICK_SELECTOR) as HTMLButtonElement | null;
+      if (el && !el.disabled) this.playUi('click');
+    }, true);
+  }
+
+  // ---------- minimap interaction (§8) ----------
+
+  /** Project a pointer event over the minimap to a sim-world point. The canvas
+   *  paints at `region.size` mapped to its backing width, so the world point is
+   *  just the click fraction times the region size — independent of CSS scale. */
+  private minimapPointToWorld(e: MouseEvent): Vec2 | null {
+    const rect = this.minimap.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return null;
+    const size = this.game.region.size;
+    const fx = (e.clientX - rect.left) / rect.width;
+    const fy = (e.clientY - rect.top) / rect.height;
+    return {
+      x: Math.max(0, Math.min(size, fx * size)),
+      y: Math.max(0, Math.min(size, fy * size))
+    };
+  }
+
+  private setupMinimapInput(): void {
+    this.minimap.addEventListener('contextmenu', (e) => e.preventDefault());
+    this.minimap.addEventListener('pointerdown', (e) => {
+      if (this.game.cinematic.active || this.input.uiModalOpen || this.modalKind !== 'none') return;
+      if (this.game.settings.minimap === false) return;
+      const point = this.minimapPointToWorld(e);
+      if (!point) return;
+      e.preventDefault();
+      e.stopPropagation();
+      // Alt-click pings; middle-click or Ctrl looks; left/right click moves (§8).
+      if (e.altKey) {
+        this.game.scene.showPing?.(point);
+        this.addMinimapPing(point);
+        this.playUi('tab');
+        return;
+      }
+      if (e.button === 1 || e.ctrlKey || e.metaKey) {
+        this.game.scene.lookAt?.(point);
+        this.playUi('tab');
+        return;
+      }
+      this.game.orderMove(point);
+    });
+  }
+
+  private addMinimapPing(point: Vec2): void {
+    this.minimapPings.push({ x: point.x, y: point.y, at: performance.now() });
+    if (this.minimapPings.length > 6) this.minimapPings.shift();
   }
 
   // ---------- hover card (rich tooltips) ----------
@@ -702,6 +797,7 @@ export class Hud {
           instance: st,
           label: this.statusLabel(st),
           glyph: this.statusGlyph(st),
+          icon: STATUS_ICON_PATHS[this.statusIconToken(st)] ?? '',
           cls,
           urgent: isDebuff && HARD_CC.includes(st.status),
           remaining,
@@ -733,6 +829,22 @@ export class Hud {
     const label = this.statusLabel(st);
     if (st.status !== 'buff') return STATUS_GLYPHS[st.status];
     return label.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase() || STATUS_GLYPHS.buff;
+  }
+
+  /** Resolve a status to its curated-icon token (§4/§13). Non-buff carriers map
+   *  by StatusId; buff carriers map by the derived sub-kind the label names. */
+  private statusIconToken(st: StatusInstance): string {
+    if (st.status !== 'buff') return st.status;
+    switch (this.statusLabel(st)) {
+      case 'Damage Over Time': return 'dot';
+      case 'Burning Aura': return 'aura';
+      case 'Shield': return 'shield';
+      case 'Regen': return 'regen';
+      case 'Power': return 'power';
+      case 'Haste': return 'haste';
+      case 'Debuff': return 'debuff';
+      default: return 'buff';
+    }
   }
 
   private statusSource(st: StatusInstance): string {
@@ -767,7 +879,10 @@ export class Hud {
         accent: view.cls === 'debuff' ? 'var(--bad)' : view.cls === 'aura' ? 'var(--brass-lite)' : 'var(--good)'
       });
       const time = Number.isFinite(view.remaining) ? `<em>${Math.ceil(view.remaining)}</em>` : '';
-      return `<span class="status-pip ${view.cls} ${view.urgent ? 'urgent' : ''}" style="--status-deg:${view.ringDeg.toFixed(0)}deg"${tip}><b>${esc(view.glyph)}</b>${time}</span>`;
+      const mark = view.icon
+        ? `<svg class="status-ico" viewBox="0 0 ${STATUS_ICON_VIEWBOX} ${STATUS_ICON_VIEWBOX}" aria-hidden="true"><path d="${view.icon}"/></svg>`
+        : `<b>${esc(view.glyph)}</b>`;
+      return `<span class="status-pip ${view.cls} ${view.urgent ? 'urgent' : ''}" style="--status-deg:${view.ringDeg.toFixed(0)}deg"${tip}>${mark}${time}</span>`;
     }).join('');
     return `<div class="status-strip ${scope}">${pips}</div>`;
   }
@@ -821,7 +936,43 @@ export class Hud {
     this.renderLiveGym();
     this.renderCombatReadout();
     this.renderCinematic();
+    this.updateLowHpHeartbeat();
     if (this.modalKind === 'shop' || this.modalKind === 'party') this.refreshModalDynamic();
+  }
+
+  /** Low-HP heartbeat (§11): a slow pulse that fades in under ~25% HP and
+   *  quickens as it drops. The audio cue itself is gentle; photosensitivity/
+   *  reduced-motion only governs the matching screen vignette, so the cue stays
+   *  but its intensity is capped. Silent in menus, cinematics, and on death. */
+  private updateLowHpHeartbeat(): void {
+    const g = this.game;
+    const u = g.controlledUnit() ?? g.activeUnit();
+    const paused = g.paused || g.cinematic.active || this.modalKind === 'menu';
+    if (!u || !u.alive || paused || u.stats.maxHp <= 0) {
+      this.heartbeatNextAt = 0;
+      this.root.classList.remove('low-hp');
+      return;
+    }
+    const frac = u.hp / u.stats.maxHp;
+    if (frac >= 0.25) {
+      this.heartbeatNextAt = 0;
+      this.root.classList.remove('low-hp');
+      return;
+    }
+    // 25% HP → ~1.05s between beats; 5% HP → ~0.5s. The danger vignette respects
+    // the photosensitivity/reduced-motion floor by simply not pulsing.
+    const danger = Math.max(0, Math.min(1, (0.25 - frac) / 0.2));
+    const interval = 1050 - danger * 550;
+    const now = performance.now();
+    if (this.heartbeatNextAt === 0) this.heartbeatNextAt = now + interval;
+    if (now >= this.heartbeatNextAt) {
+      this.heartbeatNextAt = now + interval;
+      this.playUi('heartbeat');
+      if (!this.reducedMotion()) {
+        this.root.classList.add('low-hp');
+        window.setTimeout(() => this.root.classList.remove('low-hp'), 220);
+      }
+    }
   }
 
   private interfaceSettings(): ReturnType<typeof defaultInterfaceSettings> {
@@ -893,51 +1044,102 @@ export class Hud {
     `;
   }
 
+  // Minimap POI categories (§8): shaped glyphs (never color-only) with a
+  // legend/filter for the dense ones. `legend` lists what the filter exposes.
+  private static readonly MINIMAP_CATEGORIES: { id: string; label: string; color: string; legend: boolean }[] = [
+    { id: 'camps', label: 'Camps', color: '#db6b55', legend: true },
+    { id: 'gates', label: 'Gates', color: '#7aff9a', legend: true },
+    { id: 'gyms', label: 'Gyms', color: '#ff9ad5', legend: true },
+    { id: 'dungeons', label: 'Dungeons', color: '#b28cff', legend: true },
+    { id: 'echoes', label: 'Echoes', color: '#8fe8ff', legend: true },
+    { id: 'waypoints', label: 'Waypoints', color: '#7af7ff', legend: true },
+    { id: 'chests', label: 'Chests', color: '#ffd86a', legend: true },
+    { id: 'shards', label: 'Shards', color: '#d990ff', legend: true },
+    { id: 'sources', label: 'Sources', color: '#ff9f57', legend: true }
+  ];
+
+  /** Draw a shaped POI glyph on the minimap — shape carries the category so the
+   *  map reads without relying on color alone (accessibility, §1/§8). */
+  private minimapGlyph(
+    ctx: CanvasRenderingContext2D,
+    shape: 'circle' | 'square' | 'tri-up' | 'tri-down' | 'diamond' | 'cross' | 'house' | 'star',
+    cx: number, cy: number, r: number, color: string, filled: boolean
+  ): void {
+    ctx.beginPath();
+    switch (shape) {
+      case 'circle': ctx.arc(cx, cy, r, 0, Math.PI * 2); break;
+      case 'square': ctx.rect(cx - r, cy - r, r * 2, r * 2); break;
+      case 'tri-up': ctx.moveTo(cx, cy - r); ctx.lineTo(cx + r, cy + r); ctx.lineTo(cx - r, cy + r); ctx.closePath(); break;
+      case 'tri-down': ctx.moveTo(cx, cy + r); ctx.lineTo(cx + r, cy - r); ctx.lineTo(cx - r, cy - r); ctx.closePath(); break;
+      case 'diamond': ctx.moveTo(cx, cy - r); ctx.lineTo(cx + r, cy); ctx.lineTo(cx, cy + r); ctx.lineTo(cx - r, cy); ctx.closePath(); break;
+      case 'house': ctx.moveTo(cx, cy - r); ctx.lineTo(cx + r, cy - r * 0.1); ctx.lineTo(cx + r, cy + r); ctx.lineTo(cx - r, cy + r); ctx.lineTo(cx - r, cy - r * 0.1); ctx.closePath(); break;
+      case 'star':
+        for (let i = 0; i < 10; i++) {
+          const rad = i % 2 === 0 ? r : r * 0.45;
+          const a = (Math.PI / 5) * i - Math.PI / 2;
+          const px = cx + Math.cos(a) * rad, py = cy + Math.sin(a) * rad;
+          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        break;
+      case 'cross':
+        ctx.moveTo(cx - r, cy); ctx.lineTo(cx + r, cy); ctx.moveTo(cx, cy - r); ctx.lineTo(cx, cy + r);
+        ctx.strokeStyle = color; ctx.lineWidth = 1.6; ctx.stroke();
+        return;
+    }
+    if (filled) { ctx.fillStyle = color; ctx.fill(); ctx.strokeStyle = 'rgba(7,16,24,0.7)'; ctx.lineWidth = 1; ctx.stroke(); }
+    else { ctx.strokeStyle = color; ctx.lineWidth = 1.8; ctx.stroke(); }
+  }
+
   private renderMinimap(): void {
     const g = this.game;
-    this.minimap.classList.toggle('hidden', g.settings.minimap === false);
-    if (g.settings.minimap === false) return;
+    const hidden = g.settings.minimap === false;
+    this.minimap.classList.toggle('hidden', hidden);
+    this.minimapLegend.classList.toggle('hidden', hidden);
+    if (hidden) return;
     const ctx = this.minimapCtx;
     const s = this.minimap.width;
     const scale = s / g.region.size;
-    const dot = (x: number, y: number, r: number, color: string, stroke = false): void => {
-      ctx.beginPath();
-      ctx.arc(x * scale, y * scale, r, 0, Math.PI * 2);
-      if (stroke) {
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 2;
-        ctx.stroke();
-      } else {
-        ctx.fillStyle = color;
-        ctx.fill();
-      }
-    };
+    const show = (cat: string): boolean => !this.minimapHidden.has(cat);
+    const glyph = (shape: Parameters<typeof this.minimapGlyph>[1], x: number, y: number, r: number, color: string, filled = false): void =>
+      this.minimapGlyph(ctx, shape, x * scale, y * scale, r, color, filled);
     const bg = { grass: '#263b26', snow: '#dce8f2', desert: '#7a5d32', wasteland: '#3a2930', coast: '#23465c', forest: '#1f3d2e' }[g.region.biome];
     ctx.clearRect(0, 0, s, s);
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, s, s);
+
+    // Day/night tint matching the world clock (§8): darken toward midnight.
+    const t = g.dayTime;
+    const daylight = 0.5 + 0.5 * Math.cos((t - 0.25) * Math.PI * 2);
+    const nightAmt = 1 - daylight;
+    if (nightAmt > 0.02) {
+      ctx.fillStyle = `rgba(20,30,68,${(nightAmt * 0.36).toFixed(3)})`;
+      ctx.fillRect(0, 0, s, s);
+    }
     ctx.strokeStyle = 'rgba(255,255,255,0.18)';
     ctx.strokeRect(0.5, 0.5, s - 1, s - 1);
-    for (const camp of g.region.camps) dot(camp.pos.x, camp.pos.y, 1.6, '#db6b55');
-    for (const spawn of g.region.heroSpawns) dot(spawn.pos.x, spawn.pos.y, 2.4, '#b88cff', true);
-    for (const echo of g.region.echoSpawns ?? []) dot(echo.pos.x, echo.pos.y, 2.2, '#8fe8ff', true);
-    for (const gate of g.region.gates ?? []) dot(gate.pos.x, gate.pos.y, 2.7, '#7aff9a', true);
-    for (const gym of g.region.gyms ?? []) dot(gym.pos.x, gym.pos.y, 3, '#ff9ad5', true);
-    for (const dungeon of g.region.dungeons ?? []) dot(dungeon.pos.x, dungeon.pos.y, 3, '#b28cff', true);
-    for (const wp of g.region.waypoints ?? []) dot(wp.pos.x, wp.pos.y, 2.5, g.discovered.has(wp.id) ? '#7af7ff' : '#446b73', true);
-    for (const chest of g.region.chests ?? []) {
-      if (!g.openedChests.has(chest.id)) dot(chest.pos.x, chest.pos.y, 2, '#ffd86a', true);
+
+    if (show('camps')) for (const camp of g.region.camps) glyph('tri-up', camp.pos.x, camp.pos.y, 2, '#db6b55', true);
+    for (const spawn of g.region.heroSpawns) glyph('circle', spawn.pos.x, spawn.pos.y, 2.4, '#b88cff');
+    if (show('echoes')) for (const echo of g.region.echoSpawns ?? []) glyph('diamond', echo.pos.x, echo.pos.y, 2.4, '#8fe8ff');
+    if (show('gates')) for (const gate of g.region.gates ?? []) glyph('tri-up', gate.pos.x, gate.pos.y, 2.9, '#7aff9a');
+    if (show('gyms')) for (const gym of g.region.gyms ?? []) glyph('square', gym.pos.x, gym.pos.y, 2.7, '#ff9ad5');
+    if (show('dungeons')) for (const dungeon of g.region.dungeons ?? []) glyph('tri-down', dungeon.pos.x, dungeon.pos.y, 2.9, '#b28cff');
+    if (show('waypoints')) for (const wp of g.region.waypoints ?? []) glyph('cross', wp.pos.x, wp.pos.y, 2.6, g.discovered.has(wp.id) ? '#7af7ff' : '#446b73');
+    if (show('chests')) for (const chest of g.region.chests ?? []) {
+      if (!g.openedChests.has(chest.id)) glyph('square', chest.pos.x, chest.pos.y, 1.9, '#ffd86a');
     }
-    for (const shard of g.region.shards ?? []) {
-      if (!g.collectedShards.has(shard.id)) dot(shard.pos.x, shard.pos.y, 1.8, '#d990ff');
+    if (show('shards')) for (const shard of g.region.shards ?? []) {
+      if (!g.collectedShards.has(shard.id)) glyph('diamond', shard.pos.x, shard.pos.y, 1.9, '#d990ff', true);
     }
-    for (const src of g.region.elementSources ?? []) dot(src.pos.x, src.pos.y, 1.8, '#ff9f57');
-    dot(g.region.town.pos.x, g.region.town.pos.y, 4, '#ffd86a', true);
-    dot(g.region.shrine.pos.x, g.region.shrine.pos.y, 2.4, '#67d7ff');
+    if (show('sources')) for (const src of g.region.elementSources ?? []) glyph('tri-up', src.pos.x, src.pos.y, 1.9, '#ff9f57', true);
+    glyph('house', g.region.town.pos.x, g.region.town.pos.y, 3.6, '#ffd86a', true);
+    glyph('star', g.region.shrine.pos.x, g.region.shrine.pos.y, 3, '#67d7ff', true);
     // Walking quest givers: gold when a reward is ready, cyan when one is active.
     for (const giver of g.questGiverViews()) {
-      dot(giver.x, giver.y, 2.6, giver.hasClaimable ? '#ffd24a' : giver.hasActive ? '#73d9ff' : '#8aa0b8', true);
+      glyph('circle', giver.x, giver.y, 2.6, giver.hasClaimable ? '#ffd24a' : giver.hasActive ? '#73d9ff' : '#8aa0b8');
     }
+
     const reducedMotion = this.reducedMotion();
     const qNow = reducedMotion ? 0 : performance.now();
     for (const marker of this.questMinimapMarkers(this.trackedQuests())) {
@@ -961,10 +1163,88 @@ export class Hud {
       ctx.textBaseline = 'middle';
       ctx.fillText('Q', x, y + 0.3);
     }
+
+    this.renderMinimapPings(ctx, scale);
+    this.renderMinimapViewport(ctx, scale);
+
     const u = g.activeUnit();
     if (u) {
-      dot(u.pos.x, u.pos.y, 3.3, '#ffffff');
-      dot(u.pos.x, u.pos.y, 5.2, '#ffd86a', true);
+      this.minimapGlyph(ctx, 'circle', u.pos.x * scale, u.pos.y * scale, 2.6, '#ffffff', true);
+      this.minimapGlyph(ctx, 'circle', u.pos.x * scale, u.pos.y * scale, 5.2, '#ffd86a', false);
+    }
+    this.renderMinimapLegend();
+  }
+
+  /** Expanding ping rings dropped by Alt-clicking the minimap (§8). */
+  private renderMinimapPings(ctx: CanvasRenderingContext2D, scale: number): void {
+    const now = performance.now();
+    this.minimapPings = this.minimapPings.filter((p) => now - p.at < 2200);
+    for (const p of this.minimapPings) {
+      const age = (now - p.at) / 2200;
+      const r = 3 + age * 12;
+      ctx.beginPath();
+      ctx.arc(p.x * scale, p.y * scale, r, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(122,223,255,${(1 - age).toFixed(3)})`;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+  }
+
+  /** Camera-viewport rectangle showing the current view bounds on the map (§8). */
+  private renderMinimapViewport(ctx: CanvasRenderingContext2D, scale: number): void {
+    const corners = this.game.scene.viewBoundsSim?.();
+    if (!corners || corners.length !== 4) return;
+    ctx.save();
+    ctx.beginPath();
+    corners.forEach((c, i) => {
+      const x = c.x * scale, y = c.y * scale;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.closePath();
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  private renderMinimapLegend(): void {
+    const g = this.game;
+    const present = Hud.MINIMAP_CATEGORIES.filter((cat) => cat.legend && this.minimapCategoryPresent(cat.id));
+    const key = present.map((c) => `${c.id}:${this.minimapHidden.has(c.id) ? 0 : 1}`).join('|');
+    if (key === this.lastMinimapLegendKey) return;
+    this.lastMinimapLegendKey = key;
+    if (present.length === 0) {
+      this.minimapLegend.innerHTML = '';
+      return;
+    }
+    this.minimapLegend.innerHTML = present.map((cat) => {
+      const off = this.minimapHidden.has(cat.id);
+      return `<button class="mm-legend-chip ${off ? 'off' : ''}" data-mm-cat="${cat.id}" title="Toggle ${esc(cat.label)} on the minimap">
+        <i style="background:${cat.color}"></i>${esc(cat.label)}</button>`;
+    }).join('');
+    this.minimapLegend.querySelectorAll<HTMLElement>('[data-mm-cat]').forEach((el) => {
+      el.addEventListener('click', () => {
+        const cat = el.dataset.mmCat!;
+        if (this.minimapHidden.has(cat)) this.minimapHidden.delete(cat);
+        else this.minimapHidden.add(cat);
+        this.lastMinimapLegendKey = '';
+      });
+    });
+  }
+
+  private minimapCategoryPresent(cat: string): boolean {
+    const r = this.game.region;
+    switch (cat) {
+      case 'camps': return r.camps.length > 0;
+      case 'gates': return (r.gates?.length ?? 0) > 0;
+      case 'gyms': return (r.gyms?.length ?? 0) > 0;
+      case 'dungeons': return (r.dungeons?.length ?? 0) > 0;
+      case 'echoes': return (r.echoSpawns?.length ?? 0) > 0;
+      case 'waypoints': return (r.waypoints?.length ?? 0) > 0;
+      case 'chests': return (r.chests?.length ?? 0) > 0;
+      case 'shards': return (r.shards?.length ?? 0) > 0;
+      case 'sources': return (r.elementSources?.length ?? 0) > 0;
+      default: return false;
     }
   }
 
@@ -1439,12 +1719,21 @@ export class Hud {
         }
         case 'immune-block': {
           const u = g.sim.unit(ev.uid);
-          if (u) this.addFloater(u.pos.x, u.pos.y, 'IMMUNE', 'immunef');
+          if (u) this.addContactFloater(`immune:${u.uid}`, u.pos.x, u.pos.y, 'IMMUNE', 'immunef blockedf');
           break;
         }
         case 'miss': {
           const u = g.sim.unit(ev.target);
-          if (u) this.addFloater(u.pos.x, u.pos.y, 'MISS', 'missf');
+          if (u) this.addContactFloater(`miss:${u.uid}`, u.pos.x, u.pos.y, 'MISS', 'missf');
+          break;
+        }
+        case 'projectile-block': {
+          this.addContactFloater(`projectile-block:${ev.obstacleId ?? `${Math.round(ev.pos.x)}:${Math.round(ev.pos.y)}`}`, ev.pos.x, ev.pos.y, 'BLOCKED', 'blockedf');
+          break;
+        }
+        case 'movement-blocked': {
+          const label = ev.reason === 'out-of-range' ? 'OUT OF RANGE' : ev.reason === 'no-path' ? 'NO PATH' : 'BLOCKED';
+          this.addContactFloater(`move-block:${ev.uid}:${ev.reason}`, ev.pos.x, ev.pos.y, label, ev.reason === 'out-of-range' ? 'rangef' : 'blockedf');
           break;
         }
         case 'death': {
@@ -1499,6 +1788,14 @@ export class Hud {
       scale: opts.scale ?? 1,
       driftX: opts.driftX ?? 0
     });
+  }
+
+  private addContactFloater(key: string, simX: number, simY: number, text: string, cls: string): void {
+    const now = performance.now();
+    const last = this.contactFloaterAt.get(key) ?? -Infinity;
+    if (now - last < 550) return;
+    this.contactFloaterAt.set(key, now);
+    this.addFloater(simX, simY, text, cls, { life: 0.9, scale: 0.95 });
   }
 
   private updateFloaters(): void {
@@ -1700,6 +1997,7 @@ export class Hud {
       this.closeModal();
       return;
     }
+    this.playUi(this.modalKind === 'none' ? 'open' : 'tab');
     this.modalKind = kind;
     this.input.uiModalOpen = true;
     this.modal.classList.remove('hidden');
@@ -1720,6 +2018,7 @@ export class Hud {
 
   closeModal(): void {
     if (this.modalKind === 'gambit') this.commitGambit();
+    if (this.modalKind !== 'none') this.playUi('close');
     this.modalKind = 'none';
     this.questGiverFocus = null;
     this.input.uiModalOpen = false;
@@ -1756,7 +2055,12 @@ export class Hud {
           <h3>Mouse</h3>
           <div class="help-row"><kbd>RMB</kbd><span>Move, attack, or interact with hovered targets</span></div>
           <div class="help-row"><kbd>Shift</kbd><span>Queue move, attack, ability, and item orders</span></div>
-          <div class="help-row"><kbd>Alt+Map</kbd><span>Ping a minimap point when map pings are available</span></div>
+        </section>
+        <section class="help-section help-notes">
+          <h3>Minimap</h3>
+          <div class="help-row"><kbd>Click</kbd><span>Move the hero to the clicked point</span></div>
+          <div class="help-row"><kbd>Ctrl/MMB</kbd><span>Look at a point without moving</span></div>
+          <div class="help-row"><kbd>Alt+Click</kbd><span>Drop a ping at that point</span></div>
         </section>
       </div>`
     );
@@ -1996,6 +2300,7 @@ export class Hud {
     this.gambitDraft = rec.gambits.length > 0
       ? structuredClone(rec.gambits)
       : buildDefaultGambit(REG.hero(rec.heroId).roles);
+    this.playUi(this.modalKind === 'none' ? 'open' : 'tab');
     this.modalKind = 'gambit';
     this.input.uiModalOpen = true;
     this.modal.classList.remove('hidden');
@@ -2233,6 +2538,7 @@ export class Hud {
 
   openDungeonEntry(dungeonId: string): void {
     this.dungeonEntryId = dungeonId;
+    this.playUi(this.modalKind === 'none' ? 'open' : 'tab');
     this.modalKind = 'dungeon-entry';
     this.input.uiModalOpen = true;
     this.modal.classList.remove('hidden');
@@ -2244,6 +2550,7 @@ export class Hud {
   openQuestGiver(giverId: string): void {
     this.questGiverFocus = giverId;
     if (this.modalKind !== 'journal') {
+      this.playUi(this.modalKind === 'none' ? 'open' : 'tab');
       this.modalKind = 'journal';
       this.input.uiModalOpen = true;
       this.modal.classList.remove('hidden');
@@ -2316,6 +2623,7 @@ export class Hud {
 
   openGymPrefight(gymId: string): void {
     this.prefightGymId = gymId;
+    this.playUi(this.modalKind === 'none' ? 'open' : 'tab');
     this.modalKind = 'prefight';
     this.input.uiModalOpen = true;
     this.modal.classList.remove('hidden');

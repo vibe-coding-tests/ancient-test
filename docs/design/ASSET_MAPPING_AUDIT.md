@@ -30,9 +30,10 @@ visual stack** (3D held GLBs, 2D icon sprites, procedural glyphs — Section 5).
 live in `src/engine/assets.ts` and `scripts/assets/generate_item_icons.mjs`; provenance
 lives in `ASSETS.md`.
 
-The standing rules still apply: original / generated / CC0 / CC-BY only, never Valve
-or Blizzard files; every asset is optional at runtime; the build must boot with
-`public/assets/` empty.
+The standing rules still apply: any Creative Commons or permissive license, including
+NonCommercial/ShareAlike (DECISIONS 2026-06-14) — never Valve or Blizzard files, and no
+NoDerivatives (the build retextures/retrims/recolors); every asset is optional at
+runtime; the build must boot with `public/assets/` empty.
 
 ---
 
@@ -297,9 +298,11 @@ monkey-king-bar, abyssal-blade, mjollnir, satanic, bloodthorn, desolator.
   `crystalys`, `diffusal-blade`, `maelstrom`, `silver-edge`, `echo-sabre`, `nullifier`,
   `skull-basher`, `ethereal-blade`, `dagon`, `meteor-hammer`, `heavens-halberd`.
 
-Upgrade priority: **low**. They're small, motion-correct, and read fine in play. Replace
-an individual one only if it looks wrong, or batch-upgrade the generator to smoother
-shapes (bevels/lathe instead of raw boxes) if the artifact tier ever gets a polish pass.
+Upgrade priority: **moderate, and part of the bar** (Phase 5 is required, not optional).
+They're motion-correct so urgency is lower than a static body, but "production-ready"
+means they read as authored silhouettes, not raw primitive assemblies — batch-upgrade the
+generator to smoother shapes (bevels/lathe instead of raw boxes) and give the marquee
+artifacts recognizable shapes. Replace an individual one sooner if it looks wrong.
 
 ### 5.2 2D icon sprites (191 + 56, DL-CCBY)
 
@@ -385,7 +388,7 @@ override) instead of `PROCEDURAL_HOLDOUTS`, and drop them from the holdout sets.
 leviathan" / crab base — that describes `tidehunter`, not `primal-beast`. Correct or
 remove it.
 
-### D. Download targets (CC0/CC-BY) for the worst faithfulness gaps
+### D. Download targets (any CC / permissive, incl. NC/SA) for the worst faithfulness gaps
 
 **Every candidate must ship idle + a locomotion clip; reject static meshes.**
 
@@ -405,13 +408,14 @@ remove it.
 winged creature, bear, or treant turns up, swap it in — they back several creeps and
 heroes, so the upgrade propagates widely.
 
-### F. Item + hero weapons (CUSTOM-GEN) — low priority
+### F. Item + hero weapons (CUSTOM-GEN) — part of the bar (Phase 5 required)
 
-- 13 item weapon GLBs: motion-correct (hand-socket), read fine; replace individually
-  only if one looks wrong, or batch-smooth the generator in a future polish pass.
-- 80 hero default weapons: the cheapest per-hero identity lever inside a shared-body
-  cohort — a better generated/signature weapon set is worth more than touching the item
-  weapons. Low–medium.
+- 13 item weapon GLBs: motion-correct (hand-socket) but raw primitive assemblies;
+  Phase 5 (required) batch-smooths the generator and gives the marquee artifacts
+  recognizable silhouettes. Replace individually sooner if one looks wrong.
+- Hero default weapons: **done** (Phase 4 Tier A). Every humanoid-cohort hero carries a
+  per-hero signature weapon shape (`STYLE_BY_HERO` + per-style geometry), so cohort-mates
+  diverge by weapon silhouette + palette. Keep it covered by tests.
 - 2D item icon sprites (game-icons.net): no action except keep the **CC-BY attribution**
   shipped in `ASSETS.md` + `CREDITS.md`. Don't strip it.
 - Procedural glyph/portrait floor: leave as-is; it's the empty-assets boot floor.
@@ -453,7 +457,9 @@ Production-ready means all of these hold and are enforced by `assets:check` + te
    / Quaternius-CC0 / KayKit-CC0 / Poly-Pizza / game-icons, so this audit regenerates.
 6. **Attribution intact.** CC-BY credits (game-icons, tusk/hoodwink) shipped in
    `ASSETS.md` + `CREDITS.md`.
-7. **Gates green.** `npm run assets:check && npm run typecheck && npm test && npm run build`.
+7. **Held weapons read as authored.** The marquee item GLBs and the per-hero weapon set
+   carry recognizable silhouettes, not raw primitive blocks (Phase 4 Tier A + Phase 5).
+8. **Gates green.** `npm run assets:check && npm run typecheck && npm test && npm run build`.
 
 ### Phase 0 — Guardrails (no art; do first)
 
@@ -508,29 +514,41 @@ Replace the "closest available" stand-ins with faithful, animated creatures.
 The 80 same-body cohort heroes (Section 2.1) are the biggest remaining unfaithfulness.
 Full per-hero bodies are out of scope; this phase de-risks the *worst* reads only.
 
-- **Tier A (cheap, high value):** upgrade the generated hero weapon set (Section 5.4) to
-  per-hero signature shapes so cohort-mates diverge by weapon + palette.
-- **Tier B (targeted downloads):** move the strongest non-humanoid offenders onto
-  existing or downloaded creature bases — e.g. `winter-wyvern`→`dragonevolved`,
-  `clockwerk`/`timbersaw`→`goblin`(mech), `pudge`/`undying`→a brute/zombie body. Pick
-  from the Section 2.1 offender list; each must be animated.
+- **Tier A (cheap, high value) — landed:** the generated hero weapon set (Section 5.4)
+  now carries a per-hero signature shape (`STYLE_BY_HERO` + per-style geometry in
+  `generate_hero_weapons.mjs`), so cohort-mates diverge by weapon silhouette + palette,
+  not palette alone. Pinned by tests.
+- **Tier B (mapping edits, animated bases) — landed for the clearest reads:** the worst
+  non-humanoid cohort offenders now ride animated creature bodies — `winter-wyvern`→
+  `dragonevolved`, `clockwerk`/`timbersaw`→`goblin` (mech), `death-prophet`→`ghost`
+  (banshee). Remaining offenders (`pudge`/`undying`→a brute/zombie body, the energy
+  elementals) need a download and stay on their cohort body for now.
 - **Tier C (backlog):** bespoke per-hero downloads for marquee heroes, opportunistically.
 - **Exit:** no hero whose Dota silhouette is strongly non-humanoid is stuck on a plain
   humanoid base; the rest are accepted cohort stand-ins by design.
 
-### Phase 5 — Item + weapon polish (optional, lowest priority)
+### Phase 5 — Item + weapon polish (required)
 
-- Smooth the generated item-weapon generator (bevels/lathe vs raw boxes) if the artifact
-  tier gets a polish pass; add GLBs for the weapon-cores listed in §5.1 only on demand.
-- Leave the game-icons sprite set and procedural floor as-is (keep attribution).
-- **Exit:** none required for production; this is gravy.
+The held layer has to read as authored too, so this is part of the production bar, not
+gravy. (Phase 4 Tier A already landed per-hero weapon-shape divergence; this phase closes
+the item-weapon side and keeps the hero side covered.)
+
+- Smooth the generated item-weapon generator (bevels/lathe vs raw boxes) and give the
+  marquee artifacts the recognizable silhouettes called out in §5.1 (scythe, hammer,
+  orb, sun); add GLBs for the weapon-cores listed there as the tier expands.
+- Keep the per-hero weapon-shape divergence (Phase 4 Tier A) covered by tests so a
+  regression to one shared shape can't land.
+- Leave the game-icons sprite set and procedural floor as-is (keep CC-BY attribution).
+- **Exit:** no item or hero weapon ships as a raw primitive block where a recognizable
+  silhouette is achievable; gates green.
 
 ### Consolidated download list
 
-Source preference: Quaternius / Poly Pizza / KayKit (CC0) first, then any permissive
-CC-BY with attribution. **Animation is mandatory for every body** (idle + locomotion);
-reject static meshes. Process through `tmp/asset_src/` → a spec under
-`scripts/assets/specs/` → `build_assets.mjs`, then add an `ASSETS.md` row.
+Source preference: Quaternius / Poly Pizza / KayKit (CC0) first, then any CC-BY, then
+NonCommercial/ShareAlike (CC-BY-NC / CC-BY-SA / CC-BY-NC-SA) with attribution
+(DECISIONS 2026-06-14). Avoid only NoDerivatives. **Animation is mandatory for every
+body** (idle + locomotion); reject static meshes. Process through `tmp/asset_src/` → a
+spec under `scripts/assets/specs/` → `build_assets.mjs`, then add an `ASSETS.md` row.
 
 | Need | For | Phase | If not found |
 |---|---|---|---|
@@ -552,7 +570,8 @@ reject static meshes. Process through `tmp/asset_src/` → a spec under
 | 2 | fix 3 static bodies | 0–3 | M | high — animation |
 | 3 | faithfulness species downloads | 0–4 | M | medium |
 | 4 | hero identity (weapons + worst offenders) | a few | L | medium–high |
-| 5 | item/weapon polish | optional | M | low |
+| 5 | item/weapon polish (required) | a few | M | medium |
 
 Run the gates after every phase: `npm run assets:check && npm run typecheck && npm test
-&& npm run build`. Phases 0–1 are landable now with no new art.
+&& npm run build`. Phases 0–4 and the hero-weapon side of Phase 5 are landed; the
+item-weapon polish (Phase 5) and the download-gated faithfulness/identity tail remain.

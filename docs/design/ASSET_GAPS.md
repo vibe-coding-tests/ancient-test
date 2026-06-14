@@ -7,10 +7,11 @@ and marquee item against the GLBs we ship, then closed the real gaps:
 2. shipped GLBs sitting unused, and
 3. creep or hero mappings that read as the wrong creature family.
 
-The standing rules still apply: original, generated, CC0, or CC-BY assets only;
-never Valve or Blizzard files; every asset is optional at runtime; the game must
-still boot and read cleanly with `public/assets/` empty. See `ASSETS.md` for the
-ledger and `VFX_ASSETS.md` for the larger art-direction plan.
+The standing rules still apply: any Creative Commons or permissive license, including
+NonCommercial/ShareAlike (DECISIONS 2026-06-14) — but never Valve or Blizzard files
+and no NoDerivatives; every asset is optional at runtime; the game must still boot and
+read cleanly with `public/assets/` empty. See `ASSETS.md` for the ledger and policy,
+and `VFX_ASSETS.md` for the larger art-direction plan.
 
 ## Final State
 

@@ -42,6 +42,22 @@ export const TOWN_LANDMARK_SIZE: WorldSize = {
   footprintDecoupled: true
 };
 
+export const TOWN_BUILDING_COLLISION: WorldCollisionSpec = {
+  mode: 'solid',
+  radius: 300,
+  layer: 'static',
+  blocksProjectiles: true,
+  label: 'Town building'
+};
+
+export const TOWN_LANDMARK_COLLISION: WorldCollisionSpec = {
+  mode: 'soft',
+  radius: 240,
+  layer: 'static',
+  blocksProjectiles: false,
+  label: 'Town landmark'
+};
+
 /** Authored town dressing props already on disk, each with its declared size. */
 export const DRESSING_PROP_SIZES = {
   well: { heightM: 1.9, footprintM: 0.9, sizeClass: 'prop', pose: 'static' },

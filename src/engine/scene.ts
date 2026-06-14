@@ -8,9 +8,11 @@ import { applyAuthoredSilhouette, applyHeroLikeness, applyItemAppearances, attac
 import { HeroAssetLoader, heroAssetEntry, creepCreatureUrl, BESPOKE_HERO_MODELS, ENABLED_HOLDOUT_MODELS, heroBaseId, holdoutSignatureUrl, itemWeaponGlbUrl } from './assets';
 import { animateRig, applyCinematicGesture, newAnimState, type AnimState } from './animator';
 import { loadVfxBeamRamp, loadVfxTextureAtlas, VfxManager } from './vfx';
+import { resolveUnitBodies } from '../core/collision';
 import type { CinematicView } from './cinematic';
 import { lodForDistance, shouldAnimateAtLod, shouldUseCrowdImpostor, type LodTier } from './lod';
-import { WORLD_SCALE } from './scale';
+import { WORLD_SCALE, heightMFromScale, scaleFromHeightM } from './scale';
+import { heroWorldSize, creepWorldSize } from './world-size';
 import { TUNING } from '../data/tuning';
 import { rarityColor } from '../data/quality';
 import { AMBIENT_CRITTERS } from '../data/world/props';
@@ -404,6 +406,8 @@ export class GameScene {
   private questGivers = new Map<string, QuestGiverMarker>();
   private dungeonRoomGroup: THREE.Group | null = null;
   private dungeonRoomFloorY: number | null = null;
+  private readonly collisionDebugEnabled = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('debug');
+  private collisionDebugGroup = new THREE.Group();
 
   cameraMode: CameraMode = 'follow';
   private gameplayCameraMode: 'follow' | 'map' = 'follow';
@@ -422,6 +426,10 @@ export class GameScene {
   private cinematicGradeStrength = 0;
   private camZoom = 1; // user wheel zoom within mode
   private modeBlend = 0; // 0 = follow, 1 = map
+  // Free-look (§8 minimap click-to-look): a transient camera focus that overrides
+  // the follow target until it expires or the player issues a move.
+  private lookTarget: THREE.Vector3 | null = null;
+  private lookUntil = 0;
   selectedUid = -1;
   playerTeam = 0;
   private time = 0;
@@ -518,6 +526,9 @@ export class GameScene {
 
     this.vfx = new VfxManager((x, y) => this.visualGroundHeightAt(x, y), qualityCfg.transientVfxCap);
     this.scene.add(this.vfx.group);
+    this.collisionDebugGroup.name = 'collision-debug-overlay';
+    this.collisionDebugGroup.visible = this.collisionDebugEnabled;
+    this.scene.add(this.collisionDebugGroup);
     this.groundItemGroup.name = 'ground-item-drops';
     this.scene.add(this.groundItemGroup);
     if (qualityCfg.tier !== 'low') {
@@ -1096,6 +1107,7 @@ export class GameScene {
       const u = sim.unit(uid);
       return u ? { x: u.pos.x, y: u.pos.y, h: 0 } : null;
     });
+    this.syncCollisionDebug(sim);
     this.vfx.update(renderDt);
     this.updateDayNight(timeOfDay01);
     this.updateCamera(followUnit, renderDt, sim, cinematicView);
@@ -1109,6 +1121,92 @@ export class GameScene {
     else this.renderer.render(this.scene, this.camera);
     this.lastRenderCalls = this.renderer.info.render.calls;
     this.lastRenderTriangles = this.renderer.info.render.triangles;
+  }
+
+  private syncCollisionDebug(sim: Sim): void {
+    if (!this.collisionDebugEnabled) return;
+    this.clearCollisionDebug();
+    this.addDebugPolyline([
+      { x: 0, y: 0 },
+      { x: sim.bounds.w, y: 0 },
+      { x: sim.bounds.w, y: sim.bounds.h },
+      { x: 0, y: sim.bounds.h },
+      { x: 0, y: 0 }
+    ], '#ffffff', 0.35);
+
+    for (const u of sim.unitsArr) {
+      if (!u.alive) continue;
+      const bodies = resolveUnitBodies(u);
+      this.addDebugBodyCircle(u.pos, bodies.movement, '#6fae4a', 0.42);
+      this.addDebugBodyCircle(u.pos, bodies.target, '#ffd86a', 0.32);
+      this.addDebugBodyCircle(u.pos, bodies.hit, '#ff7a3a', 0.32);
+      this.addDebugBodyCircle(u.pos, bodies.pick, '#7adfff', 0.26, bodies.pick.pickPadding ?? 0);
+    }
+
+    for (const obstacle of sim.obstacles) {
+      if (obstacle.body.shape.kind !== 'circle') continue;
+      const color = obstacle.body.blocksProjectiles ? '#d88cff' : obstacle.body.blocksMovement === false ? '#8a8a8a' : '#c8b08a';
+      this.addDebugCircle(obstacle.pos, obstacle.body.shape.radius, color, 0.42);
+    }
+
+    for (const z of sim.zones) {
+      if (z.shape === 'circle' && z.pos) this.addDebugCircle(z.pos, z.radius ?? 0, z.wall ? '#d8f4ff' : '#65d8ff', z.wall ? 0.55 : 0.35);
+      else if (z.shape === 'line' && z.a && z.b) {
+        this.addDebugPolyline([z.a, z.b], z.wall ? '#d8f4ff' : '#65d8ff', z.wall ? 0.55 : 0.35);
+        this.addDebugCircle(z.a, Math.max(12, z.width / 2), '#65d8ff', 0.25);
+        this.addDebugCircle(z.b, Math.max(12, z.width / 2), '#65d8ff', 0.25);
+      }
+    }
+
+    for (const p of sim.projectiles) {
+      if (p.model !== 'linear' || !p.dir) continue;
+      const remaining = Math.max(0, Math.min(360, p.range - p.travelled));
+      this.addDebugPolyline([p.pos, { x: p.pos.x + p.dir.x * remaining, y: p.pos.y + p.dir.y * remaining }], '#ffffff', 0.45);
+      this.addDebugCircle(p.pos, Math.max(8, p.width / 2), '#ffffff', 0.28);
+    }
+  }
+
+  private clearCollisionDebug(): void {
+    while (this.collisionDebugGroup.children.length > 0) {
+      const child = this.collisionDebugGroup.children.pop()!;
+      child.traverse((obj) => {
+        const mesh = obj as THREE.Mesh | THREE.Line;
+        mesh.geometry?.dispose();
+        const mat = mesh.material;
+        if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+        else mat?.dispose();
+      });
+    }
+  }
+
+  private addDebugBodyCircle(pos: Vec2, body: ReturnType<typeof resolveUnitBodies>['movement'], color: string, opacity: number, padding = 0): void {
+    if (body.shape.kind !== 'circle') return;
+    this.addDebugCircle(pos, body.shape.radius + padding, color, opacity);
+  }
+
+  private addDebugCircle(pos: Vec2, radius: number, color: string, opacity: number): void {
+    if (radius <= 0) return;
+    const points: THREE.Vector3[] = [];
+    const steps = 48;
+    const y = this.visualGroundHeightAt(pos.x, pos.y) + 0.32;
+    for (let i = 0; i <= steps; i++) {
+      const a = (i / steps) * Math.PI * 2;
+      points.push(new THREE.Vector3((pos.x + Math.cos(a) * radius) / WORLD_SCALE, y, (pos.y + Math.sin(a) * radius) / WORLD_SCALE));
+    }
+    this.addDebugLineObject(points, color, opacity);
+  }
+
+  private addDebugPolyline(points: Vec2[], color: string, opacity: number): void {
+    if (points.length < 2) return;
+    this.addDebugLineObject(points.map((p) => new THREE.Vector3(p.x / WORLD_SCALE, this.visualGroundHeightAt(p.x, p.y) + 0.34, p.y / WORLD_SCALE)), color, opacity);
+  }
+
+  private addDebugLineObject(points: THREE.Vector3[], color: string, opacity: number): void {
+    const geo = new THREE.BufferGeometry().setFromPoints(points);
+    const mat = new THREE.LineBasicMaterial({ color, transparent: true, opacity, depthTest: false, depthWrite: false });
+    const line = new THREE.Line(geo, mat);
+    line.renderOrder = 40;
+    this.collisionDebugGroup.add(line);
   }
 
   private recordFrameMs(frameMs: number, dt: number): void {
@@ -1558,6 +1656,39 @@ export class GameScene {
     this.vfx.orderPing(point, kind, queued);
   }
 
+  /** Drop a standalone location ping (§8 minimap Alt-click); reuses the move flare. */
+  showPing(point: Vec2): void {
+    this.vfx.orderPing(point, 'move');
+  }
+
+  /** Click-to-look (§8): recenter the camera on a sim point without moving the
+   *  hero. Holds for a few seconds, then eases back to the followed unit. */
+  lookAt(point: Vec2, holdSec = 4): void {
+    const y = this.visualGroundHeightAt(point.x, point.y);
+    this.lookTarget = new THREE.Vector3(point.x / WORLD_SCALE, y, point.y / WORLD_SCALE);
+    this.lookUntil = this.time + holdSec;
+  }
+
+  /** Cancel any active free-look (called when the player issues a move). */
+  clearLook(): void {
+    this.lookTarget = null;
+  }
+
+  /** The four ground-plane corners of the current view, in sim coords, for the
+   *  minimap viewport rectangle (§8). Empty if any corner misses the ground. */
+  viewBoundsSim(): Vec2[] {
+    const ndc: [number, number][] = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
+    const out: Vec2[] = [];
+    this.groundPlane.constant = -this.camTarget.y;
+    const pt = new THREE.Vector3();
+    for (const [nx, ny] of ndc) {
+      this.raycaster.setFromCamera(new THREE.Vector2(nx, ny), this.camera);
+      if (!this.raycaster.ray.intersectPlane(this.groundPlane, pt)) return [];
+      out.push({ x: pt.x * WORLD_SCALE, y: pt.z * WORLD_SCALE });
+    }
+    return out;
+  }
+
   private syncUnits(sim: Sim, dt: number): void {
     const seen = new Set<number>();
     let fullAnimationBudget = this.quality.fullRigAnimationBudget;
@@ -1700,15 +1831,24 @@ export class GameScene {
     }
     if (!sil) sil = { build: 'biped', scale: 1 };
     if (!palette) palette = ['#888899', '#666677', '#aaaabb'];
-    // §5.1: a boss renders at its resolved world height. `visualScale` is render-
-    // only, so clone the (shared REG) silhouette before lifting its scale. Boss
-    // units without a precise per-unit lift (raid arena) fall back to the tuning
+    // §2/§5.1: the rig fits to the unit's *resolved world height* — an explicit
+    // `WorldSize.heightM` when declared, else derived from the silhouette scale. We
+    // fold that back into the silhouette scale so `worldSize.heightM`, not a bare
+    // scale, is the render source of truth. For scale-only content this is a no-op
+    // (the derivation round-trips), so nothing visual moves for existing entities.
+    let resolvedHeightM = heightMFromScale(sil.scale ?? 1);
+    if (!u.visual) {
+      if (u.kind === 'hero' && u.heroId) resolvedHeightM = heroWorldSize(REG.hero(u.heroId)).heightM;
+      else if (u.kind === 'creep' && u.creepId) resolvedHeightM = creepWorldSize(REG.creep(u.creepId)).heightM;
+    }
+    const baseScale = scaleFromHeightM(resolvedHeightM);
+    // A boss renders at its resolved boss height via the render-only `visualScale`.
+    // Units without a precise per-unit lift (legacy raid path) fall back to the tuning
     // default; everything else renders at 1.0×.
     const visualScale = u.visualScale ?? (u.ctrl.kind === 'boss' ? TUNING.bossVisualScale : 1);
-    if (visualScale !== 1) {
-      sil = { ...sil, scale: (sil.scale ?? 1) * visualScale };
-      id = `${id}@${visualScale}`;
-    }
+    const finalScale = +(baseScale * visualScale).toFixed(4);
+    if (finalScale !== (sil.scale ?? 1)) sil = { ...sil, scale: finalScale };
+    if (visualScale !== 1) id = `${id}@${visualScale}`;
     return { sil, palette, key: `${u.kind}:${id}:${sil.build}:${palette.join('/')}` };
   }
 
@@ -2471,7 +2611,13 @@ export class GameScene {
     const targetBlend = this.cameraMode === 'map' ? 1 : 0;
     this.modeBlend += (targetBlend - this.modeBlend) * Math.min(1, dt * 5);
 
-    if (follow) {
+    if (this.lookTarget && this.time >= this.lookUntil) this.lookTarget = null;
+    if (this.lookTarget) {
+      // Free-look: ease toward the inspected point, then snap back to follow once
+      // the hold expires (the follow branch below resumes the lerp).
+      const k = Math.min(1, dt * 4);
+      this.camTarget.lerp(this.lookTarget, k);
+    } else if (follow) {
       const wx = follow.pos.x / WORLD_SCALE;
       const wz = follow.pos.y / WORLD_SCALE;
       const wy = this.visualGroundHeightAt(follow.pos.x, follow.pos.y);
@@ -2512,11 +2658,24 @@ export class GameScene {
 
   // ---------- picking ----------
 
+  /** The unit's resolved visual footprint radius in world meters (OVERWORLD_PLANNING
+   *  §6): an explicit `WorldSize.footprintM` when declared, else the sim radius. */
+  private unitFootprintM(u: Unit): number {
+    if (!u.visual) {
+      if (u.kind === 'hero' && u.heroId) return heroWorldSize(REG.hero(u.heroId)).footprintM;
+      if (u.kind === 'creep' && u.creepId) return creepWorldSize(REG.creep(u.creepId)).footprintM;
+    }
+    return u.radius / WORLD_SCALE;
+  }
+
   private unitPickRadius(u: Unit, view: UnitView): number {
     const rootScale = Math.max(view.rig.root.scale.x, view.rig.root.scale.z, 1);
     const simRadius = u.radius / WORLD_SCALE;
+    // §6 selection-ring sanity: the capsule encloses the declared visual footprint
+    // (not just the sim radius), so a wide creature isn't clickable only at its core.
+    const footprintM = this.unitFootprintM(u);
     const visualRadius = view.rig.scale * UNIT_PICK_VISUAL_RADIUS_FACTOR;
-    return Math.max(UNIT_PICK_MIN_RADIUS, simRadius + UNIT_PICK_RADIUS_PADDING, visualRadius) * rootScale;
+    return Math.max(UNIT_PICK_MIN_RADIUS, simRadius + UNIT_PICK_RADIUS_PADDING, footprintM, visualRadius) * rootScale;
   }
 
   private unitPickHeight(view: UnitView): number {

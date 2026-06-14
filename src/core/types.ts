@@ -1550,6 +1550,7 @@ export type SimEvent =
   | { t: 'attack-launch'; uid: number; target: number; speed: number }
   | { t: 'projectile-spawn'; pid: number; from: Vec2; vfx: VfxSpec; targetUid?: number; toPoint?: Vec2 }
   | { t: 'projectile-hit'; pid: number; pos: Vec2; targetUid?: number }
+  | { t: 'projectile-block'; pid: number; pos: Vec2; obstacleId?: string; feedback?: CollisionFeedbackHint }
   | { t: 'projectile-expire'; pid: number; pos: Vec2 }
   | { t: 'zone-spawn'; zid: number; pos: Vec2; spec: { shape: 'circle' | 'line'; radius: number; length: number; width: number; angle: number; wall: boolean; duration: number; followUid?: number }; vfx: VfxSpec }
   | { t: 'zone-expire'; zid: number }
@@ -1560,6 +1561,7 @@ export type SimEvent =
   | { t: 'reaction'; uid: number; from: number; reaction: string; elements: [Exclude<ElementId, 'neutral'>, Exclude<ElementId, 'neutral'>] }
   | { t: 'immune-block'; uid: number }   // BKB visible spell rejection
   | { t: 'miss'; uid: number; target: number }
+  | { t: 'movement-blocked'; uid: number; pos: Vec2; reason: 'blocked' | 'no-path' | 'out-of-range'; obstacleId?: string; feedback?: CollisionFeedbackHint }
   | { t: 'blink'; uid: number; from: Vec2; to: Vec2 }
   | { t: 'levelup'; uid: number; level: number }
   | { t: 'skill-spend'; uid: number; kind: 'ability' | 'talent' | 'attribute' }

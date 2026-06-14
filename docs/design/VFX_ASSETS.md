@@ -46,9 +46,12 @@ never imports `three` or reads renderer-only fields.
   A missing or slow asset never blocks play (scene-token guard in `scene.ts`).
 - **Theme wins.** Pick assets because they belong together. Storage cost is
   secondary to silhouette, palette, material style, animation fit, and scene mood.
-- **CC0 / original only.** Never Valve or Blizzard files. Heroes read through
-  CC0 base meshes we retexture, generated pieces, bespoke pieces, or procedural
-  overlays. Every shipped file still gets an `ASSETS.md` row.
+- **Original or any Creative Commons license** — CC0, CC-BY, and (this being a
+  non-commercial project) NonCommercial/ShareAlike too (DECISIONS 2026-06-14); avoid
+  only NoDerivatives. **Never Valve or Blizzard files** (a separate IP rule). Heroes
+  read through licensed base meshes we retexture, generated pieces, bespoke pieces, or
+  procedural overlays. Every shipped file still gets an `ASSETS.md` row + a credit when
+  the license asks for one.
 - **Performance gates, not storage gates.** Low tier can stay procedural or use
   reduced assets. Medium and high tiers should load the art that makes the game
   feel complete. Use streaming, preloading, LOD, and cache policy to make that

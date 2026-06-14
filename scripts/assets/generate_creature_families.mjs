@@ -16,6 +16,26 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..', '..');
 const OUT_DIR = path.join(ROOT, 'public', 'assets', 'creeps');
 
+// OVERWORLD_PLANNING §5.6: generation prompts inherit the band. This .mjs has no
+// TS runtime, so it reads the declared size + per-class anchor language from the
+// bridge the resolver emits (world-sizes.generated.json) and prints the prompt the
+// authored proportions must read as. Keeps generation coherent with the renderer.
+const BRIDGE_PATH = path.join(HERE, 'world-sizes.generated.json');
+function loadBridge() {
+  try {
+    const json = JSON.parse(fs.readFileSync(BRIDGE_PATH, 'utf8'));
+    return { sizes: json.sizes ?? {}, prompts: json.prompts ?? {} };
+  } catch {
+    return { sizes: {}, prompts: {} };
+  }
+}
+function promptFor(bridge, id) {
+  const size = bridge.sizes[`creeps/${id}.glb`];
+  if (!size) return `${id}: no declared size in bridge — author to the human yardstick (~1.8 m)`;
+  const anchor = bridge.prompts[size.sizeClass] ?? size.sizeClass;
+  return `${id}: read as ${size.sizeClass}, ~${size.heightM} m (${anchor}); feet at origin, facing +x.`;
+}
+
 const MATERIALS = ['primary', 'secondary', 'accent', 'dark'];
 
 const CREATURES = {
@@ -24,7 +44,15 @@ const CREATURES = {
   // Bulky bear for ursa / hellbear / owlbears.
   bear: { palette: ['#7c5a3c', '#3a2616', '#d8c0a0'], style: 'bear' },
   // Walking tree for treant-protector.
-  treant: { palette: ['#5d7a3c', '#352712', '#9fd05c'], style: 'treant' }
+  treant: { palette: ['#5d7a3c', '#352712', '#9fd05c'], style: 'treant' },
+  // Desert scorpion for sand-king (no CC0 animated scorpion exists; arachnid spider
+  // base lost the pincers + stinger this restores).
+  scorpion: { palette: ['#caa46e', '#6e5230', '#e6d49a'], style: 'scorpion' },
+  // Horse-bodied humanoid for the centaur creeps + centaur-warrunner: the bull base
+  // dropped the human torso this puts back.
+  centaur: { palette: ['#7a5536', '#3a2616', '#d8b070'], style: 'centaur' },
+  // Hyena-headed biped for gnoll-assassin: a closer feral read than the goblin base.
+  gnoll: { palette: ['#a98a52', '#4a3a22', '#d8c890'], style: 'gnoll' }
 };
 
 function hexToLinearFactor(hex) {
@@ -242,6 +270,93 @@ function partsFor(style) {
       add(box('canopy-f', 'accent', 0.42, 0.4, 0.46, { x: 0.28, y: 2.3 }));
       break;
     }
+    case 'scorpion': {
+      // Low, long arachnid: wide cephalothorax, tapering abdomen, six legs to the
+      // ground, two forward pincer arms, and a tail arched up over the back to a
+      // raised stinger. The reared tail gives height so the height-fit keeps length sane.
+      add(box('cephalo', 'primary', 0.5, 0.26, 0.6, { x: 0.34, y: 0.34 }));
+      add(box('abdomen', 'primary', 0.6, 0.3, 0.5, { x: -0.16, y: 0.34 }));
+      add(box('abdomen2', 'secondary', 0.4, 0.26, 0.36, { x: -0.6, y: 0.34 }));
+      add(box('head', 'secondary', 0.16, 0.16, 0.34, { x: 0.62, y: 0.36 }));
+      add(box('eye-l', 'accent', 0.05, 0.06, 0.05, { x: 0.7, y: 0.42, z: 0.08 }));
+      add(box('eye-r', 'accent', 0.05, 0.06, 0.05, { x: 0.7, y: 0.42, z: -0.08 }));
+      for (let i = 0; i < 3; i++) {
+        const lx = 0.34 - i * 0.3;
+        add(cylinder(`leg-l${i}`, 'dark', 0.035, 0.42, 'y', { x: lx, y: 0.2, z: 0.34 }, 6));
+        add(cylinder(`leg-r${i}`, 'dark', 0.035, 0.42, 'y', { x: lx, y: 0.2, z: -0.34 }, 6));
+        add(box(`foot-l${i}`, 'dark', 0.14, 0.04, 0.06, { x: lx + 0.06, y: 0.02, z: 0.42 }));
+        add(box(`foot-r${i}`, 'dark', 0.14, 0.04, 0.06, { x: lx + 0.06, y: 0.02, z: -0.42 }));
+      }
+      for (const side of [1, -1]) {
+        const z = 0.28 * side;
+        add(cylinder(`pincer-arm-${side}`, 'primary', 0.06, 0.42, 'x', { x: 0.74, y: 0.34, z }, 6));
+        add(box(`pincer-base-${side}`, 'secondary', 0.2, 0.14, 0.14, { x: 1.0, y: 0.34, z }));
+        add(cone(`pincer-top-${side}`, 'accent', 0.05, 0.26, 'x', { x: 1.22, y: 0.4, z }, 6));
+        add(cone(`pincer-bot-${side}`, 'accent', 0.05, 0.26, 'x', { x: 1.22, y: 0.3, z }, 6));
+      }
+      const tail = [
+        { x: -0.78, y: 0.46, rz: 1.2 },
+        { x: -0.86, y: 0.68, rz: 1.6 },
+        { x: -0.82, y: 0.92, rz: 2.1 },
+        { x: -0.64, y: 1.12, rz: 2.6 },
+        { x: -0.42, y: 1.24, rz: 3.0 }
+      ];
+      for (let i = 0; i < tail.length; i++) {
+        add(cylinder(`tail-${i}`, 'secondary', 0.08 - i * 0.008, 0.26, 'y', { x: tail[i].x, y: tail[i].y, rz: tail[i].rz }, 6));
+      }
+      add(cone('stinger', 'accent', 0.06, 0.3, 'x', { x: -0.26, y: 1.28, rz: 0.5 }, 6));
+      break;
+    }
+    case 'centaur': {
+      // Horse barrel on four legs with a humanoid torso rising at the withers.
+      for (const [lx, tag] of [[0.42, 'f'], [-0.42, 'b']]) {
+        add(cylinder(`leg-l-${tag}`, 'primary', 0.09, 0.86, 'y', { x: lx, y: 0.45, z: 0.22 }, 8));
+        add(cylinder(`leg-r-${tag}`, 'primary', 0.09, 0.86, 'y', { x: lx, y: 0.45, z: -0.22 }, 8));
+        add(box(`hoof-l-${tag}`, 'dark', 0.16, 0.1, 0.16, { x: lx, y: 0.05, z: 0.22 }));
+        add(box(`hoof-r-${tag}`, 'dark', 0.16, 0.1, 0.16, { x: lx, y: 0.05, z: -0.22 }));
+      }
+      add(box('barrel', 'primary', 1.1, 0.5, 0.6, { x: 0.0, y: 1.0 }));
+      add(box('croup', 'primary', 0.4, 0.46, 0.56, { x: -0.5, y: 1.0 }));
+      add(box('chest', 'secondary', 0.4, 0.5, 0.56, { x: 0.46, y: 1.04 }));
+      for (let i = 0; i < 3; i++) add(cone(`tail-${i}`, 'dark', 0.06, 0.4, 'x', { x: -0.74, y: 0.98 - i * 0.06, z: (i - 1) * 0.06, rz: 3.4 }, 6));
+      add(box('torso', 'primary', 0.36, 0.62, 0.46, { x: 0.5, y: 1.5 }));
+      add(box('chest-h', 'secondary', 0.34, 0.34, 0.42, { x: 0.52, y: 1.66 }));
+      add(cylinder('arm-l', 'primary', 0.07, 0.6, 'y', { x: 0.5, y: 1.5, z: 0.3, rz: 0.2 }, 8));
+      add(cylinder('arm-r', 'primary', 0.07, 0.6, 'y', { x: 0.5, y: 1.5, z: -0.3, rz: 0.2 }, 8));
+      add(box('fist-l', 'accent', 0.12, 0.12, 0.12, { x: 0.6, y: 1.2, z: 0.34 }));
+      add(box('fist-r', 'accent', 0.12, 0.12, 0.12, { x: 0.6, y: 1.2, z: -0.34 }));
+      add(cylinder('neck', 'secondary', 0.09, 0.24, 'y', { x: 0.52, y: 1.92 }, 8));
+      add(box('head', 'primary', 0.26, 0.3, 0.28, { x: 0.54, y: 2.14 }));
+      add(box('jaw', 'secondary', 0.18, 0.12, 0.22, { x: 0.64, y: 2.06 }));
+      add(box('eye-l', 'accent', 0.05, 0.06, 0.05, { x: 0.66, y: 2.18, z: 0.1 }));
+      add(box('eye-r', 'accent', 0.05, 0.06, 0.05, { x: 0.66, y: 2.18, z: -0.1 }));
+      break;
+    }
+    case 'gnoll': {
+      // Lean digitigrade biped with a hyena head: long snout, big ears, a back mane.
+      add(cylinder('thigh-l', 'primary', 0.1, 0.5, 'y', { x: 0.02, y: 0.72, z: 0.18 }, 8));
+      add(cylinder('thigh-r', 'primary', 0.1, 0.5, 'y', { x: 0.02, y: 0.72, z: -0.18 }, 8));
+      add(cylinder('shin-l', 'secondary', 0.08, 0.5, 'y', { x: 0.1, y: 0.32, z: 0.18, rz: -0.3 }, 8));
+      add(cylinder('shin-r', 'secondary', 0.08, 0.5, 'y', { x: 0.1, y: 0.32, z: -0.18, rz: -0.3 }, 8));
+      add(box('paw-l', 'dark', 0.22, 0.06, 0.14, { x: 0.24, y: 0.03, z: 0.18 }));
+      add(box('paw-r', 'dark', 0.22, 0.06, 0.14, { x: 0.24, y: 0.03, z: -0.18 }));
+      add(box('hips', 'primary', 0.34, 0.3, 0.44, { x: 0.0, y: 1.04 }));
+      add(box('torso', 'primary', 0.42, 0.56, 0.5, { x: 0.08, y: 1.42, rz: -0.12 }));
+      add(box('chest', 'secondary', 0.3, 0.34, 0.42, { x: 0.2, y: 1.5 }));
+      for (let i = 0; i < 3; i++) add(cone(`mane-${i}`, 'accent', 0.06, 0.2, 'y', { x: -0.04 - i * 0.08, y: 1.66 - i * 0.04, rz: -0.5 }, 6));
+      add(cylinder('arm-l', 'primary', 0.07, 0.62, 'y', { x: 0.12, y: 1.36, z: 0.32, rz: 0.25 }, 8));
+      add(cylinder('arm-r', 'primary', 0.07, 0.62, 'y', { x: 0.12, y: 1.36, z: -0.32, rz: 0.25 }, 8));
+      add(box('claw-l', 'accent', 0.1, 0.12, 0.12, { x: 0.34, y: 1.06, z: 0.36 }));
+      add(box('claw-r', 'accent', 0.1, 0.12, 0.12, { x: 0.34, y: 1.06, z: -0.36 }));
+      add(box('head', 'primary', 0.3, 0.3, 0.3, { x: 0.34, y: 1.78 }));
+      add(box('snout', 'secondary', 0.26, 0.16, 0.18, { x: 0.56, y: 1.74 }));
+      add(box('nose', 'dark', 0.08, 0.08, 0.12, { x: 0.7, y: 1.76 }));
+      add(cone('ear-l', 'accent', 0.1, 0.2, 'y', { x: 0.26, y: 2.0, z: 0.12 }, 6));
+      add(cone('ear-r', 'accent', 0.1, 0.2, 'y', { x: 0.26, y: 2.0, z: -0.12 }, 6));
+      add(box('eye-l', 'accent', 0.05, 0.06, 0.05, { x: 0.48, y: 1.84, z: 0.1 }));
+      add(box('eye-r', 'accent', 0.05, 0.06, 0.05, { x: 0.48, y: 1.84, z: -0.1 }));
+      break;
+    }
   }
   return p;
 }
@@ -407,8 +522,10 @@ function writeGlb(file, id, palette, parts) {
 
 function main() {
   fs.mkdirSync(OUT_DIR, { recursive: true });
+  const bridge = loadBridge();
   let count = 0;
   for (const [id, def] of Object.entries(CREATURES)) {
+    console.log(`  prompt ${promptFor(bridge, id)}`);
     writeGlb(path.join(OUT_DIR, `${id}.glb`), id, def.palette, partsFor(def.style));
     count++;
   }

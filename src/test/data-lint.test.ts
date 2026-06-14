@@ -20,13 +20,14 @@ import { PHASE5_STARTER_ASSETS, ENABLED_HERO_COHORTS, creepCreatureUrl, heroBase
 import { HERO_LIKENESS_PROFILES } from '../engine/models';
 import { PERFORMANCE_BUDGET } from '../engine/performance';
 import { TUNING } from '../data/tuning';
-import { heroWorldSize, creepWorldSize, bossWorldSize, summonWorldSize, questGiverWorldSize, bossVisualScale, bossVisualScaleForRank, inBand, SIZE_BANDS, type ResolvedWorldSize } from '../engine/world-size';
+import { heroWorldSize, creepWorldSize, bossWorldSize, summonWorldSize, questGiverWorldSize, bossVisualScale, bossVisualScaleForRank, inBand, SIZE_BANDS, SIZE_PROMPTS, generationPrompt, type ResolvedWorldSize } from '../engine/world-size';
 import { HERO_HEIGHT_M, footprintToRadius } from '../engine/scale';
-import { BUILT_WORLD_SIZES } from '../data/world/props';
-import { readFileSync } from 'node:fs';
+import { BUILT_WORLD_SIZES, TOWN_BUILDING_COLLISION } from '../data/world/props';
+import { readFileSync, writeFileSync } from 'node:fs';
 import type { AbilityDef, AnimGesture, AttackVisualKind, DropSource, EffectNode, ItemAppearancePart, ItemWeaponVisualKind, SoundArchetype, SummonSpec, ValueRef, VfxArchetype } from '../core/types';
 import { abilityMaxLevel } from '../core/values';
 import { gestureForAbility, soundForAbility } from '../core/gestures';
+import { resolveUnitBodies } from '../core/collision';
 
 // ============================================================
 // Data lint (SPEC §1.2): every entry validates, every
@@ -462,8 +463,10 @@ describe('data lint: Phase 4/5 polish infrastructure', () => {
     for (const starter of ['crystal-maiden', 'earthshaker', 'juggernaut', 'lich', 'pudge', 'sniper']) {
       expect(ids.has(starter), `${starter} shipped`).toBe(true);
     }
-    // Knight + Mage + Barbarian + Rogue cohorts after winter-wyvern moves to a dragon base.
-    expect(PHASE5_STARTER_ASSETS.length).toBe(79);
+    // Knight(15) + Mage(28) + Barbarian(15) + Rogue(18) humanoid cohorts. Phase 4 Tier B
+    // moved the worst non-humanoid offenders onto animated creature bases: winter-wyvern
+    // (dragon), clockwerk/timbersaw (mech → goblin), death-prophet (banshee → ghost).
+    expect(PHASE5_STARTER_ASSETS.length).toBe(76);
     for (const asset of PHASE5_STARTER_ASSETS) {
       // Every shipped model belongs to an enabled humanoid cohort.
       expect(ENABLED_HERO_COHORTS.has(heroBaseId(asset.heroId)), `${asset.heroId} cohort`).toBe(true);
@@ -489,6 +492,13 @@ describe('data lint: Phase 4/5 polish infrastructure', () => {
     expectCreepFamily(['hellbear', 'wildwing', 'wildwing-ripper', 'enraged-wildkin', 'polar-furbolg'], 'bear');
     expect(creepCreatureUrl('elder-jungle-stalker', 'golem')).toBe('/assets/creeps/wolf.glb');
     expect(creepCreatureUrl('future-bird', 'bird')).toBe('/assets/creeps/flier.glb');
+    // vhoul are desert undead — the downloaded CC0 skeleton reads closer than goblin.
+    expect(creepCreatureUrl('vhoul-assassin', 'biped')).toBe('/assets/creeps/skeleton.glb');
+    // Phase 3 generated families: scorpion (sand-king), centaur (horse-torso), gnoll (hyena).
+    expectCreepFamily(['centaur-courser', 'centaur-conqueror'], 'centaur');
+    expect(creepCreatureUrl('gnoll-assassin', 'biped')).toBe('/assets/creeps/gnoll.glb');
+    expect(heroBaseUrl(heroBaseId('sand-king'))).toBe('/assets/creeps/scorpion.glb');
+    expect(heroBaseUrl(heroBaseId('centaur-warrunner'))).toBe('/assets/creeps/centaur.glb');
 
     expect(heroBaseUrl(heroBaseId('winter-wyvern'))).toBe('/assets/creeps/dragonevolved.glb');
     expect(heroBaseUrl(heroBaseId('phoenix'))).toBe('/assets/creeps/flier.glb');
@@ -498,6 +508,11 @@ describe('data lint: Phase 4/5 polish infrastructure', () => {
     expect(heroBaseUrl(heroBaseId('lone-druid'))).toBe('/assets/creeps/bear.glb');
     expect(heroBaseUrl(heroBaseId('bane'))).toBe('/assets/creeps/demon.glb');
     expect(heroBaseUrl(heroBaseId('leshrac'))).toBe('/assets/creeps/demon.glb');
+    // Phase 4 Tier B: the worst non-humanoid cohort offenders ride animated creature
+    // bodies instead of a plain knight/mage body.
+    expect(heroBaseUrl(heroBaseId('clockwerk'))).toBe('/assets/creeps/goblin.glb');
+    expect(heroBaseUrl(heroBaseId('timbersaw'))).toBe('/assets/creeps/goblin.glb');
+    expect(heroBaseUrl(heroBaseId('death-prophet'))).toBe('/assets/creeps/ghost.glb');
     expect(heroBaseId('io')).toBe('procedural');
     expect(heroBaseId('enigma')).toBe('procedural');
     expect(heroBaseId('morphling')).toBe('procedural');
@@ -1331,6 +1346,32 @@ describe('data lint: world size (test 24)', () => {
     }
   });
 
+  it('generation prompts inherit the band, in sync with the .mjs bridge (§5.6)', () => {
+    // Every class carries lifelike anchor language, and the composed prompt
+    // surfaces both the declared height and that anchor — so a generated GLB is
+    // authored to read against its neighbors instead of rescaled after the fact.
+    for (const sizeClass of Object.keys(SIZE_BANDS) as (keyof typeof SIZE_BANDS)[]) {
+      expect(SIZE_PROMPTS[sizeClass], `${sizeClass}: missing prompt anchor`).toBeTruthy();
+      const prompt = generationPrompt('sample', sizeClass, SIZE_BANDS[sizeClass].min);
+      expect(prompt).toContain(sizeClass);
+      expect(prompt).toContain(SIZE_PROMPTS[sizeClass]);
+      expect(prompt, `${sizeClass}: prompt must carry a height target`).toMatch(/~\d/);
+    }
+    // The .mjs generators (no TS runtime) read the anchors from the resolver
+    // bridge; it must match SIZE_PROMPTS so generation can't drift from the lint.
+    let bridge: { prompts?: Record<string, string> } | null = null;
+    try {
+      bridge = JSON.parse(readFileSync('scripts/assets/world-sizes.generated.json', 'utf8'));
+    } catch {
+      bridge = null;
+    }
+    expect(bridge?.prompts, 'world-sizes bridge missing prompts — run UPDATE_WORLD_SIZES=1').toEqual(SIZE_PROMPTS);
+    // And a generator actually consumes the bridge (closes rollout step 4).
+    const gen = readFileSync('scripts/assets/generate_creature_families.mjs', 'utf8');
+    expect(gen).toContain('world-sizes.generated.json');
+    expect(gen).toContain('promptFor');
+  });
+
   it('renders the §7 coverage matrix with no red boxes (§9.9)', () => {
     const byKind = new Map<string, number>();
     for (const row of rows) byKind.set(row.kind, (byKind.get(row.kind) ?? 0) + 1);
@@ -1347,4 +1388,206 @@ describe('data lint: world size (test 24)', () => {
     console.log(`[world-size matrix] ${rows.length} entities (${summary}); red boxes: ${red}`);
     expect(red, 'every entity must be fully sized (zero red boxes)').toBe(0);
   });
+
+  it('emits the committed §7 coverage matrix, in sync with the registry (§7/§9.9)', () => {
+    const matrix = renderSizeMatrix(rows);
+    const MATRIX_PATH = 'docs/design/WORLD_SIZE_MATRIX.md';
+    if (process.env.UPDATE_WORLD_SIZES) writeFileSync(MATRIX_PATH, matrix);
+    let onDisk: string | null = null;
+    try {
+      onDisk = readFileSync(MATRIX_PATH, 'utf8');
+    } catch {
+      onDisk = null;
+    }
+    expect(onDisk, `${MATRIX_PATH} missing — run UPDATE_WORLD_SIZES=1 to generate`).not.toBeNull();
+    expect(onDisk, 'world-size matrix drifted — run UPDATE_WORLD_SIZES=1 to refresh').toBe(matrix);
+  });
+
+  it('every camp fits its creep pack: footprint vs camp radius (§6)', () => {
+    for (const region of ALL_REGIONS) {
+      for (const camp of region.camps) {
+        const r = footprintToRadius(creepWorldSize(REG.creep(camp.creepId)).footprintM);
+        expect(r * 2, `${camp.id}: ${camp.creepId} (r=${r}) must fit camp radius ${camp.radius}`).toBeLessThan(camp.radius);
+        // Loose hex packing (~0.55 disc density): the whole pack must fit the camp disc.
+        const packArea = camp.count * Math.PI * r * r;
+        const campArea = Math.PI * camp.radius * camp.radius;
+        expect(packArea, `${camp.id}: ${camp.count}x ${camp.creepId} can't pack into camp`).toBeLessThan(campArea * 0.55);
+      }
+    }
+  });
+
+  it('the widest creature fits the smallest dungeon room with clearance (§6)', () => {
+    const widest = Math.max(...ALL_CREEPS.map((c) => footprintToRadius(creepWorldSize(c).footprintM)));
+    for (const t of ALL_ROOM_TEMPLATES) {
+      const minDim = Math.min(t.size.x, t.size.y);
+      expect(widest * 2, `room ${t.id} (${minDim}) too small for a ${widest}u creep footprint`).toBeLessThan(minDim * 0.5);
+    }
+  });
+
+  it('structures frame a 2.2m door and gates clear the widest traveller (§3/§6)', () => {
+    const DOOR_CLEAR_M = 2.2;
+    // Every built structure/landmark a unit can stand beside frames a >=2.2m entrance.
+    for (const row of rows.filter((r) => r.size.sizeClass === 'structure' || r.size.sizeClass === 'landmark')) {
+      expect(row.size.heightM, `${row.id}: ${row.size.sizeClass} shorter than a 2.2m door frame`).toBeGreaterThanOrEqual(DOOR_CLEAR_M);
+    }
+    // The 1.8m hero clears that frame (the door-frame rule's whole point).
+    expect(HERO_HEIGHT_M, 'the hero must clear a 2.2m door frame').toBeLessThan(DOOR_CLEAR_M);
+    // Region gates (the routed path width) clear the widest traveller's footprint.
+    const widest = Math.max(...ALL_CREEPS.map((c) => footprintToRadius(creepWorldSize(c).footprintM)));
+    for (const region of ALL_REGIONS) {
+      for (const gate of region.gates ?? []) {
+        expect(gate.radius, `${gate.id}: path narrower than a ${widest}u traveller footprint`).toBeGreaterThan(widest * 2);
+      }
+    }
+  });
 });
+
+/** Render the §7 coverage matrix as a stable, diff-friendly markdown table. */
+function renderSizeMatrix(rows: SizeRow[]): string {
+  const byKind = new Map<string, number>();
+  for (const row of rows) byKind.set(row.kind, (byKind.get(row.kind) ?? 0) + 1);
+  const summary = [...byKind.entries()].sort().map(([k, n]) => `${k} ${n}`).join(', ');
+  const sorted = [...rows].sort((a, b) => (a.kind === b.kind ? a.id.localeCompare(b.id) : a.kind.localeCompare(b.kind)));
+  const body = sorted.map((r) => {
+    const band = inBand(r.size.sizeClass, r.size.heightM) ? 'ok' : 'OUT';
+    let radius = '—';
+    if (r.size.footprintDecoupled) radius = 'decoupled';
+    else if (r.simRadius !== undefined) {
+      const fromFoot = footprintToRadius(r.size.footprintM);
+      const drift = Math.round((Math.abs(fromFoot - r.simRadius) / r.simRadius) * 100);
+      radius = `${fromFoot}u (${drift}%)`;
+    }
+    return `| ${r.kind} | ${r.id} | ${r.size.sizeClass} | ${r.size.heightM} | ${r.size.footprintM} | ${r.size.pose} | ${band} | ${radius} |`;
+  });
+  return [
+    '# WORLD SIZE MATRIX (generated)',
+    '',
+    'OVERWORLD_PLANNING §7. One row per world entity, generated from the registry by',
+    '`src/test/data-lint.test.ts`. Do not edit by hand — refresh with',
+    '`UPDATE_WORLD_SIZES=1 npx vitest run src/test/data-lint.test.ts`.',
+    '',
+    `Entities: ${rows.length} (${summary}).`,
+    '',
+    '| kind | id | class | heightM | footprintM | pose | band | radius |',
+    '|---|---|---|---|---|---|---|---|',
+    ...body,
+    ''
+  ].join('\n');
+}
+
+function visitVolumeEffects(effects: readonly EffectNode[] | undefined, fn: (node: EffectNode) => void): void {
+  for (const node of effects ?? []) {
+    fn(node);
+    if (node.kind === 'repeat') visitVolumeEffects(node.effects, fn);
+    if (node.kind === 'projectile') visitVolumeEffects(node.proj.onHit, fn);
+    if (node.kind === 'zone') {
+      visitVolumeEffects(node.zone.tick?.effects, fn);
+      visitVolumeEffects(node.zone.onEnter?.effects, fn);
+    }
+  }
+}
+
+// ============================================================
+// Test 25 — collision and hitbox contract (COLLISION_HITBOX_SPEC):
+// authored blockers are circle-only for the first cut, projectile blocker policy
+// is explicit, footprint-decoupled units resolve widened hit/pick bodies, and
+// authored ability volumes advertise matching presentation archetypes.
+// ============================================================
+
+describe('data lint: collision contract (test 25)', () => {
+  it('terrain solid collision radii are declared in built-world data', () => {
+    expect(TOWN_BUILDING_COLLISION.mode).toBe('solid');
+    expect(TOWN_BUILDING_COLLISION.radius).toBeGreaterThan(0);
+    expect(TOWN_BUILDING_COLLISION.blocksProjectiles).toBe(true);
+
+    const terrain = readFileSync('src/engine/terrain.ts', 'utf8');
+    expect(terrain).toContain('TOWN_BUILDING_COLLISION.radius');
+    expect(terrain).toContain('source: \'terrain:town\'');
+  });
+
+  it('authored dungeon gameplay blockers are circle-only and clear anchors/connectors', () => {
+    const heroClearance = TUNING.unitRadiusHero + 60;
+    for (const template of ALL_ROOM_TEMPLATES) {
+      const blockers = [...(template.walls ?? []), ...(template.blockers ?? []), ...(template.doors ?? []).map((door) => door.body)];
+      expect(blockers.length, `${template.id}: missing authored collision blockers`).toBeGreaterThan(0);
+      for (const blocker of blockers) {
+        expect(blocker.pos.x, `${template.id}/${blocker.id}: x inside room`).toBeGreaterThanOrEqual(0);
+        expect(blocker.pos.x, `${template.id}/${blocker.id}: x inside room`).toBeLessThanOrEqual(template.size.x);
+        expect(blocker.pos.y, `${template.id}/${blocker.id}: y inside room`).toBeGreaterThanOrEqual(0);
+        expect(blocker.pos.y, `${template.id}/${blocker.id}: y inside room`).toBeLessThanOrEqual(template.size.y);
+        expect(blocker.body.shape.kind, `${template.id}/${blocker.id}: first-cut blockers must be circles`).toBe('circle');
+        if (blocker.body.shape.kind !== 'circle') continue;
+        expect(blocker.body.shape.radius, `${template.id}/${blocker.id}: radius`).toBeGreaterThan(0);
+        expect(blocker.body.blocksMovement, `${template.id}/${blocker.id}: should block movement`).toBe(true);
+        expect(blocker.body.blocksProjectiles, `${template.id}/${blocker.id}: projectile blocker policy`).toBe(true);
+        for (const anchor of [...template.spawnAnchors, ...template.connectors.map((c) => c.at)]) {
+          const d = Math.hypot(anchor.x - blocker.pos.x, anchor.y - blocker.pos.y);
+          expect(d, `${template.id}/${blocker.id}: anchor/connector too close`).toBeGreaterThan(blocker.body.shape.radius + heroClearance);
+        }
+      }
+    }
+  });
+
+  it('dungeon safe and no-spawn zones are explicit non-blocking circles', () => {
+    for (const template of ALL_ROOM_TEMPLATES) {
+      const zones = [...(template.safeZones ?? []), ...(template.noSpawnZones ?? [])];
+      expect(zones.length, `${template.id}: missing safe/no-spawn collision zones`).toBeGreaterThan(0);
+      for (const zone of zones) {
+        expect(zone.body.blocksMovement, `${template.id}/${zone.id}: zones should not block movement`).toBe(false);
+        expect(zone.body.shape.kind, `${template.id}/${zone.id}: first-cut zones must be circles`).toBe('circle');
+        if (zone.body.shape.kind === 'circle') expect(zone.body.shape.radius, `${template.id}/${zone.id}: radius`).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('footprint-decoupled bosses resolve wider hit and pick bodies', () => {
+    for (const boss of ALL_BOSSES) {
+      const size = bossWorldSize(boss, REG.hero(boss.heroId));
+      expect(size.footprintDecoupled, `${boss.id}: boss footprint policy`).toBe(true);
+      const visualFootprintRadius = footprintToRadius(size.footprintM);
+      const bodies = resolveUnitBodies({
+        radius: TUNING.unitRadiusHero * TUNING.raidBossRadiusScale,
+        kind: 'hero',
+        footprintDecoupled: true,
+        visualFootprintRadius
+      });
+      expect(bodies.hit.shape.kind).toBe('circle');
+      expect(bodies.pick.shape.kind).toBe('circle');
+      if (bodies.hit.shape.kind === 'circle') expect(bodies.hit.shape.radius, `${boss.id}: hit body`).toBeGreaterThanOrEqual(visualFootprintRadius);
+      if (bodies.pick.shape.kind === 'circle') expect(bodies.pick.shape.radius, `${boss.id}: pick body`).toBeGreaterThanOrEqual(visualFootprintRadius);
+    }
+
+    const dungeonSession = readFileSync('src/systems/dungeon-session.ts', 'utf8');
+    const raidSession = readFileSync('src/systems/raid-session.ts', 'utf8');
+    const macro = readFileSync('src/core/macro.ts', 'utf8');
+    for (const source of [dungeonSession, macro]) {
+      expect(source).toContain('footprintDecoupled');
+      expect(source).toContain('hitRadius');
+      expect(source).toContain('pickRadius');
+    }
+    expect(raidSession).toContain('setupRaidSim');
+    expect(raidSession).toContain('bossRank');
+  });
+
+  it('spell volumes use matching VFX archetypes where the data declares a volume', () => {
+    const skillshotVfx = new Set<VfxArchetype>(['projectile', 'hook', 'beam']);
+    const volumeVfx = new Set<VfxArchetype>(['ground-aoe', 'wall', 'shield', 'summon-pop', 'storm', 'dome', 'vortex']);
+    for (const hero of ALL_HEROES) {
+      for (const ability of hero.abilities as AbilityDef[]) {
+        let hasLinearProjectile = false;
+        let hasZone = false;
+        visitVolumeEffects(ability.effects, (node) => {
+          if (node.kind === 'projectile' && node.proj.model === 'linear') hasLinearProjectile = true;
+          if (node.kind === 'zone') hasZone = true;
+        });
+        if (ability.targeting === 'skillshot' && hasLinearProjectile) {
+          expect(skillshotVfx.has(ability.vfx.archetype), `${hero.id}/${ability.id}: skillshot preview archetype`).toBe(true);
+        }
+        if ((ability.targeting === 'ground-aoe' || ability.targeting === 'point-target') && hasZone) {
+          expect(volumeVfx.has(ability.vfx.archetype), `${hero.id}/${ability.id}: zone preview archetype`).toBe(true);
+        }
+      }
+    }
+  });
+});
+

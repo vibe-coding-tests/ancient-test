@@ -475,6 +475,14 @@ export interface SceneLike {
   resetUnitViews?(): void;
   setDungeonRoom?(template: RoomTemplate | null, room?: DungeonRoom | null): void;
   showOrderFeedback?(point: Vec2, kind: 'move' | 'attack-move' | 'attack-unit', queued?: boolean): void;
+  /** Optional (real GameScene only, §8): a standalone location ping flare. */
+  showPing?(point: Vec2): void;
+  /** Optional (real GameScene only, §8): recenter the camera on a point. */
+  lookAt?(point: Vec2, holdSec?: number): void;
+  /** Optional (real GameScene only, §8): cancel an active free-look. */
+  clearLook?(): void;
+  /** Optional (real GameScene only, §8): current view corners in sim coords. */
+  viewBoundsSim?(): Vec2[];
   /** Optional (real GameScene only): place/move the walking quest-giver NPCs (QUEST.md). */
   syncQuestGivers?(givers: readonly QuestGiverView[]): void;
   /** Optional (real GameScene only): live graphics-settings hooks (§6). */
@@ -492,7 +500,9 @@ export interface SceneLike {
 export function eventWorldPos(ev: SimEvent, sim: Sim): Vec2 | undefined {
   switch (ev.t) {
     case 'projectile-hit':
+    case 'projectile-block':
     case 'projectile-expire':
+    case 'movement-blocked':
     case 'aoe-burst':
     case 'summon':
     case 'revive':
@@ -663,6 +673,7 @@ export class Game {
   private faintTickAt = 0;
   private createdAt = 0;
   private queuedOrders: Order[] = [];
+  private lastErrorCueAt = 0;
 
   /** Active live gym fight (§3.5): when set, update() steps + renders it instead of the overworld. */
   liveGym: LiveGymFight | null = null;
@@ -691,6 +702,7 @@ export class Game {
   /** events the HUD wants this frame (damage floaters, gold, barks) */
   frameEvents: SimEvent[] = [];
   private queuedPresentationEvents: SimEvent[] = [];
+  private lastBlockedMoveFeedbackAt = -999;
   paused = false;
 
   /** Headless game for tests/CI: no WebGL scene, no audio. */
@@ -1358,6 +1370,15 @@ export class Game {
   msg(text: string, kind: Toast['kind'] = 'info', color?: string): void {
     this.toasts.push({ text, kind, at: performance.now() / 1000, color });
     if (this.toasts.length > 60) this.toasts.splice(0, this.toasts.length - 60);
+    // A blocked/invalid action buzzes (§11). Throttled so a burst of 'bad'
+    // toasts (e.g. repeated illegal orders) never machine-guns the UI bus.
+    if (kind === 'bad') {
+      const now = performance.now();
+      if (now - this.lastErrorCueAt > 140) {
+        this.lastErrorCueAt = now;
+        this.audio.playUi?.('error');
+      }
+    }
   }
 
   private cutsceneSeenKey(id: string, ctx: CutsceneContext): string {
@@ -5619,6 +5640,15 @@ export class Game {
     if (!u || !u.alive) return;
     this.pendingRecruitNpcUid = null;
     const safeOrder = this.sanitizeOrderPoint(sim, u, order);
+    if (feedback && (order.kind === 'move' || order.kind === 'attack-move') && (safeOrder.kind === 'move' || safeOrder.kind === 'attack-move')) {
+      const dx = safeOrder.point.x - order.point.x;
+      const dy = safeOrder.point.y - order.point.y;
+      if (dx * dx + dy * dy > 16 && sim.time - this.lastBlockedMoveFeedbackAt > 0.6) {
+        this.lastBlockedMoveFeedbackAt = sim.time;
+        this.emitPresentationEvent({ t: 'movement-blocked', uid: u.uid, pos: { ...safeOrder.point }, reason: 'blocked' }, true);
+      }
+    }
+    this.scene.clearLook?.();
     if (feedback) {
       this.showOrderFeedback(sim, safeOrder, queued);
       this.audio.playUi?.(order.kind === 'attack-move' || order.kind === 'attack-unit' ? 'tab' : 'click');

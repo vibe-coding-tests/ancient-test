@@ -1,5 +1,20 @@
-import type { CreepDef } from '../../core/types';
+import type { CreepDef, CreepTier, WorldSize } from '../../core/types';
 import { gestureForAbility, soundForAbility } from '../../core/gestures';
+
+// OVERWORLD_PLANNING §8: the creep tier defaults are declared as a WorldSize (real
+// meters + footprint), not a bare silhouette scale. `heightM` is the fit/read target
+// and the silhouette scale derives from it (`heightM / 1.8`); `footprintM` matches the
+// per-tier sim radius (`TUNING.unitRadiusCreep`) so the §9.4 parity gate holds. A
+// hand-authored creep still overrides freely via its own `silhouette.scale`.
+export const CREEP_TIER_SIZE: Record<CreepTier, WorldSize> = {
+  small: { heightM: 1.116, footprintM: 0.18 },
+  medium: { heightM: 1.53, footprintM: 0.24 },
+  large: { heightM: 2.07, footprintM: 0.32 },
+  ancient: { heightM: 2.61, footprintM: 0.44 }
+};
+
+/** The silhouette scale a tier renders at, derived from its declared height (§2). */
+const tierScale = (tier: CreepTier): number => +(CREEP_TIER_SIZE[tier].heightM / 1.8).toFixed(2);
 
 // ============================================================
 // Phase 1 wild creeps — the catchable "Pokémon" of the vale,
@@ -292,10 +307,10 @@ function creep(
   opts: { ranged?: boolean; summon?: boolean; aura?: boolean; stun?: boolean } = {}
 ): CreepDef {
   const tierStats = {
-    small: { maxHp: 260, damage: 16, armor: 0, xp: 34, gold: 20, scale: 0.62 },
-    medium: { maxHp: 520, damage: 30, armor: 1, xp: 72, gold: 46, scale: 0.85 },
-    large: { maxHp: 980, damage: 48, armor: 3, xp: 125, gold: 82, scale: 1.15 },
-    ancient: { maxHp: 1900, damage: 78, armor: 6, xp: 260, gold: 165, scale: 1.45 }
+    small: { maxHp: 260, damage: 16, armor: 0, xp: 34, gold: 20 },
+    medium: { maxHp: 520, damage: 30, armor: 1, xp: 72, gold: 46 },
+    large: { maxHp: 980, damage: 48, armor: 3, xp: 125, gold: 82 },
+    ancient: { maxHp: 1900, damage: 78, armor: 6, xp: 260, gold: 165 }
   }[tier];
   const abilities = opts.summon
     ? [{
@@ -365,7 +380,8 @@ function creep(
     },
     abilities,
     bounty: { xp: tierStats.xp, gold: tierStats.gold },
-    silhouette: { build: tier === 'ancient' ? 'golem' : opts.ranged ? 'biped' : 'brute', scale: tierStats.scale, bodyShape: tier === 'small' ? 'slim' : 'bulky', head: opts.aura ? 'horned' : 'bare', weapon: opts.ranged ? 'staff' : 'none' },
+    silhouette: { build: tier === 'ancient' ? 'golem' : opts.ranged ? 'biped' : 'brute', scale: tierScale(tier), bodyShape: tier === 'small' ? 'slim' : 'bulky', head: opts.aura ? 'horned' : 'bare', weapon: opts.ranged ? 'staff' : 'none' },
+    worldSize: CREEP_TIER_SIZE[tier],
     palette,
     aggroRadius: tier === 'ancient' ? 720 : 600,
     animProfile: { rig: tier === 'ancient' ? 'ancient' : 'neutral', castStyle: opts.ranged ? 'caster' : 'beast', voiceTimbre: tier }

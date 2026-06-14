@@ -198,11 +198,14 @@ describe('shared hero bases (WS-A0)', () => {
   });
 
   it('resolves shared base URLs only for shipped creature hero cohorts', () => {
-    expect(ENABLED_HERO_BASES.size).toBe(17);
+    expect(ENABLED_HERO_BASES.size).toBe(19);
     expect(heroBaseUrl(heroBaseId('broodmother'))).toBe('/assets/creeps/spider.glb');
     expect(heroBaseUrl(heroBaseId('doom'))).toBe('/assets/creeps/demon.glb');
     expect(heroBaseUrl(heroBaseId('winter-wyvern'))).toBe('/assets/creeps/dragonevolved.glb');
     expect(heroBaseUrl(heroBaseId('spirit-breaker'))).toBe('/assets/creeps/bull.glb');
+    // Phase 3 generated families: sand-king (scorpion) + centaur-warrunner (centaur).
+    expect(heroBaseUrl(heroBaseId('sand-king'))).toBe('/assets/creeps/scorpion.glb');
+    expect(heroBaseUrl(heroBaseId('centaur-warrunner'))).toBe('/assets/creeps/centaur.glb');
     // Generated P1.3 families: animal-shaped holdouts now ride animated creature bodies.
     expect(heroBaseUrl(heroBaseId('ursa'))).toBe('/assets/creeps/bear.glb');
     expect(heroBaseUrl(heroBaseId('lone-druid'))).toBe('/assets/creeps/bear.glb');

@@ -56,6 +56,36 @@ export function inBand(sizeClass: SizeClass, heightM: number): boolean {
   return heightM >= band.min && heightM <= band.max;
 }
 
+/**
+ * The lifelike anchor language per class (§5.6): how a model in this band should
+ * read *relative to the 1.8 m hero*. This is the single source for generation
+ * prompts — `generationPrompt` composes it with a name and the declared height,
+ * and the asset build mirrors it into `world-sizes.generated.json` so the .mjs
+ * generators (no TS runtime) prompt against the same bands the renderer enforces.
+ */
+export const SIZE_PROMPTS: Record<SizeClass, string> = {
+  tiny: 'ankle-high to a person — vermin, wisps, swarmlings',
+  small: 'knee-to-waist on a person — child-sized scuttlers',
+  human: 'eye-to-eye with the 1.8 m hero — the yardstick',
+  large: 'head-and-shoulders over a person — ogres, bears, brutes',
+  huge: 'two-to-three people tall — towers over the party',
+  colossal: 'a walking building — dwarfs the party, a three-storey read',
+  prop: 'hand-to-head height beside a standing person',
+  structure: 'a person fits through its doorway with 2.2 m headroom to spare',
+  landmark: 'the tallest thing in view — read from across the region'
+};
+
+/**
+ * The §5.6 generation prompt for an entity: its declared `sizeClass`/`heightM`
+ * plus the band's relative-to-human anchor and the §5.2 authoring pose contract,
+ * so a generated GLB reads at the right scale next to its neighbors by
+ * construction instead of being rescaled after the fact.
+ */
+export function generationPrompt(name: string, sizeClass: SizeClass, heightM: number): string {
+  return `${name}: author to read as ${sizeClass}, ~${+heightM.toFixed(2)} m tall (${SIZE_PROMPTS[sizeClass]}). `
+    + 'Feet at the origin, facing +Z, footprint centered on (x,z)=0 — the build fits height to this target.';
+}
+
 function poseForBuild(build: SilhouetteSpec['build']): NonNullable<WorldSize['pose']> {
   switch (build) {
     case 'quad': return 'quadruped';
@@ -109,19 +139,30 @@ export function questGiverWorldSize(giver: QuestGiverDef): ResolvedWorldSize {
 }
 
 /**
+ * The minimum size band a boss reads at, by rank (§3 boss rule): a mini-boss towers
+ * one band over the human yardstick (`large`), a boss reads `huge`, and a world/raid
+ * boss is `colossal` — a walking building. The floor is a *minimum*: a source hero
+ * already taller keeps its height.
+ */
+export const BOSS_RANK_FLOOR: Record<BossDef['rank'], SizeClass> = {
+  'mini-boss': 'large',
+  boss: 'huge',
+  'world-boss': 'colossal'
+};
+
+/**
  * A boss is never just its source hero at 1.0× (closes the §0 gap): `rank` carries
- * a minimum band — mini-boss ≥ `large`, boss ≥ `huge` — and footprint grows with
- * the silhouette. The visual scale-up is intentionally decoupled from the sim
- * radius (regular bosses keep the hero's collision radius; only raid bosses scale
- * it via `raidBossRadiusScale`), so the §6 parity gate skips it.
+ * a minimum band — mini-boss ≥ `large`, boss ≥ `huge`, world-boss ≥ `colossal` — and
+ * footprint grows with the silhouette. The visual scale-up is intentionally decoupled
+ * from the sim radius (regular bosses keep the hero's collision radius; only raid
+ * bosses scale it via `raidBossRadiusScale`), so the §6 parity gate skips it.
  */
 export function bossWorldSize(boss: BossDef, hero: HeroDef): ResolvedWorldSize {
   const base = heroWorldSize(hero);
   if (boss.worldSize?.heightM) {
     return creatureWorldSize(hero.silhouette, { footprintDecoupled: true, ...boss.worldSize }, TUNING.unitRadiusHero);
   }
-  const floorClass: SizeClass = boss.rank === 'boss' ? 'huge' : 'large';
-  const heightM = Math.max(base.heightM, SIZE_BANDS[floorClass].min);
+  const heightM = Math.max(base.heightM, SIZE_BANDS[BOSS_RANK_FLOOR[boss.rank]].min);
   const grow = heightM / base.heightM;
   return {
     heightM,
@@ -147,7 +188,6 @@ export const bossVisualScale = (boss: BossDef, hero: HeroDef): number =>
  * rank (the raid arena builds its boss from a hero setup, not a `BossDef`). */
 export function bossVisualScaleForRank(rank: BossDef['rank'], hero: HeroDef): number {
   const base = heroWorldSize(hero);
-  const floorClass: SizeClass = rank === 'boss' ? 'huge' : 'large';
-  const heightM = Math.max(base.heightM, SIZE_BANDS[floorClass].min);
+  const heightM = Math.max(base.heightM, SIZE_BANDS[BOSS_RANK_FLOOR[rank]].min);
   return +(heightM / base.heightM).toFixed(4);
 }

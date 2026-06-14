@@ -4,7 +4,7 @@ import { REG } from '../core/registry';
 import { Sim } from '../core/sim';
 import { resolveCollisions, steerToward } from '../core/movement';
 import { dist, pointSegDist } from '../core/math2d';
-import { projectileSegmentHitsUnit, resolveUnitBodies, staticCircleObstacle, zoneContainsUnit } from '../core/collision';
+import { obstacleBlocksProjectiles, projectileSegmentHitsObstacle, projectileSegmentHitsUnit, resolveUnitBodies, staticCircleObstacle, zoneContainsUnit } from '../core/collision';
 
 beforeAll(() => registerAllContent());
 
@@ -121,6 +121,21 @@ describe('movement and collision', () => {
     expect(bodies.pick.pickPadding).toBeGreaterThan(0);
   });
 
+  it('widens hit and pick bodies for footprint-decoupled units', () => {
+    const bodies = resolveUnitBodies({
+      radius: 48,
+      kind: 'hero',
+      footprintDecoupled: true,
+      visualFootprintRadius: 180
+    });
+
+    expect(bodies.movement.shape).toEqual({ kind: 'circle', radius: 48 });
+    expect(bodies.hit.shape).toEqual({ kind: 'circle', radius: 180 });
+    expect(bodies.target.shape).toEqual({ kind: 'circle', radius: 180 });
+    expect(bodies.pick.shape).toEqual({ kind: 'circle', radius: 180 });
+    expect(bodies.pick.pickPadding).toBeGreaterThan(18);
+  });
+
   it('keeps named hit helpers in parity with current circle math', () => {
     const target = { pos: { x: 180, y: 0 }, radius: 80, kind: 'creep' as const };
     expect(zoneContainsUnit({ shape: 'circle', pos: { x: 100, y: 0 }, radius: 40, width: 0 }, target)).toBe(true);
@@ -149,5 +164,67 @@ describe('movement and collision', () => {
     expect(sim.obstacles[0].body.shape).toEqual({ kind: 'circle', radius: 80 });
     expect(sim.obstacles[0].body.blocksMovement).toBe(true);
     expect(dist(unit.pos, sim.obstacles[0].pos)).toBeGreaterThanOrEqual(sim.obstacles[0].radius + unit.radius - 0.1);
+  });
+
+  it('detects projectile-blocking obstacle contacts along a swept segment', () => {
+    const input = staticCircleObstacle({
+      pos: { x: 180, y: 0 },
+      radius: 40,
+      id: 'blocking-pillar',
+      blocksProjectiles: true
+    });
+    const sim = new Sim({ seed: 27, bounds: { w: 1000, h: 1000 }, obstacles: [input] });
+    const obstacle = sim.obstacles[0];
+    const hit = projectileSegmentHitsObstacle({ x: 0, y: 0 }, { x: 400, y: 0 }, 20, obstacle);
+
+    expect(obstacleBlocksProjectiles(obstacle)).toBe(true);
+    expect(hit).not.toBeNull();
+    expect(hit?.pos.x).toBeCloseTo(130, 4);
+  });
+
+  it('blocks linear projectiles on the first projectile-blocking obstacle', () => {
+    const sim = new Sim({
+      seed: 28,
+      bounds: { w: 1200, h: 800 },
+      obstacles: [staticCircleObstacle({ pos: { x: 260, y: 400 }, radius: 45, id: 'test-pillar', blocksProjectiles: true })]
+    });
+    sim.events.captureAll = true;
+    const caster = sim.spawnHero(REG.hero('lina'), { team: 0, pos: { x: 120, y: 400 }, level: 1, ctrl: { kind: 'none' } });
+    const target = sim.spawnHero(REG.hero('axe'), { team: 1, pos: { x: 520, y: 400 }, level: 1, ctrl: { kind: 'none' } });
+    sim.spawnProjectile(caster, { defId: 'test-linear', level: 1, vfx: { archetype: 'projectile', color: '#fff' } }, {
+      model: 'linear',
+      speed: 1200,
+      width: 40,
+      range: 900,
+      onHit: [{ kind: 'damage', dtype: 'magical', amount: 10, target: 'target' }]
+    }, { toPoint: target.pos });
+
+    sim.run(0.2);
+
+    expect(sim.events.history.some((e) => e.t === 'projectile-block' && e.obstacleId === 'test-pillar')).toBe(true);
+    expect(sim.events.history.some((e) => e.t === 'projectile-hit')).toBe(false);
+  });
+
+  it('lets non-projectile-blocking obstacles pass linear projectiles through', () => {
+    const sim = new Sim({
+      seed: 29,
+      bounds: { w: 1200, h: 800 },
+      obstacles: [staticCircleObstacle({ pos: { x: 260, y: 400 }, radius: 45, id: 'tree', blocksProjectiles: false })]
+    });
+    sim.events.captureAll = true;
+    const caster = sim.spawnHero(REG.hero('lina'), { team: 0, pos: { x: 120, y: 400 }, level: 1, ctrl: { kind: 'none' } });
+    const target = sim.spawnHero(REG.hero('axe'), { team: 1, pos: { x: 360, y: 400 }, level: 1, ctrl: { kind: 'none' } });
+    sim.spawnProjectile(caster, { defId: 'test-linear-pass', level: 1, vfx: { archetype: 'projectile', color: '#fff' } }, {
+      model: 'linear',
+      speed: 1200,
+      width: 40,
+      range: 900,
+      onHit: [{ kind: 'damage', dtype: 'magical', amount: 10, target: 'target' }]
+    }, { toPoint: target.pos });
+
+    sim.run(0.25);
+
+    expect(sim.events.history.some((e) => e.t === 'projectile-block')).toBe(false);
+    expect(sim.events.history.some((e) => e.t === 'projectile-hit' && e.targetUid === target.uid)).toBe(true);
   });
 });

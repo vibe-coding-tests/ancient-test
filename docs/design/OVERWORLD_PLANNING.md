@@ -1,10 +1,31 @@
 # OVERWORLD PLANNING — COHERENT, LIFELIKE SCALE
 
-The size contract for everything that stands on the world. Companion to `VFX_ASSETS.md` (the master art plan and cohort/creature mapping), `GRAPHICS_SPEC.md` (the `UnitRig` contract and prop instancing), `ASSET_GAPS.md` (the closed coverage audit this extends), and `ASSETS.md` (the generate-or-download policy this respects). Same crunch-mode footing as `SPEC.md §0`: this names direction, priority, and a data shape — it is not a gate until `§9` says so.
+The size contract for everything that stands on the world. Companion to `COLLISION_HITBOX_SPEC.md` (gameplay contact, blockers, spell volumes, and hit feedback), `VFX_ASSETS.md` (the master art plan and cohort/creature mapping), `GRAPHICS_SPEC.md` (the `UnitRig` contract and prop instancing), `ASSET_GAPS.md` (the closed coverage audit this extends), and `ASSETS.md` (the generate-or-download policy this respects). Same crunch-mode footing as `SPEC.md §0`: this names direction, priority, and a data shape — it is not a gate until `§9` says so.
 
 The request behind this doc: heroes, creeps, monsters, bosses, NPCs, buildings, and environment all belong to the same world. Right now each is sized in its own corner — a hero by `SilhouetteSpec.scale`, a building by a hardcoded `3.6` in `terrain.ts`, a critter by a literal in `scene.ts`. When we generate GLBs against those scattered numbers, nothing guarantees a kobold reads as knee-high to a knight, a town hall reads taller than the hero who walks into it, or a treant reads as the giant it's meant to be. **This spec gives every world entity one canonical real-world size, in meters, from a single source — so generation is coherent and the world reads as lifelike.**
 
-The throughline is unchanged and non-negotiable. **The headless deterministic core (`SPEC.md §1.1`, `src/core/`) stays untouched in its math.** Sim collision and pathing keep running in Dota units (`TUNING.unitRadius*`); this spec adds a *visual* size layer and the conversion that ties the two together. `boundary.test.ts` stays green and determinism hashes stay byte-identical.
+The throughline is unchanged and non-negotiable. **The headless deterministic core (`SPEC.md §1.1`, `src/core/`) stays untouched in its math.** Sim collision and pathing keep running in Dota units (`TUNING.unitRadius*`); this spec adds a *visual* size layer and the conversion that ties the two together. `COLLISION_HITBOX_SPEC.md` owns the gameplay contact rules. `boundary.test.ts` stays green and determinism hashes stay byte-identical.
+
+---
+
+## STATUS — CLOSED ✅
+
+This spec is fully executed and gated. Every world entity carries a real-world size from one source, the fit pipeline honors it, the manifest proves it, generation is prompted against the bands, and all ten `§9` gates run as live tests. The `§7` coverage matrix renders **260 entities with zero red boxes** (`docs/design/WORLD_SIZE_MATRIX.md`). The full suite is green (1636 tests, 56 files), including `boundary.test.ts` — determinism is untouched.
+
+| `§9` gate | Where it lives | Enforcing test (`src/test/data-lint.test.ts`, test 24) |
+|---|---|---|
+| 1. Every entity resolves a size | `src/engine/world-size.ts` (`*WorldSize` resolvers) | *every world entity resolves a finite height + footprint* |
+| 2. Bands hold | `SIZE_BANDS`, `inBand` | *every height sits inside its sizeClass band* |
+| 3. Scale/height agree ±5% | resolver derivation | *declared heightM agrees with silhouette scale within ±5%* |
+| 4. Footprint/radius parity ±15% | `scale.ts` `footprintToRadius` | *footprint × 100 matches the sim radius … unless decoupled* |
+| 5. Manifest agreement ±10% | `build_assets.mjs` `dimsM` stamp | *shipped world-sized GLBs agree with declared height within ±10%* |
+| 6. Neighbor coherence | cross-entity ordinals | *creep < building < landmark, boss > human* + camp/room/door/gate fits |
+| 7. No literal heights at call sites | `src/data/world/props.ts` | *the built world sizes from data, not call-site literals* |
+| 8. Determinism untouched | render-only `Unit.visualScale` | `boundary.test.ts` green; sim hashes byte-identical |
+| 9. The matrix renders | `WORLD_SIZE_MATRIX.md` (`UPDATE_WORLD_SIZES=1`) | *renders the §7 matrix with no red* + *emits the committed matrix in sync* |
+| 10. Generation inherits the band | `world-size.ts` `SIZE_PROMPTS`/`generationPrompt` → `world-sizes.generated.json` | *generation prompts inherit the band, in sync with the .mjs bridge* |
+
+**Notes for future work:** the `§9.4` parity gate only constrains creatures whose footprint tracks their sim radius (heroes, creeps, summons). Bosses are `footprintDecoupled` by design — their visual scale-up is intentionally divorced from the unchanged sim collision radius (`bossWorldSize`) — and built-world entities (props, buildings, landmarks) carry no sim radius, so both are skipped. The `decoupled` rows in the matrix are expected, not gaps. Everything below is preserved as the rationale and design of record.
 
 ---
 
@@ -111,7 +132,7 @@ The yardstick is the standard biped hero at **1.8 m**. Every entity belongs to a
 |---|---|---|---|---|
 | `prop` | 0.3–2.5 m | 0.3–2.0 m | barrels, carts, market stalls, foliage | barrel `1.0`, cart `1.5`, market `2.0`, well `1.9` |
 | `structure` | 2.5–8 m | 2–10 m | houses, shops, gates, towers | town buildings `3.6` |
-| `landmark` | 8–40 m | 6–30 m | town hall, ancient, monument, great tree | (new — currently none declared) |
+| `landmark` | 8–40 m | 6–30 m | town hall, ancient, monument, great tree | town monument `12` (plaza centre, `props.ts`) |
 
 **Door-frame rule (lifelike anchor for the built world):** any `structure` or `landmark` a unit can stand beside must read taller than a `human` entity by its band, and entrances frame at ≥ 2.2 m clear height so the 1.8 m hero never looks oversized at a doorway.
 
@@ -152,7 +173,7 @@ What "generate coherently" means for the pipeline. The fit machinery already exi
 
 5. **Procedural is always the floor.** Any entity with no GLB still renders at its declared size via the procedural rig (`buildUnitRig`), which already keys off `scale`. A missing model degrades to a correctly-sized blockout, never to a default-1.0 guess.
 
-6. **Generation prompts inherit the band.** When we generate a GLB for an entity, the prompt/spec carries the entity's `sizeClass` and `heightM` so the asset is authored to read at the right scale relative to its neighbors (a `colossal` treant prompt says "tower over a person," a `small` kobold prompt says "knee-high to a knight").
+6. **Generation prompts inherit the band *(landed)*.** When we generate a GLB for an entity, the prompt/spec carries the entity's `sizeClass` and `heightM` so the asset is authored to read at the right scale relative to its neighbors (a `colossal` treant prompt says "tower over a person," a `small` kobold prompt says "knee-high to a knight"). The per-class anchor language lives once in `world-size.ts` (`SIZE_PROMPTS` + `generationPrompt`); the asset build mirrors it into `world-sizes.generated.json` so the `.mjs` generators (no TS runtime) prompt against the same bands the renderer enforces, and the specs carry an explicit `targetHeightM`/`sizeClass`. `data-lint` asserts the bridge stays in sync (§9.10).
 
 ---
 
@@ -214,12 +235,13 @@ The boxes, as tests. Layered so existing content stays green and new content mus
 3. **Scale/height agree.** Where both `scale` and `heightM` exist, they're within ±5%.
 4. **Footprint/radius parity.** `footprintM × 100` matches sim radius within ±15% unless flagged decoupled (`§6`).
 5. **Manifest agreement.** For shipped GLBs, `manifest.dimsM.h` is within ±10% of declared `heightM` (`§5.4`).
-6. **Neighbor coherence.** Region/arena ordinals from `§6` pass (creep < building < landmark; boss > human).
+6. **Neighbor coherence.** Region/arena ordinals from `§6` pass (creep < building < landmark; boss > human), and the cross-entity fits hold: every camp packs its creep at `footprintM` inside `CampDef.radius`, the widest creature clears the smallest `RoomTemplate`, structures/landmarks frame a ≥ 2.2 m door, and region gates clear the widest traveller.
 7. **No literal heights at call sites.** A lint/grep gate asserts `terrain.ts`/`scene.ts` size from data, not numeric literals (the `3.6`, the critter numbers move into `props.ts`).
 8. **Determinism untouched.** `boundary.test.ts` green; sim hashes byte-identical (visual size never enters core math).
-9. **The matrix renders.** `data-lint` emits the `§7` checklist; CI can diff it. "Done" = zero red boxes.
+9. **The matrix renders.** `data-lint` emits the `§7` checklist to a committed artifact (`docs/design/WORLD_SIZE_MATRIX.md`, one row per entity, refreshed with `UPDATE_WORLD_SIZES=1`) and CI diffs it. "Done" = zero red boxes and zero matrix drift.
+10. **Generation inherits the band.** Every `sizeClass` carries anchor language (`SIZE_PROMPTS`), `generationPrompt` surfaces it with the declared height, and the `world-sizes.generated.json` bridge the `.mjs` generators read stays byte-in-sync with the resolver — so a new GLB is authored against its band, not rescaled after (`§5.6`).
 
-Gates 1–3 land first (cheap, high-coverage, no asset work). 4–6 follow as `props.ts` and the boss rule land. 5 and 9 close the loop once `build_assets.mjs` stamps dims.
+Gates 1–3 land first (cheap, high-coverage, no asset work). 4–6 follow as `props.ts` and the boss rule land. 5 and 9 close the loop once `build_assets.mjs` stamps dims. 10 closes generation-time coherence — the whole spec is now gated.
 
 ---
 
@@ -228,8 +250,8 @@ Gates 1–3 land first (cheap, high-coverage, no asset work). 4–6 follow as `p
 1. **Declare the model** (`§2`, `§8` types + `scale.ts` helpers) and turn on gates 1–3 against derived sizes. Nothing visual changes; the world is now *describable* in meters.
 2. **Pull literals into data** — `src/data/world/props.ts`, boss size floors, creep tier `WorldSize`. `terrain.ts`/`scene.ts` read declared sizes. Turn on gates 4, 6, 7.
 3. **Stamp the manifest** (`build_assets.mjs` `dimsM`), turn on gate 5, and render the `§7` matrix (gate 9).
-4. **Generate against the bands** — every new GLB is prompted with its `sizeClass`/`heightM` (`§5.6`), so coherence is built in at authoring time, not patched after.
+4. **Generate against the bands *(landed)*** — every new GLB is prompted with its `sizeClass`/`heightM` (`§5.6`) from the single `SIZE_PROMPTS` source, mirrored to the generator bridge and gated by `§9.10`, so coherence is built in at authoring time, not patched after.
 
-**Runtime fit contract (landed).** The renderer now honors a unit's resolved world size at render time, closing the `§0` boss gap: a boss-controlled unit lifts its source-hero rig to its `bossWorldSize` height via a render-only `Unit.visualScale` (rank-precise on the dungeon path; `TUNING.bossVisualScale` ≈ huge-floor fallback on the raid-arena path). The lift is render-only — the sim keeps the hero's stats and collision, and everything anchored to rig height (HP bar, selection ring, camera framing) follows for free. `data-lint` asserts every boss reads above the human band and that the lift reproduces the declared boss height.
+**Runtime fit contract (landed).** The renderer now honors a unit's resolved world size at render time for *every* unit, not just bosses: `unitVisualSpec` resolves each hero/creep's `WorldSize.heightM` (explicit override or scale-derived) and folds it back into the rig scale, so the declared height — not a bare `silhouette.scale` — is the render source of truth (a no-op for scale-only content, so nothing visual moves until an entity declares an explicit height). On top of that, a boss-controlled unit lifts its source-hero rig to its resolved boss height via a render-only `Unit.visualScale`, now rank-precise on both live paths: the dungeon guardian uses `bossVisualScale(BossDef, hero)`, and the live raid arena uses `bossVisualScaleForRank(RaidDef.bossRank ?? 'boss', hero)` (marquee colossi declare `bossRank: 'world-boss'` → `colossal`), replacing the flat `TUNING.bossVisualScale` fallback. The lift is render-only — the sim keeps the hero's stats and collision, and everything anchored to rig height (HP bar, selection ring, camera framing) and the footprint-derived pick capsule follows for free. `data-lint` asserts every boss reads above the human band and that the lift reproduces the declared boss height.
 
-End state: one matrix, every box green — every hero, monster, creep, boss, NPC, building, and prop carries a real-world size from one source, the fit pipeline honors it, the manifest proves it, and a generated world reads as a single, lifelike place.
+End state *(reached)*: one matrix, every box green — every hero, monster, creep, boss, NPC, building, and prop carries a real-world size from one source, the fit pipeline honors it, the manifest proves it, generation is prompted against the bands, and all ten `§9` gates are live in `data-lint`. The world reads as a single, lifelike place, by contract.

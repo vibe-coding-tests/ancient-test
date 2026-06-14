@@ -7,7 +7,8 @@ import { REG } from '../core/registry';
 import { Sim } from '../core/sim';
 import { makeItemState, sortInventory } from '../core/items';
 import { normalizeCollisionObstacle, roomCollisionObstacle } from '../core/collision';
-import { bossVisualScale } from '../engine/world-size';
+import { footprintToRadius } from '../engine/scale';
+import { bossVisualScale, bossWorldSize } from '../engine/world-size';
 import { TUNING } from '../data/tuning';
 import type { AffixDef, BossDef, CollisionObstacle, CollisionObstacleInput, CreepInstanceSave, DifficultyTier, DungeonDef, DungeonLayout, DungeonRoom, EffectNode, MacroHeroSetup, PlannedPack, RaidDef, RoomTemplate, SeasonalModeKind, SummonSpec, Vec2, ZoneSpec } from '../core/types';
 import type { Unit } from '../core/unit';
@@ -512,7 +513,14 @@ export class DungeonSession {
       u.externalMods.armor = (u.externalMods.armor ?? 0) + u.base.baseArmor * (scale.armor - 1);
     }
     u.radius = TUNING.unitRadiusHero * TUNING.raidBossRadiusScale;
+    const bossSize = bossWorldSize(boss, REG.hero(boss.heroId));
+    const footprintRadius = footprintToRadius(bossSize.footprintM);
     u.visualScale = bossVisualScale(boss, REG.hero(boss.heroId));
+    u.footprintDecoupled = bossSize.footprintDecoupled;
+    u.visualFootprintRadius = footprintRadius;
+    u.hitRadius = Math.max(u.radius, footprintRadius);
+    u.targetRadius = u.hitRadius;
+    u.pickRadius = u.hitRadius;
     u.markStatsDirty();
     u.refresh(this.sim.time);
     u.hp = u.stats.maxHp;

@@ -1,17 +1,17 @@
 {
   "version": 1,
-  "hash": "294f52182874",
-  "generatedAt": "2026-06-14T17:15:14.815Z",
+  "hash": "624280b4f754",
+  "generatedAt": "2026-06-14T18:30:23.875Z",
   "assetRoot": "/assets/",
-  "totalBytes": 139127615,
+  "totalBytes": 139454038,
   "groups": {
     "audio": {
       "count": 54,
       "bytes": 14634052
     },
     "creep": {
-      "count": 24,
-      "bytes": 3249256
+      "count": 28,
+      "bytes": 3451612
     },
     "env": {
       "count": 2,
@@ -34,8 +34,8 @@
       "bytes": 822752
     },
     "ui": {
-      "count": 253,
-      "bytes": 375883
+      "count": 276,
+      "bytes": 413118
     },
     "vfx": {
       "count": 2,
@@ -43,7 +43,7 @@
     },
     "weapon": {
       "count": 92,
-      "bytes": 632736
+      "bytes": 719568
     }
   },
   "files": [
@@ -703,6 +703,39 @@
       }
     },
     {
+      "path": "creeps/centaur.glb",
+      "url": "/assets/creeps/centaur.glb",
+      "bytes": 48148,
+      "type": "model",
+      "group": "creep",
+      "preloadGroup": "creep",
+      "sourceSpec": null,
+      "source": "generated in-repo: generate_creature_families.mjs",
+      "animations": [
+        "idle",
+        "run",
+        "attack",
+        "cast",
+        "death"
+      ],
+      "worldSize": {
+        "heightM": 2.07,
+        "sizeClass": "human",
+        "pose": "standing",
+        "source": "shared-creature"
+      },
+      "dims": {
+        "w": 1.6634,
+        "h": 2.29,
+        "d": 0.8
+      },
+      "dimsM": {
+        "h": 2.07,
+        "w": 1.5036,
+        "d": 0.7231
+      }
+    },
+    {
       "path": "creeps/crabenemy.glb",
       "url": "/assets/creeps/crabenemy.glb",
       "bytes": 62156,
@@ -1019,6 +1052,39 @@
       ]
     },
     {
+      "path": "creeps/gnoll.glb",
+      "url": "/assets/creeps/gnoll.glb",
+      "bytes": 44808,
+      "type": "model",
+      "group": "creep",
+      "preloadGroup": "creep",
+      "sourceSpec": null,
+      "source": "generated in-repo: generate_creature_families.mjs",
+      "animations": [
+        "idle",
+        "run",
+        "attack",
+        "cast",
+        "death"
+      ],
+      "worldSize": {
+        "heightM": 1.116,
+        "sizeClass": "small",
+        "pose": "standing",
+        "source": "shared-creature"
+      },
+      "dims": {
+        "w": 1.0406,
+        "h": 2.1,
+        "d": 0.84
+      },
+      "dimsM": {
+        "h": 1.116,
+        "w": 0.553,
+        "d": 0.4464
+      }
+    },
+    {
       "path": "creeps/goblin.glb",
       "url": "/assets/creeps/goblin.glb",
       "bytes": 47924,
@@ -1169,6 +1235,39 @@
       }
     },
     {
+      "path": "creeps/scorpion.glb",
+      "url": "/assets/creeps/scorpion.glb",
+      "bytes": 60636,
+      "type": "model",
+      "group": "creep",
+      "preloadGroup": "creep",
+      "sourceSpec": null,
+      "source": "generated in-repo: generate_creature_families.mjs",
+      "animations": [
+        "idle",
+        "run",
+        "attack",
+        "cast",
+        "death"
+      ],
+      "worldSize": {
+        "heightM": 1.8,
+        "sizeClass": "human",
+        "pose": "standing",
+        "source": "shared-creature"
+      },
+      "dims": {
+        "w": 2.342,
+        "h": 1.3855,
+        "d": 0.9
+      },
+      "dimsM": {
+        "h": 1.8,
+        "w": 3.0427,
+        "d": 1.1693
+      }
+    },
+    {
       "path": "creeps/serpent.glb",
       "url": "/assets/creeps/serpent.glb",
       "bytes": 62912,
@@ -1197,6 +1296,38 @@
         "h": 2.016,
         "w": 0.7374,
         "d": 2.1252
+      }
+    },
+    {
+      "path": "creeps/skeleton.glb",
+      "url": "/assets/creeps/skeleton.glb",
+      "bytes": 48764,
+      "type": "model",
+      "group": "creep",
+      "preloadGroup": "creep",
+      "sourceSpec": "scripts/assets/specs/asset-gaps-polypizza.json",
+      "source": "Quaternius skeleton via Poly Pizza — CC0",
+      "animations": [
+        "attack",
+        "death",
+        "idle",
+        "run"
+      ],
+      "worldSize": {
+        "heightM": 1.17,
+        "sizeClass": "small",
+        "pose": "standing",
+        "source": "shared-creature"
+      },
+      "dims": {
+        "w": 59286,
+        "h": 17114,
+        "d": 65534
+      },
+      "dimsM": {
+        "h": 1.17,
+        "w": 4.0531,
+        "d": 4.4802
       }
     },
     {
@@ -7708,6 +7839,236 @@
       "source": "game-icons.net curated item silhouettes — CC BY 3.0"
     },
     {
+      "path": "ui/status/aura.svg",
+      "url": "/assets/ui/status/aura.svg",
+      "bytes": 1634,
+      "type": "svg",
+      "group": "ui",
+      "preloadGroup": "ui",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "ui/status/blind.svg",
+      "url": "/assets/ui/status/blind.svg",
+      "bytes": 2997,
+      "type": "svg",
+      "group": "ui",
+      "preloadGroup": "ui",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "ui/status/break.svg",
+      "url": "/assets/ui/status/break.svg",
+      "bytes": 571,
+      "type": "svg",
+      "group": "ui",
+      "preloadGroup": "ui",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "ui/status/buff.svg",
+      "url": "/assets/ui/status/buff.svg",
+      "bytes": 1914,
+      "type": "svg",
+      "group": "ui",
+      "preloadGroup": "ui",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "ui/status/cyclone.svg",
+      "url": "/assets/ui/status/cyclone.svg",
+      "bytes": 2324,
+      "type": "svg",
+      "group": "ui",
+      "preloadGroup": "ui",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "ui/status/debuff.svg",
+      "url": "/assets/ui/status/debuff.svg",
+      "bytes": 1270,
+      "type": "svg",
+      "group": "ui",
+      "preloadGroup": "ui",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "ui/status/disarm.svg",
+      "url": "/assets/ui/status/disarm.svg",
+      "bytes": 1438,
+      "type": "svg",
+      "group": "ui",
+      "preloadGroup": "ui",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "ui/status/dot.svg",
+      "url": "/assets/ui/status/dot.svg",
+      "bytes": 581,
+      "type": "svg",
+      "group": "ui",
+      "preloadGroup": "ui",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "ui/status/fear.svg",
+      "url": "/assets/ui/status/fear.svg",
+      "bytes": 1919,
+      "type": "svg",
+      "group": "ui",
+      "preloadGroup": "ui",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "ui/status/frozen.svg",
+      "url": "/assets/ui/status/frozen.svg",
+      "bytes": 2765,
+      "type": "svg",
+      "group": "ui",
+      "preloadGroup": "ui",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "ui/status/haste.svg",
+      "url": "/assets/ui/status/haste.svg",
+      "bytes": 527,
+      "type": "svg",
+      "group": "ui",
+      "preloadGroup": "ui",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "ui/status/hex.svg",
+      "url": "/assets/ui/status/hex.svg",
+      "bytes": 2748,
+      "type": "svg",
+      "group": "ui",
+      "preloadGroup": "ui",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "ui/status/invis.svg",
+      "url": "/assets/ui/status/invis.svg",
+      "bytes": 2430,
+      "type": "svg",
+      "group": "ui",
+      "preloadGroup": "ui",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "ui/status/magic-immune.svg",
+      "url": "/assets/ui/status/magic-immune.svg",
+      "bytes": 1283,
+      "type": "svg",
+      "group": "ui",
+      "preloadGroup": "ui",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "ui/status/power.svg",
+      "url": "/assets/ui/status/power.svg",
+      "bytes": 1043,
+      "type": "svg",
+      "group": "ui",
+      "preloadGroup": "ui",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "ui/status/regen.svg",
+      "url": "/assets/ui/status/regen.svg",
+      "bytes": 320,
+      "type": "svg",
+      "group": "ui",
+      "preloadGroup": "ui",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "ui/status/root.svg",
+      "url": "/assets/ui/status/root.svg",
+      "bytes": 760,
+      "type": "svg",
+      "group": "ui",
+      "preloadGroup": "ui",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "ui/status/shield.svg",
+      "url": "/assets/ui/status/shield.svg",
+      "bytes": 625,
+      "type": "svg",
+      "group": "ui",
+      "preloadGroup": "ui",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "ui/status/silence.svg",
+      "url": "/assets/ui/status/silence.svg",
+      "bytes": 2590,
+      "type": "svg",
+      "group": "ui",
+      "preloadGroup": "ui",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "ui/status/sleep.svg",
+      "url": "/assets/ui/status/sleep.svg",
+      "bytes": 581,
+      "type": "svg",
+      "group": "ui",
+      "preloadGroup": "ui",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "ui/status/slow.svg",
+      "url": "/assets/ui/status/slow.svg",
+      "bytes": 2137,
+      "type": "svg",
+      "group": "ui",
+      "preloadGroup": "ui",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "ui/status/stun.svg",
+      "url": "/assets/ui/status/stun.svg",
+      "bytes": 1952,
+      "type": "svg",
+      "group": "ui",
+      "preloadGroup": "ui",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
+      "path": "ui/status/taunt.svg",
+      "url": "/assets/ui/status/taunt.svg",
+      "bytes": 2826,
+      "type": "svg",
+      "group": "ui",
+      "preloadGroup": "ui",
+      "sourceSpec": null,
+      "source": null
+    },
+    {
       "path": "vfx/beam_ramp.webp",
       "url": "/assets/vfx/beam_ramp.webp",
       "bytes": 84,
@@ -7760,7 +8121,7 @@
     {
       "path": "weapons/heroes/arc-warden.glb",
       "url": "/assets/weapons/heroes/arc-warden.glb",
-      "bytes": 8840,
+      "bytes": 11364,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",
@@ -7790,7 +8151,7 @@
     {
       "path": "weapons/heroes/bloodseeker.glb",
       "url": "/assets/weapons/heroes/bloodseeker.glb",
-      "bytes": 6652,
+      "bytes": 9608,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",
@@ -7840,7 +8201,7 @@
     {
       "path": "weapons/heroes/chen.glb",
       "url": "/assets/weapons/heroes/chen.glb",
-      "bytes": 5004,
+      "bytes": 8268,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",
@@ -7850,7 +8211,7 @@
     {
       "path": "weapons/heroes/clinkz.glb",
       "url": "/assets/weapons/heroes/clinkz.glb",
-      "bytes": 3492,
+      "bytes": 6316,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",
@@ -7870,7 +8231,7 @@
     {
       "path": "weapons/heroes/crystal-maiden.glb",
       "url": "/assets/weapons/heroes/crystal-maiden.glb",
-      "bytes": 5084,
+      "bytes": 11636,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",
@@ -7880,7 +8241,7 @@
     {
       "path": "weapons/heroes/dark-seer.glb",
       "url": "/assets/weapons/heroes/dark-seer.glb",
-      "bytes": 8804,
+      "bytes": 11328,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",
@@ -7910,7 +8271,7 @@
     {
       "path": "weapons/heroes/dazzle.glb",
       "url": "/assets/weapons/heroes/dazzle.glb",
-      "bytes": 4980,
+      "bytes": 8248,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",
@@ -7920,7 +8281,7 @@
     {
       "path": "weapons/heroes/death-prophet.glb",
       "url": "/assets/weapons/heroes/death-prophet.glb",
-      "bytes": 5072,
+      "bytes": 7600,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",
@@ -7930,7 +8291,7 @@
     {
       "path": "weapons/heroes/disruptor.glb",
       "url": "/assets/weapons/heroes/disruptor.glb",
-      "bytes": 8752,
+      "bytes": 9808,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",
@@ -7970,7 +8331,7 @@
     {
       "path": "weapons/heroes/ember-spirit.glb",
       "url": "/assets/weapons/heroes/ember-spirit.glb",
-      "bytes": 6656,
+      "bytes": 9304,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",
@@ -8020,7 +8381,7 @@
     {
       "path": "weapons/heroes/invoker.glb",
       "url": "/assets/weapons/heroes/invoker.glb",
-      "bytes": 8788,
+      "bytes": 11300,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",
@@ -8030,7 +8391,7 @@
     {
       "path": "weapons/heroes/juggernaut.glb",
       "url": "/assets/weapons/heroes/juggernaut.glb",
-      "bytes": 6648,
+      "bytes": 7888,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",
@@ -8040,7 +8401,7 @@
     {
       "path": "weapons/heroes/keeper-of-the-light.glb",
       "url": "/assets/weapons/heroes/keeper-of-the-light.glb",
-      "bytes": 5024,
+      "bytes": 7592,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",
@@ -8050,7 +8411,7 @@
     {
       "path": "weapons/heroes/kunkka.glb",
       "url": "/assets/weapons/heroes/kunkka.glb",
-      "bytes": 6628,
+      "bytes": 7932,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",
@@ -8070,7 +8431,7 @@
     {
       "path": "weapons/heroes/lich.glb",
       "url": "/assets/weapons/heroes/lich.glb",
-      "bytes": 5032,
+      "bytes": 11504,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",
@@ -8090,7 +8451,7 @@
     {
       "path": "weapons/heroes/lina.glb",
       "url": "/assets/weapons/heroes/lina.glb",
-      "bytes": 5036,
+      "bytes": 13028,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",
@@ -8100,7 +8461,7 @@
     {
       "path": "weapons/heroes/lion.glb",
       "url": "/assets/weapons/heroes/lion.glb",
-      "bytes": 5024,
+      "bytes": 8288,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",
@@ -8180,7 +8541,7 @@
     {
       "path": "weapons/heroes/natures-prophet.glb",
       "url": "/assets/weapons/heroes/natures-prophet.glb",
-      "bytes": 5080,
+      "bytes": 11524,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",
@@ -8220,7 +8581,7 @@
     {
       "path": "weapons/heroes/outworld-destroyer.glb",
       "url": "/assets/weapons/heroes/outworld-destroyer.glb",
-      "bytes": 8852,
+      "bytes": 11412,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",
@@ -8270,7 +8631,7 @@
     {
       "path": "weapons/heroes/pugna.glb",
       "url": "/assets/weapons/heroes/pugna.glb",
-      "bytes": 5008,
+      "bytes": 8272,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",
@@ -8310,7 +8671,7 @@
     {
       "path": "weapons/heroes/rubick.glb",
       "url": "/assets/weapons/heroes/rubick.glb",
-      "bytes": 5028,
+      "bytes": 8296,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",
@@ -8320,7 +8681,7 @@
     {
       "path": "weapons/heroes/shadow-shaman.glb",
       "url": "/assets/weapons/heroes/shadow-shaman.glb",
-      "bytes": 5056,
+      "bytes": 8340,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",
@@ -8340,7 +8701,7 @@
     {
       "path": "weapons/heroes/skywrath-mage.glb",
       "url": "/assets/weapons/heroes/skywrath-mage.glb",
-      "bytes": 5084,
+      "bytes": 7704,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",
@@ -8380,7 +8741,7 @@
     {
       "path": "weapons/heroes/storm-spirit.glb",
       "url": "/assets/weapons/heroes/storm-spirit.glb",
-      "bytes": 8820,
+      "bytes": 9888,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",
@@ -8460,7 +8821,7 @@
     {
       "path": "weapons/heroes/void-spirit.glb",
       "url": "/assets/weapons/heroes/void-spirit.glb",
-      "bytes": 6616,
+      "bytes": 7856,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",
@@ -8470,7 +8831,7 @@
     {
       "path": "weapons/heroes/warlock.glb",
       "url": "/assets/weapons/heroes/warlock.glb",
-      "bytes": 5072,
+      "bytes": 8344,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",
@@ -8490,7 +8851,7 @@
     {
       "path": "weapons/heroes/witch-doctor.glb",
       "url": "/assets/weapons/heroes/witch-doctor.glb",
-      "bytes": 5084,
+      "bytes": 8364,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",
@@ -8510,7 +8871,7 @@
     {
       "path": "weapons/heroes/zeus.glb",
       "url": "/assets/weapons/heroes/zeus.glb",
-      "bytes": 8780,
+      "bytes": 9816,
       "type": "model",
       "group": "weapon",
       "preloadGroup": "weapon",

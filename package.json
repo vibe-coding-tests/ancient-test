@@ -24,6 +24,7 @@
     "generate:hero-weapons": "node scripts/assets/generate_hero_weapons.mjs",
     "generate:item-weapons": "node scripts/assets/generate_item_weapons.mjs",
     "generate:item-icons": "node scripts/assets/generate_item_icons.mjs",
+    "generate:status-icons": "node scripts/assets/generate_status_icons.mjs",
     "generate:holdout-signatures": "node scripts/assets/generate_holdout_signatures.mjs",
     "generate:ui-assets": "node scripts/assets/generate_ui_assets.mjs",
     "generate:vfx-ramp": "node scripts/assets/generate_vfx_ramp.mjs",

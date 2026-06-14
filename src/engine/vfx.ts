@@ -368,6 +368,7 @@ export class VfxManager {
         break;
       }
       case 'projectile-hit':
+      case 'projectile-block':
       case 'projectile-expire': {
         const entry = this.projectiles.get(ev.pid);
         if (entry) {
@@ -376,6 +377,12 @@ export class VfxManager {
           if (ev.t === 'projectile-hit') {
             this.burst(ev.pos.x, ev.pos.y, '#ffffff', 0.6, 0.25);
             this.impactDecal(ev.pos.x, ev.pos.y, '#ffffff', 0.48, 0.3);
+          } else if (ev.t === 'projectile-block') {
+            const color = ev.feedback?.impactVfx === 'shield' ? '#bfeaff' : ev.feedback?.impactVfx === 'spark' ? '#ffe27d' : '#c8b08a';
+            this.burst(ev.pos.x, ev.pos.y, color, 0.55, 0.22);
+            this.impactDecal(ev.pos.x, ev.pos.y, color, 0.42, 0.28);
+          } else {
+            this.burst(ev.pos.x, ev.pos.y, '#b8c6d8', 0.28, 0.14);
           }
         }
         break;

@@ -356,6 +356,7 @@ describe('dungeon session D1/D2', () => {
     for (const obstacle of session.sim.obstacles) {
       expect(obstacle.body.shape.kind).toBe('circle');
       expect(obstacle.body.blocksMovement).toBe(true);
+      expect(obstacle.body.blocksProjectiles).toBe(true);
     }
     for (const uid of session.enemyUids) {
       const enemy = session.sim.unit(uid);

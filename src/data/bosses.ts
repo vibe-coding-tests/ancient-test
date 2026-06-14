@@ -1,5 +1,15 @@
-import type { BossDef, ItemRarity, LootTable } from '../core/types';
+import type { BossDef, ItemRarity, LootTable, WorldSize } from '../core/types';
 import { TUNING } from './tuning';
+
+// OVERWORLD_PLANNING §3/§8: a few bosses read far larger than their source hero's
+// silhouette and the generic rank floor — a leviathan, a stone giant, an elder treant.
+// They declare an explicit `WorldSize` (footprint decoupled by the resolver) so the
+// fit/visual-lift pipeline reproduces the lore size instead of the default huge floor.
+const BOSS_WORLD_SIZE: Record<string, WorldSize> = {
+  'boss-tidehunter': { heightM: 5.2, footprintM: 0.9, pose: 'standing' },   // Leviathan
+  'boss-tiny': { heightM: 6.6, footprintM: 1.1, pose: 'standing' },         // grown stone colossus
+  'mini-treant-protector': { heightM: 6.0, footprintM: 1.1, pose: 'standing' } // elder treant
+};
 
 // GAMEPLAY_2.0_REHAUL §3.3: every boss is an *efficient* themed home, classified
 // by its hero's combat identity so a str titan never hands out caster cores (and
@@ -134,7 +144,8 @@ function boss(id: string, heroId: string, region: string, rank: BossDef['rank'])
       : [{ atHpPct: 50, onEnter: [{ kind: 'status', status: 'buff', duration: 5, target: 'self', params: { mods: { moveSpeedPct: 12 }, tag: `${id}-mini-phase` } }] }],
     loot: themedLoot(heroId, rank),
     tiers: ['normal', 'nightmare', 'hell'],
-    dialogue: bossDialogue(heroId, rank)
+    dialogue: bossDialogue(heroId, rank),
+    ...(BOSS_WORLD_SIZE[id] ? { worldSize: BOSS_WORLD_SIZE[id] } : {})
   };
 }
 

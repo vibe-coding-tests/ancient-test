@@ -5,6 +5,7 @@ import { execEffects, type EffectCtx } from './effects';
 import { REG } from './registry';
 import { itemReady } from './items';
 import { cannotAttack, cannotCast, cannotMove, isDisabled } from './status';
+import { unitHitRadius, unitTargetRadius } from './collision';
 import type { Unit } from './unit';
 import { faceToward, integrateForcedMoves, steerToward } from './movement';
 import { levelArr } from './values';
@@ -209,12 +210,12 @@ function nearestEnemyOnAttackMovePath(sim: Sim, u: Unit, point: { x: number; y: 
       o.kind !== 'npc' &&
       !o.summary.untargetable &&
       o.isVisibleTo(u.team, sim.time) &&
-      pointSegDist(o.pos, u.pos, point) <= pathWidth + o.radius
+      pointSegDist(o.pos, u.pos, point) <= pathWidth + unitHitRadius(o)
   );
 }
 
 function pursueAndAttack(sim: Sim, u: Unit, target: Unit, dt: number): void {
-  const range = u.stats.attackRange + u.radius + target.radius;
+  const range = u.stats.attackRange + unitTargetRadius(u) + unitTargetRadius(target);
   const attackMoveRange = range + TUNING.meleeRangeBuffer;
   if (dist2(u.pos, target.pos) > attackMoveRange * attackMoveRange) {
     if (u.windupUntil > 0) u.windupUntil = -1;
@@ -227,7 +228,7 @@ function pursueAndAttack(sim: Sim, u: Unit, target: Unit, dt: number): void {
 
 function attackIfInRange(sim: Sim, u: Unit, target: Unit, dt: number): void {
   const now = sim.time;
-  const range = u.stats.attackRange + u.radius + target.radius;
+  const range = u.stats.attackRange + unitTargetRadius(u) + unitTargetRadius(target);
   const faced = faceToward(u, target.pos, dt);
 
   // windup resolving?
@@ -314,7 +315,7 @@ function handleCastOrder(sim: Sim, u: Unit, dt: number): void {
   const castRange = (levelArr(asArr(def.castRange, def), a.level, 600) + u.stats.castRangeBonus) * TUNING.rangeScale;
   const aim = target?.pos ?? point;
   if (def.targeting !== 'no-target' && aim) {
-    const d = dist(u.pos, aim) - (target ? target.radius : 0);
+    const d = dist(u.pos, aim) - (target ? unitTargetRadius(target) : 0);
     if (d > castRange) {
       steerToward(sim, u, aim, dt, castRange * 0.92);
       return;
@@ -487,7 +488,7 @@ function handleItemOrder(sim: Sim, u: Unit, dt: number): void {
   const castRange = (typeof active.castRange === 'number' ? active.castRange : 600) + u.stats.castRangeBonus;
   const aim = target?.pos ?? point;
   if (active.targeting !== 'no-target' && aim) {
-    if (dist(u.pos, aim) - (target ? target.radius : 0) > castRange) {
+    if (dist(u.pos, aim) - (target ? unitTargetRadius(target) : 0) > castRange) {
       steerToward(sim, u, aim, dt, castRange * 0.92);
       return;
     }
