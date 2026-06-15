@@ -8,6 +8,7 @@ import { makeItemState } from './items';
 import { raidSetupFromDef } from './phase3';
 import { worldLevelScale } from './progression';
 import { applyElementAura } from './combat';
+import { execEffects } from './effects';
 import { slotToWorld, type Formation } from './board';
 import type { EffectCtx } from './effects';
 import type { ActiveElement, BossDef, DifficultyTier, HeroDef, MacroHeroSetup, RaidBossSetup, RaidDef, StatModMap, Vec2, ZoneSpec } from './types';
@@ -66,7 +67,7 @@ export interface MacroResult {
 
 /** A raid mechanic that fired in the sim (Phase 3 §3.B / Phase 6 §3.9). */
 export interface RaidMechanicFired {
-  kind: 'add-wave' | 'zone' | 'signature' | 'enrage';
+  kind: 'add-wave' | 'zone' | 'signature' | 'enrage' | 'phase';
   id: string;
   atSec: number;
   bossHpPct: number;
@@ -173,7 +174,10 @@ export function setupRaidSim(setup: RaidSetup): Sim {
     kind: 'boss',
     threat: {},
     homePos: { x: TUNING.arenaWidth - TUNING.macroTeamXInset, y: centerY },
-    boss: { depth: aiDepth, enrageSec: setup.boss.enrageSec }
+    // COMBAT_DEPTH_OVERHAUL: the boss carries `aiDepth` too (not only `boss.depth`),
+    // so its utility/combo discipline scales with tier like the raid party's does.
+    boss: { depth: aiDepth, enrageSec: setup.boss.enrageSec },
+    aiDepth
   }, bossLevel, bossBuild);
   const hpScale = setup.boss.hpScale ?? TUNING.raidBossHpScale;
   const damageScale = setup.boss.damageScale ?? TUNING.raidBossDamageScale;
@@ -272,6 +276,22 @@ export function runRaidBattle(setup: RaidSetup): MacroResult {
   return runBattleToResult(sim, setup.maxSec ?? TUNING.macroMaxSec);
 }
 
+/**
+ * COMBAT_DEPTH_OVERHAUL P3: a single-boss fight that actually runs the boss's authored
+ * mechanics — `BossDef.phases[].onEnter` self-empowers fire on HP-threshold crossing, and a
+ * soft-enrage timer keeps you from out-sustaining a long fight. Used by overworld regional
+ * bosses (game.ts `runBossFight`); raids/dungeons drive the runner through their own defs.
+ */
+export function runBossBattle(setup: RaidSetup, mech: { id: string; enrageSec: number; phases?: BossDef['phases'] }): MacroResult {
+  const sim = setupRaidSim(setup);
+  const boss = sim.unitsArr.find((u) => u.team === 1 && u.ctrl.kind === 'boss');
+  if (!boss) return runBattleToResult(sim, setup.maxSec ?? TUNING.macroMaxSec);
+  // Arm the FSM's enrage posture on the same timer so the hard ramp is actually eligible to fire.
+  if (boss.ctrl.boss) boss.ctrl.boss.enrageSec = mech.enrageSec;
+  const runner = createRaidMechanicRunner({ id: mech.id, addWaves: [], zones: [], enrageSec: mech.enrageSec }, sim, boss, mech.phases);
+  return runBattleToResult(sim, setup.maxSec ?? TUNING.macroMaxSec, { onTick: runner.tick });
+}
+
 function nearestLivingEnemyHero(sim: Sim, fallen: Unit): Unit | null {
   let best: Unit | null = null;
   let bestD = Infinity;
@@ -368,7 +388,8 @@ function runBattleToResult(sim: Sim, maxSec: number, hooks: BattleHooks = {}): M
 
 interface RaidMech {
   key: string;
-  kind: RaidMechanicFired['kind'];
+  // Phase transitions run on a separate immediate track, so a RaidMech is never a 'phase'.
+  kind: Exclude<RaidMechanicFired['kind'], 'phase'>;
   atHpPct: number;
   wave?: { summon: RaidDef['addWaves'][number]['summon']; count: number };
   zone?: ZoneSpec;
@@ -478,7 +499,10 @@ export function runDomainEncounter(setup: DomainEncounterSetup): DomainEncounter
   return { ...base, cleared, reactions };
 }
 
-export function createRaidMechanicRunner(def: RaidDef, sim: Sim, boss: Unit): RaidMechanicRunner {
+/** The slice of a RaidDef the mechanic runner actually reads (lets a lone boss run mechanics without a full RaidDef). */
+export type BossMechanicDef = Pick<RaidDef, 'id' | 'addWaves' | 'zones' | 'signatureExotic' | 'enrageSec'>;
+
+export function createRaidMechanicRunner(def: BossMechanicDef, sim: Sim, boss: Unit, phases: BossDef['phases'] = []): RaidMechanicRunner {
   // One unique mechanic instance per scripted beat (dup summon ids stay distinct).
   const mechs: RaidMech[] = [
     ...def.addWaves.map((w, i) => ({ key: `wave-${i}`, kind: 'add-wave' as const, atHpPct: w.atHpPct, wave: { summon: w.summon, count: w.count } })),
@@ -486,6 +510,12 @@ export function createRaidMechanicRunner(def: RaidDef, sim: Sim, boss: Unit): Ra
   ];
   if (def.signatureExotic) mechs.push({ key: 'signature', kind: 'signature', atHpPct: 50, sigId: def.signatureExotic });
   mechs.push({ key: 'enrage', kind: 'enrage', atHpPct: 0 });
+
+  // COMBAT_DEPTH_OVERHAUL P3: authored boss phase-transitions (BossDef.phases[].onEnter) run on a
+  // separate immediate track — they fire the instant the HP threshold is crossed, not gated by the
+  // cluster-holding FSM that stages area beats. These are typically self-empowers (the boss gets
+  // meaner as it bleeds), so delaying them would defeat the point.
+  const phaseBeats = (phases ?? []).map((p, i) => ({ key: `phase-${i}`, atHpPct: p.atHpPct, effects: p.onEnter }));
 
   const fired: RaidMechanicFired[] = [];
   const done = new Set<string>();
@@ -511,6 +541,15 @@ export function createRaidMechanicRunner(def: RaidDef, sim: Sim, boss: Unit): Ra
   const tick = (s: Sim) => {
     if (!boss.alive) return;
     const hpPct = 100 * boss.hp / Math.max(1, boss.stats.maxHp);
+
+    // Phase transitions fire immediately on threshold crossing (self-empowers must not be held).
+    for (const p of phaseBeats) {
+      if (done.has(p.key) || hpPct > p.atHpPct) continue;
+      done.add(p.key);
+      if (p.effects.length > 0) execEffects(s, boss, ctx, p.effects, { target: boss, point: { ...boss.pos } });
+      fired.push({ kind: 'phase', id: p.key, atSec: s.time, bossHpPct: hpPct });
+    }
+
     for (const m of mechs) {
       if (done.has(m.key)) continue;
       if (m.kind === 'enrage') {

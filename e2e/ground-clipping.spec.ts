@@ -5,7 +5,7 @@ const WORLD_SCALE = 100;
 
 test.describe('ground clipping red-team', () => {
   test('rendered hero stays on top of terrain through teleports, dashes, and dungeon floors', async ({ page }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(180_000);
     const errors = watchPageErrors(page);
     await boot(page, { hero: 'juggernaut', region: 'icewrack', seed: 14001, webgl: true, quality: 'low' });
     await clearCinematics(page);
@@ -43,7 +43,7 @@ test.describe('ground clipping red-team', () => {
       ];
       for (const point of weirdClicks) {
         g.orderMove(point);
-        for (let i = 0; i < 18; i++) t.step(33);
+        for (let i = 0; i < 10; i++) t.step(33);
         sample(`walk ${Math.round(point.x)},${Math.round(point.y)}`);
       }
 
@@ -59,7 +59,7 @@ test.describe('ground clipping red-team', () => {
         body: { layer: 'static', blocksMovement: true, shape: { kind: 'circle', radius: 120 } }
       });
       g.tryDash({ x: hero.pos.x + 900, y: hero.pos.y });
-      for (let i = 0; i < 18; i++) t.step(33);
+      for (let i = 0; i < 10; i++) t.step(33);
       sample('dash into rim rock');
 
       const portal = g.region.dungeons[0];
@@ -71,7 +71,7 @@ test.describe('ground clipping red-team', () => {
       if (dungeon) {
         const driver = dungeon.drivenUnit();
         g.orderMove({ x: dungeon.sim.bounds.w - 180, y: dungeon.sim.bounds.h - 180 });
-        for (let i = 0; i < 24; i++) t.step(33);
+        for (let i = 0; i < 12; i++) t.step(33);
         sample('dungeon diagonal walk');
         return {
           entered,

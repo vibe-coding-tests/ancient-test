@@ -1,6 +1,13 @@
 // ============================================================
 // All global tunables. The sim reads Dota-baseline numbers from
 // data and scales them through here. Rebalance centrally.
+//
+// BALANCE REGIMES (see SPEC.md Phase 5 "Balance directive" + DECISIONS 2026-06-15):
+// the micro overworld/raids is ALWAYS resonant — balance every micro-layer number
+// (heroes, items, encounters, World Level) with resonance ON. Vanilla (resonance-off)
+// balance exists SOLELY for the macro autobattler (gyms / Elite Five). Never tune a
+// micro number for a resonance-off case, and never let a macro vanilla-Dota concern
+// drive overworld/raid tuning.
 // ============================================================
 export const TUNING = {
   // --- simulation ---
@@ -276,7 +283,10 @@ export const TUNING = {
       'mount-joerlak': 2.17,
       'mad-moon-crater': 2.32
     },
-    tier: { normal: 1.0, nightmare: 1.5, hell: 2.1 }
+    // COMBAT_DEPTH_OVERHAUL P4: trimmed the difficulty-tier sponge (nightmare 1.5->1.4,
+    // hell 2.1->1.85) and reinvested that lost durability into enemyCompetence (smarter AI,
+    // pack coordination, mechanics). normal stays 1.0 so WL0/normal fights are unchanged.
+    tier: { normal: 1.0, nightmare: 1.4, hell: 1.85 }
   },
   // --- World Level (PROGRESSION_OVERHAUL §2 + §9 balance pass): opt-in
   // danger/texture dial for featured encounters. texturePerLevel is the PRIMARY
@@ -287,7 +297,7 @@ export const TUNING = {
   worldLevel: {
     cap: 8,
     trashCap: 1,                              // ordinary small/medium trash can be outgrown
-    hpPerLevel: 0.08,                         // secondary
+    hpPerLevel: 0.06,                         // secondary (COMBAT_DEPTH_OVERHAUL P4: 0.08->0.06, less sponge)
     damagePerLevel: 0.05,                     // secondary
     texturePerLevel: 0.12,                    // PRIMARY — feeds the reaction-shield wall
     rewardPerLevel: 0.06,
@@ -481,6 +491,10 @@ export const TUNING = {
   raidBadLuckPity: 8,
   raidBossHpScale: 5,
   regionalBossHpScale: 1.25,
+  // COMBAT_DEPTH_OVERHAUL P3: overworld regional bosses now run their authored phase
+  // transitions and a soft-enrage timer (you can't out-sustain a long fight). A full
+  // party clears well inside this window, so the ramp only bites stalled fights.
+  regionalBossSoftEnrageSec: 90,
   raidBossDamageScale: 1.25,
   raidBossRadiusScale: 1.7,
   // OVERWORLD_PLANNING §3/§5.1: render-only height lift for a boss-controlled unit
@@ -492,10 +506,14 @@ export const TUNING = {
   // kills start dropping a Refresher Shard + Cheese alongside the Aegis.
   roshanRespawnSec: 480,
   roshanRepeatDropFromClear: 2,
+  // COMBAT_DEPTH_OVERHAUL P4: cut the boss HP/damage sponge (hell HP 2.45->2.05, nightmare
+  // 1.65->1.5; damage trimmed too) and reinvested into bossTierAiDepth + authored phases/enrage
+  // so a higher tier reads as a smarter, mechanic-richer boss rather than a longer chip-fest.
+  // normal stays 1.0 (reversibility — combat-scaling's normal boss-length guard is unchanged).
   bossTierScale: {
     normal: { hp: 1.0, damage: 1.0, armor: 1.0 },
-    nightmare: { hp: 1.65, damage: 1.28, armor: 1.18 },
-    hell: { hp: 2.45, damage: 1.65, armor: 1.35 }
+    nightmare: { hp: 1.5, damage: 1.22, armor: 1.15 },
+    hell: { hp: 2.05, damage: 1.5, armor: 1.3 }
   },
   bossBkbByTier: {
     normal: { duration: 4, cooldown: 90 },
@@ -506,6 +524,23 @@ export const TUNING = {
   // and raid-party reaction timing, beside bossTierScale rather than instead of it.
   bossTierAiDepth: { normal: 0.45, nightmare: 0.7, hell: 1.0 },
   bossAssembledDropPct: { normal: 0.08, nightmare: 0.16, hell: 0.30 },
+
+  // --- Enemy competence (COMBAT_DEPTH_OVERHAUL): one derived 0..1 "how well the
+  // enemy fights" dial, built from difficulty tier (the bossTierAiDepth band) plus
+  // World Level and pack rarity/rank, then routed to ctrl.aiDepth (creeps & bosses),
+  // pack coordination, mechanic density, and the reaction (resonance) demand. At
+  // normal + World Level 0 it equals `ai.depthRefAiDepth`, so today's fights are
+  // unchanged; it ramps into hell / high World Level where "harder" means smarter.
+  competence: {
+    perWorldLevel: 0.045,          // each featured World Level adds this much depth (cap 8 -> +0.36)
+    championBonus: 0.08,           // an overworld champion / dungeon champion body
+    rareBonus: 0.16,              // an overworld rare lead
+    eliteBonus: 0.06,              // elite-lead / pack-leader rank
+    bossBonus: 0.10,               // a boss-ranked unit
+    packCoordMinDepth: 0.62,       // packs at/above this coordinate (shared focus / spread / peel)
+    comboMinDepth: 0.7,            // elite packs at/above this may sequence cross-unit combos
+    reactionDemandMinDepth: 0.55   // featured/elite shields force the reaction at/above this
+  },
 
   // --- macro arena ---
   arenaWidth: 4200,

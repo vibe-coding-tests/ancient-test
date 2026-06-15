@@ -276,7 +276,7 @@ With orders issued through the input layer where possible:
 ### 5.3 Statuses (P2, headless)
 
 - Stun, root, and slow apply and expire; assert via `__game` unit status state.
-- Resonance (elemental reactions) toggles in settings and changes combat output when on.
+- Resonance (elemental reactions) is always on in the overworld and changes combat output; macro sims run with it off.
 
 ### 5.4 Items in combat (P2, headless)
 
@@ -420,7 +420,6 @@ Open via Esc → Menu.
 ### 12.1 Toggles take effect (P2, headless)
 
 - Quick-cast (`#opt-quickcast`) on/off changes whether targeted abilities need a confirm click.
-- Resonance (`#opt-resonance`) on/off changes combat reactions.
 - Reduced motion and photosensitive options apply.
 
 ### 12.2 Graphics quality (P3, WebGL)
@@ -535,7 +534,7 @@ No `data-testid` exists. Use these.
 #floater-layer  #capture-bar  #hud-hint  #trial-choice  #live-gym-bar
 #cinematic-layer  #modal-root  #modal-close
 #talent-open  #debug-panel
-#opt-quickcast  #opt-resonance  #opt-quality
+#opt-quickcast  #opt-quality
 ```
 
 ### Data-attribute hooks

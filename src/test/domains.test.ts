@@ -162,6 +162,15 @@ describe('ley-line outcrop', () => {
     expect(g.gold).toBeGreaterThan(goldBefore);
   });
 
+  it('spawns ley-line defenders at full featured World Level, not the ordinary trash cap', () => {
+    const g = Game.headless(fullPartySave());
+    const camps = (g as unknown as { camps: Map<string, { uids: number[]; respawnAt: number }> }).camps;
+    const st = camps.get('tv-leyline-dawnmote')!;
+    const wls = st.uids.map((uid) => g.sim.unit(uid)?.encounterWorldLevel ?? -1);
+    expect(wls.length).toBeGreaterThan(0);
+    expect(new Set(wls)).toEqual(new Set([TUNING.worldLevel.cap]));
+  });
+
   it('pays reduced dry gold when resin is short', () => {
     TUNING.resin.enabled = true;
     const g = Game.headless(fullPartySave());

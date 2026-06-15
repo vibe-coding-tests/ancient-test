@@ -1374,6 +1374,10 @@ button:disabled { opacity: 0.45; cursor: default; }
 #combat-readout .threat-line span, #combat-readout .focus-line span { color: #fff; font-weight: 700; }
 #combat-readout .focus-line { color: #bff0ff; }
 #combat-readout .ult-line { color: #ffe9a8; font-weight: 600; }
+#combat-readout .raid-line { color: #ffd6a8; font-size: 11px; font-weight: 600; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: center; }
+#combat-readout .raid-line span { color: #fff0c8; }
+#combat-readout .raid-line em { color: #ffb3a8; font-style: normal; }
+#combat-readout .raid-line b { color: #ffdf7a; }
 #combat-readout .tag-chain-line { color: var(--brass-lite); font-weight: 700; min-width: 180px; text-align: center; }
 #combat-readout .tag-chain-line span { color: #fff; }
 #combat-readout .tag-chain-line i { display: block; height: 4px; margin-top: 2px; border-radius: 3px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
@@ -1408,6 +1412,11 @@ button:disabled { opacity: 0.45; cursor: default; }
 #combat-readout .formation-line.committed b { color: #ffb05a; }
 #combat-readout .formation-line span { color: #cfe6ff; }
 #combat-readout .formation-line em { color: #ff9d9d; font-style: normal; }
+#combat-readout .shield-line { font-size: 11px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; justify-content: center; }
+#combat-readout .shield-line .shield { color: #cfe0ff; }
+#combat-readout .shield-line .shield b { color: #bfa8ff; font-weight: 700; }
+#combat-readout .shield-line .shield.broken { color: #ffe2a0; font-weight: 700; }
+#combat-readout .shield-line .shield.broken b { color: #fff; }
 
 /* ---------- gambit editor ---------- */
 

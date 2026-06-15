@@ -95,6 +95,15 @@ function recordLoaded(url: string): void {
   loadedUrls.add(normalizeUrl(url));
 }
 
+function warnAssetFailure(kind: AssetKind | 'manifest', url: string, err: unknown): void {
+  if (typeof console === 'undefined') return;
+  // Browsers abort outstanding GLB fetches as Playwright closes a page. If the
+  // asset is in the manifest, keep the failure stat/retry behavior but avoid
+  // noisy teardown warnings that look like real missing files.
+  if (kind !== 'manifest' && String(err).includes('Failed to fetch') && knownBytes.has(normalizeUrl(url))) return;
+  console.warn(`[assets] ${kind} load failed: ${url}`, err);
+}
+
 function estimateTextureBytes(tex: THREE.Texture): number {
   const img = tex.image as { width?: number; height?: number; naturalWidth?: number; naturalHeight?: number } | undefined;
   const w = img?.width ?? img?.naturalWidth ?? 0;
@@ -115,7 +124,11 @@ export function loadAssetManifest(): Promise<AssetManifest | null> {
         for (const file of manifest.files ?? []) knownBytes.set(normalizeUrl(file.url), file.bytes);
         return manifest;
       })
-      .catch(() => null);
+      .catch((err) => {
+        warnAssetFailure('manifest', '/assets/manifest.json', err);
+        manifestPromise = null;
+        return null;
+      });
   }
   return manifestPromise;
 }
@@ -158,8 +171,10 @@ export function loadModelAsset(url: string): Promise<ModelAsset | null> {
       loadedModels.set(url, asset);
       return asset;
     })
-    .catch(() => {
+    .catch((err) => {
       kindStats.model.failures++;
+      modelCache.delete(url);
+      warnAssetFailure('model', url, err);
       return null;
     });
   modelCache.set(url, p);
@@ -209,8 +224,10 @@ export function loadTex(url: string, opts: TexOpts = {}): Promise<THREE.Texture 
         gpuTextureBytes += estimateTextureBytes(tex);
         return tex;
       })
-      .catch(() => {
+      .catch((err) => {
         kindStats.texture.failures++;
+        texCache.delete(key);
+        warnAssetFailure('texture', url, err);
         return null;
       });
     texCache.set(key, p);
@@ -237,8 +254,10 @@ export function loadHdr(url: string): Promise<THREE.DataTexture | null> {
         gpuTextureBytes += estimateTextureBytes(tex);
         return tex as THREE.DataTexture;
       })
-      .catch(() => {
+      .catch((err) => {
         kindStats.hdr.failures++;
+        hdrCache.delete(url);
+        warnAssetFailure('hdr', url, err);
         return null;
       });
     hdrCache.set(url, p);

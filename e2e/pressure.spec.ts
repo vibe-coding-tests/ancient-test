@@ -4,7 +4,6 @@ import {
   clearCinematics,
   expectNoPageErrors,
   expectPartyWellFormed,
-  skipActiveCinematic,
   state,
   waitForPlayableUi,
   watchPageErrors
@@ -93,7 +92,7 @@ test.describe('PRESSURE: the modal layer is a clean state machine', () => {
   test('every modal opens and closes back to a hidden, unpaused HUD', async ({ page }) => {
     const errors = watchPageErrors(page);
     await boot(page, { hero: 'juggernaut', seed: 9200, hud: true });
-    await skipActiveCinematic(page);
+    await clearCinematics(page);
     await waitForPlayableUi(page);
     await page.evaluate(() => window.focus());
     // In town so the shop modal is reachable. (Town services are diegetic — they

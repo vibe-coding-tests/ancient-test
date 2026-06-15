@@ -94,10 +94,12 @@ export function mountDebugPanel(game: Game): () => void {
       draw ${gfx.drawCalls} · tri ${Math.round(gfx.triangles / 1000)}k · prog ${gfx.programs ?? '?'}<br>
       geo ${gfx.geometries} · tex ${gfx.textures} · dpr ${gfx.dpr.toFixed(2)} (${gfx.qualityTier})<br>
       assets ${bytes(assets.loadedBytes)} / ${bytes(assets.manifestBytes)} · gpu tex ${bytes(assets.gpuTextureBytes)}<br>
-      cache m/t/h ${assets.modelCacheSize}/${assets.textureCacheSize}/${assets.hdrCacheSize} · hit ${assets.model.hits + assets.texture.hits + assets.hdr.hits}
+      cache m/t/h ${assets.modelCacheSize}/${assets.textureCacheSize}/${assets.hdrCacheSize} · hit ${assets.model.hits + assets.texture.hits + assets.hdr.hits}<br>
+      asset failures m/t/h ${assets.model.failures}/${assets.texture.failures}/${assets.hdr.failures}
     ` : `
       assets ${bytes(assets.loadedBytes)} / ${bytes(assets.manifestBytes)}<br>
-      cache m/t/h ${assets.modelCacheSize}/${assets.textureCacheSize}/${assets.hdrCacheSize}
+      cache m/t/h ${assets.modelCacheSize}/${assets.textureCacheSize}/${assets.hdrCacheSize}<br>
+      asset failures m/t/h ${assets.model.failures}/${assets.texture.failures}/${assets.hdr.failures}
     `;
   };
   renderStats();

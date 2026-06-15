@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { boot, expectNoPageErrors, fastForward, skipActiveCinematic, waitForPlayableUi, watchPageErrors } from './helpers';
+import { boot, clearCinematics, expectNoPageErrors, fastForward, waitForPlayableUi, watchPageErrors } from './helpers';
 
 const MODAL_CARD = '#modal-root:not(.hidden) .modal-card';
 
@@ -13,7 +13,7 @@ test.describe('gameplay red-team journeys', () => {
   test('real kills update the quest log, Journal claim pays, and skill spend still works', async ({ page }) => {
     const errors = watchPageErrors(page);
     await boot(page, { hero: 'juggernaut', seed: 13001, hud: true });
-    await skipActiveCinematic(page);
+    await clearCinematics(page);
     await focusGame(page);
 
     const staged = await page.evaluate(() => {
@@ -81,9 +81,10 @@ test.describe('gameplay red-team journeys', () => {
   test('mashing item drop/pickup/use and swap keys preserves party and inventory state', async ({ page }) => {
     const errors = watchPageErrors(page);
     await boot(page, { hero: 'juggernaut', seed: 13002, hud: true });
-    await skipActiveCinematic(page);
+    await clearCinematics(page);
     await focusGame(page);
     await page.evaluate(() => (window as any).__test.fillParty({ level: 12 }));
+    await clearCinematics(page);
 
     const setup = await page.evaluate(() => {
       const g = (window as any).__game;
@@ -163,7 +164,7 @@ test.describe('gameplay red-team journeys', () => {
   test('walk-up recruitment can be canceled, retried, then a dungeon portal still works', async ({ page }) => {
     const errors = watchPageErrors(page);
     await boot(page, { hero: 'juggernaut', seed: 13003 });
-    await skipActiveCinematic(page);
+    await clearCinematics(page);
 
     const recruit = await page.evaluate(() => {
       const t = (window as any).__test;

@@ -65,6 +65,34 @@ describe('combatReadout — overworld pieces', () => {
   });
 });
 
+describe('combatReadout — reaction-wall legibility (COMBAT_DEPTH_OVERHAUL)', () => {
+  it('names the weakness element on a visible shielded enemy', () => {
+    const g = Game.headless(soloSave());
+    expect(g.sim.resonanceEnabled).toBe(true); // the overworld resolves reactions
+    const active = g.activeUnit()!;
+    const harpy = g.sim.spawnCreep(REG.creep('harpy-stormcrafter'), {
+      team: 1, pos: { x: active.pos.x + 200, y: active.pos.y }, wild: true
+    });
+    expect(harpy.elementalShield).toBeTruthy();
+    const r = g.combatReadout();
+    const entry = r.shields.find((s) => s.uid === harpy.uid);
+    expect(entry, 'a shielded enemy should surface in the readout').toBeTruthy();
+    expect(entry!.element).toBe(harpy.elementalShield!.element);
+    expect(entry!.weakTo).toEqual(harpy.elementalShield!.weakTo);
+    expect(entry!.hpPct).toBeGreaterThan(0);
+  });
+
+  it('omits shields where reactions do not resolve (pure-Dota sim)', () => {
+    const g = Game.headless(soloSave());
+    const active = g.activeUnit()!;
+    const harpy = g.sim.spawnCreep(REG.creep('harpy-stormcrafter'), {
+      team: 1, pos: { x: active.pos.x + 200, y: active.pos.y }, wild: true
+    });
+    g.sim.resonanceEnabled = false;
+    expect(g.combatReadout().shields.find((s) => s.uid === harpy.uid)).toBeUndefined();
+  });
+});
+
 describe('combatReadout — live raid overlay (C4)', () => {
   it('reports a live overlay with a boss threat marker', () => {
     const g = Game.headless(soloSave());
@@ -84,5 +112,30 @@ describe('combatReadout — live raid overlay (C4)', () => {
     }
     expect(sawBossTarget, 'boss should acquire a visible target').toBe(true);
     expect(sawCastBar, 'a cast bar should appear during the fight').toBe(true);
+  });
+
+  it('surfaces progression raid execution cues: adds, healer target, dodge telegraph, enrage', () => {
+    const g = Game.headless(soloSave());
+    g.liveRaid = new LiveRaid(ALL_RAIDS[0], PARTY, 'normal', 13579);
+    const raid = g.liveRaid;
+    const wounded = raid.sim.unitsArr.find((u) => u.team === 0 && u.heroId === 'lich')!;
+    wounded.hp = wounded.stats.maxHp * 0.35;
+    raid.boss.attackTargetUid = wounded.uid;
+    raid.sim.addZone({
+      caster: raid.boss,
+      ctx: { defId: 'test:raid-telegraph', level: raid.boss.level, vfx: { archetype: 'ground-aoe', color: '#ff7a3a' } },
+      spec: { shape: 'circle', radius: 360, duration: 4, tick: { interval: 1, affects: 'enemies', effects: [{ kind: 'damage', dtype: 'magical', amount: 20, target: 'target' }] } },
+      duration: 4,
+      pos: { ...wounded.pos },
+      radius: 360
+    });
+
+    const r = g.combatReadout();
+    expect(r.raid).not.toBeNull();
+    expect(r.raid!.nextAddWave?.count ?? 0).toBeGreaterThan(0);
+    expect(r.raid!.healerTarget).toMatchObject({ name: wounded.name, focused: true });
+    expect(r.raid!.healerTarget!.hpPct).toBeCloseTo(0.35, 2);
+    expect(r.raid!.dodgeTelegraph).toMatchObject({ count: 1, radius: 360 });
+    expect(r.raid!.enrage!.secondsRemaining).toBeGreaterThan(0);
   });
 });

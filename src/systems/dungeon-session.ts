@@ -3,6 +3,7 @@ import { execEffects, type EffectCtx } from '../core/effects';
 import { buildHero } from '../core/hero-setup';
 import { createRaidMechanicRunner, heroesAlive, type RaidMechanicRunner } from '../core/macro';
 import { bossBkbItemOverrides, tierScale } from '../core/phase3';
+import { enemyCompetence } from '../core/progression';
 import { REG } from '../core/registry';
 import { Sim } from '../core/sim';
 import { makeItemState, sortInventory } from '../core/items';
@@ -186,6 +187,10 @@ export class DungeonSession {
     this.roomTemplates = templateMap(def, templates);
     const firstTemplate = this.roomTemplateFor(this.layout.rooms[0]);
     this.sim = new Sim({ seed, bounds: roomBounds(firstTemplate), obstacles: roomObstacleInputs(firstTemplate) });
+    // COMBAT_DEPTH_OVERHAUL: dungeons are micro real-time PvE like the overworld, so
+    // reactions resolve here too — a shielded pack demands its weakness element rather
+    // than dissolving to any damage. (Macro gym/Elite sims stay pure-Dota with it off.)
+    this.sim.resonanceEnabled = true;
     this.maxTicks = Math.round((opts?.maxSec ?? this.layout.depth * 75) / this.sim.dt);
     this.affixes = new Map((def.affixes ?? []).map((affix) => [affix.id, affix]));
     this.spawnParty(party);
@@ -486,9 +491,11 @@ export class DungeonSession {
     const spawned: Unit[] = [];
     const weight = PACK_PROGRESS_WEIGHT[pack.rarity] ?? 1;
     const positions = this.packSpawnPositions(center, pack.cards.length, Math.max(...Object.values(TUNING.unitRadiusCreep)));
+    const packRarity: 'normal' | 'champion' | 'rare' = pack.rarity === 'rare' ? 'rare' : pack.rarity === 'champion' ? 'champion' : 'normal';
+    const packDepth = enemyCompetence({ tier: this.tier, rarity: packRarity });
     pack.cards.forEach((card, i) => {
       const pos = positions[i] ?? center;
-      const u = this.sim.spawnCreep(REG.creep(card.creepId), { team: 1, pos, star: card.star, wild: true, homePos: { ...center }, combatTier: this.tier });
+      const u = this.sim.spawnCreep(REG.creep(card.creepId), { team: 1, pos, star: card.star, wild: true, homePos: { ...center }, combatTier: this.tier, aiDepth: packDepth });
       spawned.push(u);
       this.enemyUids.push(u.uid);
       this.enemyWeight.set(u.uid, weight);
@@ -534,7 +541,8 @@ export class DungeonSession {
         kind: 'boss',
         threat: {},
         homePos: { ...pos },
-        boss: { depth: TUNING.bossTierAiDepth[this.tier], enrageSec: 90 }
+        boss: { depth: TUNING.bossTierAiDepth[this.tier], enrageSec: 90 },
+        aiDepth: enemyCompetence({ tier: this.tier, rank: 'boss' })
       }
     });
     for (const [k, v] of Object.entries(build.externalMods)) u.externalMods[k] = (u.externalMods[k] ?? 0) + v;

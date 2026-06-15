@@ -109,14 +109,33 @@ export async function waitForPlayableUi(page: Page): Promise<void> {
  * pure `render=headless` specs.
  */
 export async function clearCinematics(page: Page): Promise<void> {
-  await page.waitForFunction(() => Boolean((window as any).__test?.ready?.()), null, { timeout: 30_000 });
-  await page.evaluate(() => (window as any).__test.skipCinematics());
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await page.waitForFunction(() => Boolean((window as any).__test?.ready?.()), null, { timeout: 60_000 });
+    try {
+      await page.evaluate(() => {
+        (window as any).__test.skipCinematics();
+        // When the HUD is mounted the cinematic layer DOM is only refreshed on the
+        // next UI tick (step/fastForward). Hiding it here keeps the DOM consistent
+        // with the now-cleared cinematic state so the stale full-screen letterbox
+        // overlay can't cover a modal opened before the next tick — the race that
+        // made HUD-mounted prefight/draft screenshots flaky under load.
+        const layer = document.getElementById('cinematic-layer');
+        if (layer) {
+          layer.classList.add('hidden');
+          layer.innerHTML = '';
+        }
+      });
+      return;
+    } catch (err) {
+      if (!String(err).includes('Execution context was destroyed') || attempt === 2) throw err;
+    }
+  }
 }
 
 export async function skipActiveCinematic(page: Page): Promise<void> {
-  await page.waitForFunction(() => Boolean((window as any).__game), null, { timeout: 30_000 });
+  await page.waitForFunction(() => Boolean((window as any).__test?.game?.() ?? (window as any).__game), null, { timeout: 60_000 });
   await page.evaluate(() => {
-    const g = (window as any).__game;
+    const g = (window as any).__test?.game?.() ?? (window as any).__game;
     const clear = () => {
       let guard = 0;
       while (g?.cinematic?.active && guard++ < 100) g.cinematicSkip();
@@ -132,7 +151,7 @@ export async function skipActiveCinematic(page: Page): Promise<void> {
     clear();
   });
   await page.waitForFunction(() => {
-    const g = (window as any).__game;
+    const g = (window as any).__test?.game?.() ?? (window as any).__game;
     let guard = 0;
     while (g?.cinematic?.active && guard++ < 100) g.cinematicSkip();
     g?.cinematic?.clear?.();
@@ -149,7 +168,7 @@ export async function skipActiveCinematic(page: Page): Promise<void> {
 
 export async function attachScreenshot(page: Page, testInfo: TestInfo, name: string): Promise<string> {
   const path = testInfo.outputPath(`${name}.png`);
-  await page.screenshot({ path });
+  await page.screenshot({ path, timeout: 90_000 });
   await testInfo.attach(name, { path, contentType: 'image/png' });
   return path;
 }
@@ -168,11 +187,25 @@ export async function attachElementScreenshot(
   name: string,
   target: string | Locator
 ): Promise<string> {
-  const locator = typeof target === 'string' ? page.locator(target) : target;
   const path = testInfo.outputPath(`${name}.png`);
-  await locator.screenshot({ path });
-  await testInfo.attach(name, { path, contentType: 'image/png' });
-  return path;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const locator = typeof target === 'string' ? page.locator(target) : target;
+    try {
+      await locator.waitFor({ state: 'visible', timeout: 60_000 });
+      await locator.screenshot({ path, timeout: 60_000 });
+      await testInfo.attach(name, { path, contentType: 'image/png' });
+      return path;
+    } catch (err) {
+      const message = String(err);
+      const retryable =
+        message.includes('Element is not attached') ||
+        message.includes('Execution context was destroyed') ||
+        message.includes('Cannot find context');
+      if (!retryable || attempt === 2) throw err;
+      await page.waitForTimeout(250);
+    }
+  }
+  throw new Error('unreachable screenshot retry state');
 }
 
 export async function state(page: Page): Promise<GameState> {

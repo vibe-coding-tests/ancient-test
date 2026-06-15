@@ -172,7 +172,7 @@ Reputation is a simple karma counter moved by quest choices; it gates the reputa
 
 ## 9. PHASES & ACCEPTANCE (each phase ships playable)
 
-Content staging: P1 = 6 heroes / 15 items / 1 region / 6 creep types → P2 = 20 / 30 / 3 regions / 12 creeps, gyms 1–2 → P3 = 60 / 50 / 10 regions / 25 creeps / 8 gyms + Elite Five + all four raids → P4 = polish → P5 (bonus, post-ship) = Resonance, a Genshin-style elemental party layer (ships enabled by default, reversible to vanilla Dota via a settings toggle).
+Content staging: P1 = 6 heroes / 15 items / 1 region / 6 creep types → P2 = 20 / 30 / 3 regions / 12 creeps, gyms 1–2 → P3 = 60 / 50 / 10 regions / 25 creeps / 8 gyms + Elite Five + all four raids → P4 = polish → P5 (bonus, post-ship) = Resonance, a Genshin-style elemental party layer (always on in the micro overworld/raids, never on in macro — not a player toggle).
 
 ### Phase 1 — Core loop
 
@@ -204,13 +204,15 @@ Item visuals are done when: equipping a weapon-class item swaps the hero's held 
 
 ### Phase 5 — Resonance, Feel & Fidelity (bonus, post-ship)
 
-Three post-ship thrusts: a Genshin-style elemental party layer (**Resonance**), a combat **feel** pass (animation, sound, attack-move), and a **graphics overhaul** that takes heroes from stylized placeholders to faithful Dota 2 likenesses. Resonance ships enabled by default but is reversible to vanilla Dota via a settings toggle; the feel and graphics work apply to the whole game. None of it touches the headless core (§1.1) — it is all engine-side, driven by the same sim events.
+Three post-ship thrusts: a Genshin-style elemental party layer (**Resonance**), a combat **feel** pass (animation, sound, attack-move), and a **graphics overhaul** that takes heroes from stylized placeholders to faithful Dota 2 likenesses. Resonance is **always on in the micro overworld and raids** — it is the intended way that layer plays, not a player toggle — and is **never on in macro** (gyms / Elite Five stay pure Dota). The feel and graphics work apply to the whole game. None of it touches the headless core (§1.1) — it is all engine-side, driven by the same sim events.
 
 #### Resonance — Genshin-style elemental party combat
 
-A stretch layer bolted onto the shipped game — **additive and reversible**: it ships enabled by default, and a settings toggle returns vanilla Dota. It never rewrites a hero's kit (the §6 Hero Feel Fidelity rule still holds: a hero's abilities, delivery, and decisions are untouched) and it spends **zero exotic slots** — every mechanic below is a generic extension of the status / trigger / aura engine (§2), driven by data, exactly like `repeat`, target-selectors, and the unified trigger system were added without exotics. Because it builds ahead of ship, it lives outside the §0 "a phase is done only when its checklist passes" gating until P1–P4 are complete; treat it as a labeled stretch goal, not a blocker.
+A stretch layer bolted onto the shipped game — **additive**: it is always on wherever it applies (overworld/raids) and is split out of macro entirely (see Scope below), so it is *not* a player-facing on/off toggle and gameplay/balance is tuned for the resonant overworld only. It never rewrites a hero's kit (the §6 Hero Feel Fidelity rule still holds: a hero's abilities, delivery, and decisions are untouched) and it spends **zero exotic slots** — every mechanic below is a generic extension of the status / trigger / aura engine (§2), driven by data, exactly like `repeat`, target-selectors, and the unified trigger system were added without exotics. Because it builds ahead of ship, it lives outside the §0 "a phase is done only when its checklist passes" gating until P1–P4 are complete; treat it as a labeled stretch goal, not a blocker.
 
 **Scope (respect the §4 layer split).** Elements, reactions, and resonance apply in the **micro overworld and raids** — the exploration / Diablo / party-swap loop, which is where Genshin's fantasy actually lives. **Gyms and the Elite Five stay pure-Dota macro** so competitive drafting and feel fidelity aren't muddied by a reaction meta. Resonance *may* be enabled in macro as a separate ruleset later, logged in `DECISIONS.md` if so.
+
+**Balance directive (load-bearing).** The resonant overworld/raids is the **canonical balance target** — hero numbers, item tuning, encounter/World-Level scaling, and difficulty in the micro layer are all balanced *with resonance on*, because that is the only way that layer is ever played. **Vanilla (resonance-off) balance and gameplay exist solely for the macro autobattler** (gyms / Elite Five), where the layer is never enabled. Never tune a micro-layer number for a resonance-off scenario, and never let a vanilla-Dota balance concern from the autobattler dictate overworld/raid tuning. The two are separate balance regimes by design: resonant micro, pure-Dota macro.
 
 **1. Elements (closed vocabulary of 7, mapped from canon — never invented).** Each hero carries one primary `element` tag in data; individual abilities may override it (an off-element nuke is allowed). Mapping examples, by Dota identity:
 - **Pyro** (fire): Lina, Shadow Fiend, Ember Spirit, Phoenix, Batrider.
@@ -249,7 +251,7 @@ A party with no shared pair gets a small generic **Harmony** bonus, so a rainbow
 
 **6. Light traversal (optional within the bonus).** Genshin is also exploration. Add **stamina** (sprint/dash, stamina-gated climb) and a few **elemental world interactions** reusing the §3 condition/terrain system: pyro burns brush and rope bridges to open paths, hydro+cryo freezes water into walkable platforms, electro powers shrine puzzles. Keep it region-flagged and minimal — flavor, not a second game.
 
-Resonance is done when: a headless sim applies an element, a second element fires the correct table reaction, and reaction damage / Freeze / Superconduct-shred resolve deterministically for a fixed seed; resonance buffs apply and clear as party composition changes (unit test); a swapped-out hero's zone keeps ticking; data lint validates every hero/ability `element` tag and proves every reaction-table entry composes from known primitives; the boundary check stays green; and gyms/Elite Five play identically with the layer toggled on. Demo (60s): build a Pyro+Hydro party, Vaporize a creep pack, swap-Freeze a tanky elite, and feel the Pyro resonance attack buff in the damage numbers.
+Resonance is done when: a headless sim applies an element, a second element fires the correct table reaction, and reaction damage / Freeze / Superconduct-shred resolve deterministically for a fixed seed; resonance buffs apply and clear as party composition changes (unit test); a swapped-out hero's zone keeps ticking; data lint validates every hero/ability `element` tag and proves every reaction-table entry composes from known primitives; the boundary check stays green; and gyms/Elite Five play pure Dota (the layer is never enabled in macro). Demo (60s): build a Pyro+Hydro party, Vaporize a creep pack, swap-Freeze a tanky elite, and feel the Pyro resonance attack buff in the damage numbers.
 
 #### Feel pass — gameplay, animation, sound
 

@@ -91,7 +91,7 @@ function weightedPick<T>(items: readonly T[], weight: (item: T) => number, rng: 
   return items[items.length - 1];
 }
 
-function tierAtLeast(tier: DifficultyTier, min: DifficultyTier | undefined): boolean {
+export function tierAtLeast(tier: DifficultyTier, min: DifficultyTier | undefined): boolean {
   return min === undefined || TIER_RANK[tier] >= TIER_RANK[min];
 }
 

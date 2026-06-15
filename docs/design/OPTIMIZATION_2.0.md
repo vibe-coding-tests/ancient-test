@@ -278,7 +278,7 @@ Keep stable query ordering so the determinism hash never shifts.
 Resonance reactions, status ticks, and set-bonus auras each scan units. Route
 their radius work through the existing grid (the AI clustering already does), give
 them think-cadence staggering like the AI, and confirm they are off the per-frame
-path entirely when their feature is disabled (resonance can be toggled off).
+path entirely when their feature is disabled (e.g. resonance stays event-driven, never a per-frame scan, and is off in macro sims).
 
 ### C.3 Move the sim to a Web Worker (the big structural win) — [free]
 

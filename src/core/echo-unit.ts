@@ -24,6 +24,8 @@ export interface EchoOptions {
   nameSuffix?: string;
   /** Featured World Level (§2.5): scales the echo's HP/damage after the survivability tax. */
   worldLevel?: number;
+  /** COMBAT_DEPTH_OVERHAUL: enemyCompetence depth for the gambit controller (smarter at higher tier/WL). */
+  aiDepth?: number;
 }
 
 /**
@@ -41,8 +43,8 @@ export function spawnHeroEchoUnit(sim: Sim, opts: EchoOptions): Unit {
     pos: { ...opts.pos },
     level: opts.level,
     ctrl: gambit
-      ? { kind: 'gambit', rules: buildDefaultGambit(def.roles), homePos, leashRadius: opts.leashRadius }
-      : { kind: 'creep', homePos }
+      ? { kind: 'gambit', rules: buildDefaultGambit(def.roles), homePos, leashRadius: opts.leashRadius, aiDepth: opts.aiDepth }
+      : { kind: 'creep', homePos, aiDepth: opts.aiDepth }
   });
   for (const k in build.externalMods) u.externalMods[k] = (u.externalMods[k] ?? 0) + build.externalMods[k];
 

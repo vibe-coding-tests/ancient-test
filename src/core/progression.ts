@@ -1,5 +1,6 @@
 import { TUNING } from '../data/tuning';
 import { xpForLevel } from './stats';
+import type { DifficultyTier } from './types';
 
 // ------------------------------------------------------------------
 // XP & gold distribution (SPEC §6): active 100%, swapped-in
@@ -133,6 +134,36 @@ export function worldLevelScale(wl: number): { hp: number; damage: number; textu
 export function worldLevelShieldFraction(wl: number): number {
   const t = TUNING.worldLevel;
   return t.shieldBasePct + worldLevelScale(wl).texture * t.shieldTextureMult;
+}
+
+// ------------------------------------------------------------------
+// Enemy competence (COMBAT_DEPTH_OVERHAUL): one derived "how well this
+// enemy fights" scalar in [0,1]. Used as `ctrl.aiDepth` and to gate pack
+// coordination, mechanic density, and the reaction (resonance) demand, so
+// difficulty + depth make enemies SMARTER, not just tankier. Pure.
+// ------------------------------------------------------------------
+
+export interface EnemyCompetenceOpts {
+  tier?: DifficultyTier;
+  /** featured World Level (0..cap) — already gated by worldLevelForEncounter upstream. */
+  worldLevel?: number;
+  rarity?: 'normal' | 'champion' | 'rare';
+  rank?: 'creep' | 'elite' | 'boss';
+}
+
+/**
+ * Reuses the `bossTierAiDepth` band as the tier floor, so `normal + WL0` equals
+ * `ai.depthRefAiDepth` (today's baseline → `aiDepthBonus` of 0) and the value ramps
+ * up with hell / high World Level / pack rarity / rank. Clamped to [0,1].
+ */
+export function enemyCompetence(opts: EnemyCompetenceOpts = {}): number {
+  const c = TUNING.competence;
+  const base = TUNING.bossTierAiDepth[opts.tier ?? 'normal'];
+  const wl = Math.max(0, opts.worldLevel ?? 0) * c.perWorldLevel;
+  const rarity = opts.rarity === 'rare' ? c.rareBonus : opts.rarity === 'champion' ? c.championBonus : 0;
+  const rank = opts.rank === 'boss' ? c.bossBonus : opts.rank === 'elite' ? c.eliteBonus : 0;
+  const v = base + wl + rarity + rank;
+  return v < 0 ? 0 : v > 1 ? 1 : v;
 }
 
 export function xpProgress(level: number, xp: number): { current: number; needed: number; pct: number } {

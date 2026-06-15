@@ -7,7 +7,7 @@ import { comboStepMatchesOrder, orderForComboStep, planSaveChain, planTeamCombos
 import { bossArchetypeBias } from './boss-brain';
 import { abilityVal } from './values';
 import { itemReady } from './items';
-import { isDisabled } from './status';
+import { STATUS_META, isDisabled } from './status';
 import { REG } from './registry';
 import type { AbilityDef, EffectNode, ItemDef, Order, StatusId, TargetSel, Team, ValueRef, Vec2 } from './types';
 import type { Sim, TeamMind } from './sim';
@@ -357,6 +357,16 @@ function aiDepthBonus(u: Unit): number {
   return Math.max(0, depth - TUNING.ai.depthRefAiDepth);
 }
 
+/**
+ * COMBAT_DEPTH_OVERHAUL: who may sequence a single-unit combo. Gambit heroes and
+ * bosses always plan; a wild creep only plans once its enemy-competence depth clears
+ * the elite threshold, so ordinary trash stays simple while elite leads chain their kit.
+ */
+function canUnitCombo(u: Unit): boolean {
+  if (u.ctrl.kind === 'gambit' || u.ctrl.kind === 'boss') return true;
+  return u.ctrl.kind === 'creep' && (u.ctrl.aiDepth ?? 0) >= TUNING.competence.comboMinDepth;
+}
+
 function dangerNorm(o: Unit): number {
   return Math.max(0, Math.min(1, dangerousScore(o) / TUNING.ai.dangerNorm));
 }
@@ -437,8 +447,11 @@ function enemyChannelingInRange(sim: Sim, u: Unit, range: number): Unit | null {
 }
 
 function bestOffensiveTarget(sim: Sim, u: Unit, focus: Unit | null, range: number, aimAt?: CombatRole): Unit | null {
-  // prefer the focus when it is a valid enemy in range, so casts reinforce the team's commit
-  if (focus && enemyCandidate(sim, u, focus) && dist2(u.pos, focus.pos) <= range * range) return focus;
+  const focusValid = focus && enemyCandidate(sim, u, focus) && dist2(u.pos, focus.pos) <= range * range;
+  // With no role preference, converge on the team's focus. With a role preference,
+  // keep focus as a bonus rather than an override so Hex/Orchid/Solar-style plays
+  // can reach the exposed carry/support instead of tunneling a front body forever.
+  if (focusValid && !aimAt) return focus;
   let best: Unit | null = null;
   let bestScore = -Infinity;
   sim.forEachNearbyUnit(u.pos, range + 80, (o) => {
@@ -447,13 +460,14 @@ function bestOffensiveTarget(sim: Sim, u: Unit, focus: Unit | null, range: numbe
     // §3 playbook lean: with no shared focus to converge on, tilt the scan toward
     // the role this unit is built to aim at (a disabler leads onto the enemy carry).
     const lean = aimAt && o.kind === 'hero' && combatProfile(o).role === aimAt ? TUNING.ai.aimAtBonus : 0;
-    const score = targetValue(o) + lean;
+    const focusBonus = focusValid && o.uid === focus.uid ? 0.35 : 0;
+    const score = targetValue(o) + lean + focusBonus;
     if (score > bestScore || (score === bestScore && (best === null || o.uid < best.uid))) {
       bestScore = score;
       best = o;
     }
   });
-  return best;
+  return best ?? (focusValid ? focus : null);
 }
 
 /** Best cluster center among enemies in cast range, with how many it would catch. */
@@ -518,6 +532,138 @@ function enemiesNear(sim: Sim, u: Unit, radius: number): number {
     if (enemyCandidate(sim, u, o) && dist2(o.pos, u.pos) <= radius * radius) n++;
   });
   return n;
+}
+
+function hpPct(u: Unit): number {
+  return u.hp / Math.max(1, u.stats.maxHp);
+}
+
+function manaPct(u: Unit): number {
+  return u.stats.maxMana > 0 ? u.mana / Math.max(1, u.stats.maxMana) : 1;
+}
+
+function hasPurgeableDebuff(u: Unit, now: number): boolean {
+  return u.statuses.some((st) => st.until > now && st.isDebuff && STATUS_META[st.status].purgeable);
+}
+
+interface TeamResetNeed {
+  allies: number;
+  wounded: number;
+  lowMana: number;
+  debuffed: number;
+  score: number;
+}
+
+function teamResetNeed(sim: Sim, u: Unit, range: number): TeamResetNeed {
+  const out: TeamResetNeed = { allies: 0, wounded: 0, lowMana: 0, debuffed: 0, score: 0 };
+  sim.forEachNearbyUnit(u.pos, range + 80, (ally) => {
+    if (!ally.alive || ally.team !== u.team || ally.kind === 'npc') return;
+    if (dist2(ally.pos, u.pos) > range * range) return;
+    out.allies++;
+    const missingHp = 1 - hpPct(ally);
+    const missingMana = 1 - manaPct(ally);
+    if (missingHp > 0.28) {
+      out.wounded++;
+      out.score += Math.min(1.1, missingHp);
+    }
+    if (missingMana > 0.45) {
+      out.lowMana++;
+      out.score += Math.min(0.8, missingMana * 0.8);
+    }
+    if (hasPurgeableDebuff(ally, sim.time)) {
+      out.debuffed++;
+      out.score += 0.85;
+    }
+  });
+  return out;
+}
+
+function mostPressuredBuffAlly(sim: Sim, u: Unit, range: number): Unit | null {
+  let best: Unit | null = null;
+  let bestScore = -Infinity;
+  sim.forEachNearbyUnit(u.pos, range + 80, (ally) => {
+    if (!ally.alive || ally.team !== u.team || ally.kind === 'npc') return;
+    if (dist2(ally.pos, u.pos) > range * range) return;
+    const p = combatProfile(ally);
+    const nearby = enemiesNear(sim, ally, ally.stats.attackRange + 360);
+    const underFire = sim.time - ally.lastEnemyDamageAt < 1.5 ? 0.45 : 0;
+    const role = p.role === 'carry' ? 0.45 : p.posture === 'frontline' ? 0.35 : p.role === 'initiator' ? 0.4 : 0;
+    const score = role + nearby * 0.28 + (1 - hpPct(ally)) * 0.65 + underFire;
+    if (score <= 0.35) return;
+    if (score > bestScore || (score === bestScore && (best === null || ally.uid < best.uid))) {
+      bestScore = score;
+      best = ally;
+    }
+  });
+  return best;
+}
+
+function allyThreatenedByIncomingDisable(sim: Sim, observer: Unit, ally: Unit, radius: number): boolean {
+  let threatened = false;
+  sim.forEachNearbyUnit(ally.pos, radius + 80, (enemy) => {
+    if (threatened || !enemyCandidate(sim, observer, enemy)) return;
+    if (dist2(enemy.pos, ally.pos) > radius * radius) return;
+    const cur = currentCastDef(enemy);
+    if (cur && classify(cur.def).hardControl && hardDisableThreatensUnit(sim, enemy, ally, cur)) threatened = true;
+  });
+  return threatened;
+}
+
+function inRightClickWindow(u: Unit, target: Unit | null, extra = 180): boolean {
+  if (!target) return false;
+  return dist(u.pos, target.pos) <= u.stats.attackRange + u.radius + target.radius + extra;
+}
+
+function blinkEngagePoint(u: Unit, target: Unit): Vec2 {
+  const dir = norm(sub(u.pos, target.pos));
+  const away = dir.x === 0 && dir.y === 0 ? v2(target.team === 0 ? -1 : 1, 0) : dir;
+  const gap = target.radius + u.radius + 70;
+  return add(target.pos, scale(away, gap));
+}
+
+function lotusSaveTarget(sim: Sim, u: Unit, range: number): { ally: Unit; score: number } | null {
+  let best: { ally: Unit; score: number } | null = null;
+  sim.forEachNearbyUnit(u.pos, range + 80, (ally) => {
+    if (!ally.alive || ally.team !== u.team || ally.kind === 'npc') return;
+    if (dist2(ally.pos, u.pos) > range * range) return;
+    const disabled = isDisabled(ally.summary) || ally.summary.rooted || ally.summary.silenced || ally.summary.disarmed;
+    const purgeable = hasPurgeableDebuff(ally, sim.time);
+    const incoming = allyThreatenedByIncomingDisable(sim, u, ally, range);
+    const channeling = ally.channel !== null && ally.channel.until > sim.time;
+    const wounded = 1 - hpPct(ally);
+    const underFire = sim.time - ally.lastEnemyDamageAt < 1.5;
+    if (!disabled && !purgeable && !incoming && !(channeling && underFire) && wounded < 0.35) return;
+    let score = wounded;
+    if (disabled) score += 1.2;
+    if (purgeable) score += 0.7;
+    if (incoming) score += 1.0;
+    if (channeling) score += TUNING.ai.abilityArchetype.friendlyChannelSaveBonus;
+    if (underFire) score += 0.35;
+    if (!best || score > best.score || (score === best.score && ally.uid < best.ally.uid)) best = { ally, score };
+  });
+  return best;
+}
+
+function longCommitMultiplier(sim: Sim, u: Unit, profile: CombatProfile, def: AbilityDef, archetypes: Set<AbilityArchetype>, clusterCount: number, focus: Unit | null): number {
+  const longCommit = archetypes.has('channel') || (def.castPoint ?? 0) >= 0.6;
+  if (!longCommit) return 1;
+  const closeFight = enemiesNear(sim, u, 520) >= 2 || (focus !== null && dist(u.pos, focus.pos) <= u.stats.attackRange + 520);
+  const engaged = sim.teamMind(u.team).engaged || closeFight;
+  let mult = 1;
+  if (hpPct(u) < profile.retreatHpPct + 0.08 && enemiesNear(sim, u, 460) > 0) mult *= 0.45;
+  if (clusterCount < TUNING.ai.holdClusterMin) mult *= engaged ? 0.72 : 0.45;
+  else mult *= engaged ? 1.12 : 0.92;
+  return mult;
+}
+
+function spentSignatureCooldowns(u: Unit, now: number): number {
+  let spent = 0;
+  for (const a of u.abilities) {
+    if (!a || a.level <= 0 || a.cooldownUntil <= now + 3) continue;
+    const arch = abilityArchetypes(a.def);
+    if (a.def.ult || arch.has('teamfight-ult') || arch.has('cluster-nuke') || arch.has('channel') || arch.has('single-lockdown')) spent++;
+  }
+  return spent;
 }
 
 // ---------- raid-aware considerations (AI_OVERHAUL §6) ----------
@@ -823,7 +969,8 @@ function scoreAbility(sim: Sim, u: Unit, slot: number, focus: Unit | null, profi
     const width = intent.radius || TUNING.ai.abilityArchetype.skillshotWidth;
     const line = bestLine(sim, u, range, width);
     if (line && line.count > 0) {
-      const s = (w.aoe * (0.4 + line.count)) + controlW * 0.4 * line.count + (intent.offensive ? w.burst * 0.4 : 0);
+      const s = ((w.aoe * (0.4 + line.count)) + controlW * 0.4 * line.count + (intent.offensive ? w.burst * 0.4 : 0)) *
+        longCommitMultiplier(sim, u, profile, a.def, archetypes, line.count, focus);
       const order: Order = { kind: 'cast', slot, point: line.point };
       return finish(s, order, line.count, holdKind);
     }
@@ -834,15 +981,17 @@ function scoreAbility(sim: Sim, u: Unit, slot: number, focus: Unit | null, profi
     if (t === 'no-target') {
       const count = enemiesNear(sim, u, intent.radius || 300);
       if (count === 0) return null;
-      const s = (w.aoe * (0.4 + count)) + controlW * 0.4 * count;
+      const s = ((w.aoe * (0.4 + count)) + controlW * 0.4 * count) *
+        longCommitMultiplier(sim, u, profile, a.def, archetypes, count, focus);
       const order: Order = { kind: 'cast', slot };
       return finish(s, order, count, holdKind);
     }
     const cluster = bestCluster(sim, u, range, intent.radius || 300);
     if (!cluster || cluster.count === 0) return null;
-    const s = (w.aoe * (0.4 + cluster.count)) + controlW * 0.4 * cluster.count;
+    const s = ((w.aoe * (0.4 + cluster.count)) + controlW * 0.4 * cluster.count) *
+      longCommitMultiplier(sim, u, profile, a.def, archetypes, cluster.count, focus);
     if (t === 'unit-target') {
-      const tgt = bestOffensiveTarget(sim, u, focus, range);
+      const tgt = bestOffensiveTarget(sim, u, focus, range, profile.playbook.aimAt);
       if (!tgt) return null;
       const order: Order = { kind: 'cast', slot, uid: tgt.uid };
       return finish(s, order, cluster.count, holdKind);
@@ -900,6 +1049,7 @@ function scoreItemByIntent(sim: Sim, u: Unit, slot: number, focus: Unit | null, 
   if (!def?.active) return null;
   const active = def.active;
   const archetypes = itemArchetypes(def);
+  const activeArchetypes = abilityArchetypes(active);
   const intent = intentOf(active, 1);
   const t = active.targeting;
   const w = profile.weights;
@@ -947,12 +1097,14 @@ function scoreItemByIntent(sim: Sim, u: Unit, slot: number, focus: Unit | null, 
       const count = enemiesNear(sim, u, intent.radius || 300);
       if (count === 0) return null;
       const order: Order = { kind: 'item', invSlot: slot };
-      const s = (w.aoe * (0.35 + count)) + controlW * 0.35 * count + amplifyW * (0.35 + count * 0.2);
+      const s = ((w.aoe * (0.35 + count)) + controlW * 0.35 * count + amplifyW * (0.35 + count * 0.2)) *
+        longCommitMultiplier(sim, u, profile, active, activeArchetypes, count, focus);
       return finish(s, order, count, active.ult ? 'teamfight-ult' : null);
     }
     const cluster = bestCluster(sim, u, range, intent.radius || 300);
     if (!cluster || cluster.count === 0) return null;
-    const s = (w.aoe * (0.35 + cluster.count)) + controlW * 0.35 * cluster.count + amplifyW * (0.35 + cluster.count * 0.2);
+    const s = ((w.aoe * (0.35 + cluster.count)) + controlW * 0.35 * cluster.count + amplifyW * (0.35 + cluster.count * 0.2)) *
+      longCommitMultiplier(sim, u, profile, active, activeArchetypes, cluster.count, focus);
     if (t === 'unit-target') {
       const target = bestOffensiveTarget(sim, u, focus, range, profile.playbook.aimAt);
       if (!target) return null;
@@ -963,11 +1115,32 @@ function scoreItemByIntent(sim: Sim, u: Unit, slot: number, focus: Unit | null, 
     return finish(s, order, cluster.count, active.ult ? 'teamfight-ult' : null);
   }
 
-  const target = bestOffensiveTarget(sim, u, focus, range, profile.playbook.aimAt);
+  let target = bestOffensiveTarget(sim, u, focus, range, profile.playbook.aimAt);
+  let collapseTarget = false;
+  if (archetypeControl) {
+    const tm = sim.teamMind(u.team);
+    const collapse = tm.flankTargetUid !== null ? sim.unit(tm.flankTargetUid) : undefined;
+    if (collapse && collapse.alive && collapse.team !== u.team && !collapse.summary.untargetable &&
+        collapse.isVisibleTo(u.team, sim.time) && dist(u.pos, collapse.pos) <= range) {
+      target = collapse;
+      collapseTarget = true;
+    }
+  }
+  let channelInterrupt = false;
+  if (archetypeControl || intent.hardControl || intent.softControl || active.piercesImmunity) {
+    const channeler = enemyChannelingInRange(sim, u, Math.min(range, TUNING.ai.abilityArchetype.channelInterruptRange));
+    if (channeler) {
+      target = channeler;
+      channelInterrupt = true;
+    }
+  }
   if (!target) return null;
   const value = targetValue(target);
   let s = ((intent.offensive || archetypes.has('nuke')) ? w.burst * value : 0) + controlW * (0.6 + dangerNorm(target)) + amplifyW * (0.7 + dangerNorm(target));
-  if ((intent.hardControl || active.piercesImmunity) && (target.castingUntil > sim.time || (target.channel && target.channel.until > sim.time))) s += TUNING.ai.itemScore.interruptBonus;
+  if (channelInterrupt || ((archetypeControl || intent.hardControl || active.piercesImmunity) && (target.castingUntil > sim.time || (target.channel && target.channel.until > sim.time)))) {
+    s += channelInterrupt ? TUNING.ai.abilityArchetype.channelInterruptBonus : TUNING.ai.itemScore.interruptBonus;
+  }
+  if (collapseTarget && !channelInterrupt) s += TUNING.ai.abilityArchetype.collapseTargetBonus;
   const order: Order = t === 'unit-target' ? { kind: 'item', invSlot: slot, uid: target.uid } : { kind: 'item', invSlot: slot, point: { ...target.pos } };
   return finish(s, order);
 }
@@ -989,13 +1162,143 @@ function scoreItemActive(sim: Sim, u: Unit, slot: number, focus: Unit | null, pr
     slot: ITEM
   });
   switch (it.defId) {
+    case 'blink-dagger': {
+      const target = focus && enemyCandidate(sim, u, focus) ? focus : bestOffensiveTarget(sim, u, focus, 1600, profile.playbook.aimAt);
+      if (!target) break;
+      const d = dist(u.pos, target.pos);
+      const engageRole = profile.role === 'initiator' || profile.role === 'disabler' || profile.posture === 'frontline';
+      const wantsJump = engageRole && d > Math.max(520, u.stats.attackRange * 0.85) && d <= 1550;
+      if (!wantsJump || u.summary.rooted || u.summary.stunned || u.summary.cycloned || u.summary.sleeping || u.summary.frozen) break;
+      const setup = profile.weights.control + profile.weights.aoe + profile.weights.aggression;
+      return finish(1.45 * setup, { kind: 'item', invSlot: slot, point: blinkEngagePoint(u, target) });
+    }
     case 'black-king-bar': {
-      // pop magic immunity when a hard disable is landing or an enemy ult/channel is up nearby
-      const fighting = enemiesNear(sim, u, u.stats.attackRange + 360) > 0;
+      if (u.summary.magicImmune) return null;
+      // Pop magic immunity either as a reaction to spell danger, or as a carry/frontline
+      // commitment button once the unit has actually entered the fight.
+      const nearby = enemiesNear(sim, u, u.stats.attackRange + ir.bkbFight);
+      const fighting = nearby > 0;
       if (!fighting) return null;
       const threatened = incomingDisable(sim, u, 1000) || enemyCastSeen(sim, u, 'ult', 1100) || enemyCastSeen(sim, u, 'channel', 1100);
-      if (!threatened) return null;
-      return finish(is.bkb * Math.max(0.9, w.survival), { kind: 'item', invSlot: slot });
+      const roleCommit = (profile.role === 'carry' || profile.role === 'initiator' || profile.posture === 'frontline') &&
+        (nearby >= 2 || (focus !== null && inRightClickWindow(u, focus, ir.bkbFight)));
+      if (!threatened && !roleCommit) return null;
+      const commitBonus = roleCommit ? 0.45 + nearby * 0.08 : 0;
+      return finish((is.bkb + commitBonus) * Math.max(0.9, w.survival), { kind: 'item', invSlot: slot });
+    }
+    case 'satanic': {
+      if (u.summary.disarmed || u.summary.cycloned || u.summary.sleeping || u.summary.frozen) return null;
+      const attackable = inRightClickWindow(u, focus, 260) || enemiesNear(sim, u, u.stats.attackRange + 260) > 0;
+      if (!attackable) return null;
+      const missing = 1 - hpPct(u);
+      const underFire = sim.time - u.lastEnemyDamageAt < 1.5 || enemiesNear(sim, u, u.stats.attackRange + 420) >= 2;
+      if (missing < 0.32) return null;
+      if (missing < 0.42 && !underFire) return null;
+      return finish((1.45 + missing * 1.4) * Math.max(0.9, w.survival), { kind: 'item', invSlot: slot });
+    }
+    case 'manta-style': {
+      const purgeable = hasPurgeableDebuff(u, sim.time);
+      const threatened = incomingDisable(sim, u, 900);
+      const carryDodge = profile.role === 'carry' || profile.role === 'escape' || profile.attribute === 'agi';
+      if (!purgeable && !(carryDodge && threatened)) return null;
+      return finish((purgeable ? 1.55 : 1.2) * Math.max(0.85, w.survival), { kind: 'item', invSlot: slot });
+    }
+    case 'aeon-disk': {
+      const danger = enemiesNear(sim, u, u.stats.attackRange + 520) > 0 || incomingDisable(sim, u, 1000) || enemyCastSeen(sim, u, 'ult', 1200);
+      if (!danger) return null;
+      const missing = 1 - hpPct(u);
+      if (missing < 0.7 && !incomingDisable(sim, u, 900)) return null;
+      return finish((1.25 + missing) * Math.max(1, w.survival), { kind: 'item', invSlot: slot });
+    }
+    case 'magic-stick':
+    case 'magic-wand': {
+      const charges = Math.max(0, it.charges);
+      if (charges < 3) return null;
+      const missingHp = 1 - hpPct(u);
+      const missingMana = 1 - manaPct(u);
+      if (missingHp < 0.34 && missingMana < 0.45) return null;
+      return finish((0.6 + Math.min(1, charges / 12) + missingHp + missingMana * 0.5) * Math.max(0.9, w.survival), { kind: 'item', invSlot: slot });
+    }
+    case 'cheese': {
+      const missingHp = 1 - hpPct(u);
+      const missingMana = 1 - manaPct(u);
+      const danger = enemiesNear(sim, u, u.stats.attackRange + 620) > 0 || sim.time - u.lastEnemyDamageAt < 1.5;
+      if (!danger || (missingHp < 0.5 && missingMana < 0.55)) return null;
+      return finish((2.4 + missingHp * 1.4 + missingMana * 0.8) * Math.max(1, w.survival), { kind: 'item', invSlot: slot });
+    }
+    case 'bloodstone': {
+      const missingHp = 1 - hpPct(u);
+      const missingMana = 1 - manaPct(u);
+      if (enemiesNear(sim, u, u.stats.attackRange + 520) === 0) return null;
+      if (missingHp < 0.38 && missingMana < 0.45) return null;
+      return finish((1.15 + missingHp + missingMana * 0.55) * Math.max(0.9, w.survival), { kind: 'item', invSlot: slot });
+    }
+    case 'arcane-boots': {
+      const need = teamResetNeed(sim, u, 1200);
+      if (need.lowMana < 2 && !(manaPct(u) < 0.28 && need.lowMana >= 1)) return null;
+      return finish(w.saveAllies * (0.65 + need.lowMana * 0.35), { kind: 'item', invSlot: slot });
+    }
+    case 'guardian-greaves': {
+      const need = teamResetNeed(sim, u, 1200);
+      if (need.allies < 2) return null;
+      if (need.wounded < 2 && need.lowMana < 2 && need.debuffed === 0) return null;
+      return finish(Math.max(0.9, w.saveAllies) * (0.8 + need.score * 0.45), { kind: 'item', invSlot: slot });
+    }
+    case 'solar-crest': {
+      const ally = mostPressuredBuffAlly(sim, u, 900 + u.stats.castRangeBonus);
+      if (!ally) return null;
+      return finish(w.saveAllies * 0.75 + combatProfile(ally).weights.aggression * 0.8, { kind: 'item', invSlot: slot, uid: ally.uid });
+    }
+    case 'mjollnir': {
+      const ally = mostPressuredBuffAlly(sim, u, 800 + u.stats.castRangeBonus);
+      if (!ally) return null;
+      return finish(1.05 + enemiesNear(sim, ally, ally.stats.attackRange + 420) * 0.28, { kind: 'item', invSlot: slot, uid: ally.uid });
+    }
+    case 'refresher-orb':
+    case 'refresher-shard': {
+      if (enemiesNear(sim, u, u.stats.attackRange + 700) === 0 && !sim.teamMind(u.team).engaged) return null;
+      const spent = spentSignatureCooldowns(u, sim.time);
+      if (spent < 2) return null;
+      return finish((1.25 + spent * 0.45) * Math.max(w.aoe, w.control, w.burst), { kind: 'item', invSlot: slot });
+    }
+    case 'mask-of-madness': {
+      if (u.summary.silenced || u.summary.disarmed || u.summary.cycloned) return null;
+      if (!inRightClickWindow(u, focus, 240)) return null;
+      if (hpPct(u) < profile.retreatHpPct + 0.08) return null;
+      return finish(0.95 * Math.max(w.aggression, w.burst), { kind: 'item', invSlot: slot });
+    }
+    case 'ghost-scepter': {
+      if (u.summary.disarmed || u.summary.cycloned) return null;
+      if (hpPct(u) > profile.retreatHpPct + 0.12) return null;
+      if (enemiesNear(sim, u, 420) === 0) return null;
+      return finish(1.25 * Math.max(0.9, w.survival), { kind: 'item', invSlot: slot });
+    }
+    case 'hood-of-defiance':
+    case 'eternal-shroud': {
+      if (!incomingDisable(sim, u, 1000) && !enemyCastSeen(sim, u, 'ult', 1100) && !enemyCastSeen(sim, u, 'channel', 1100)) return null;
+      return finish(1.1 * Math.max(0.9, w.survival), { kind: 'item', invSlot: slot });
+    }
+    case 'wind-waker': {
+      const save = lotusSaveTarget(sim, u, 700 + u.stats.castRangeBonus);
+      if (!save || save.score < 0.9) return null;
+      return finish(w.saveAllies * (1.1 + save.score * 0.2), { kind: 'item', invSlot: slot, uid: save.ally.uid });
+    }
+    case 'hand-of-midas': {
+      let targetUid: number | null = null;
+      let bestScore = -Infinity;
+      const range = 600 + u.stats.castRangeBonus;
+      sim.forEachNearbyUnit(u.pos, range + 80, (enemy) => {
+        if (!enemyCandidate(sim, u, enemy)) return;
+        if (enemy.kind === 'hero') return;
+        if (dist2(enemy.pos, u.pos) > range * range) return;
+        const score = enemy.stats.maxHp + enemy.stats.damage * 4;
+        if (score > bestScore || (score === bestScore && (targetUid === null || enemy.uid < targetUid))) {
+          targetUid = enemy.uid;
+          bestScore = score;
+        }
+      });
+      if (targetUid === null) return null;
+      return finish(0.7, { kind: 'item', invSlot: slot, uid: targetUid });
     }
     case 'force-staff': {
       // self-peel out of a melee crush when low
@@ -1038,9 +1341,14 @@ function scoreItemActive(sim: Sim, u: Unit, slot: number, focus: Unit | null, pr
     // §2 Lotus Orb: spend Echo Shell to dispel-and-shield a disabled ally, not as a
     // generic heal on whoever is lowest — the dispel is the whole point of the timing.
     case 'lotus-orb': {
-      const ally = mostDisabledAllyInRange(sim, u, ir.lotusRange + u.stats.castRangeBonus);
-      if (!ally) return null;
-      return finish(w.saveAllies * is.lotus * (1 + (1 - ally.hp / Math.max(1, ally.stats.maxHp)) * 0.5), { kind: 'item', invSlot: slot, uid: ally.uid });
+      const save = lotusSaveTarget(sim, u, ir.lotusRange + u.stats.castRangeBonus);
+      if (!save) return null;
+      return finish(w.saveAllies * is.lotus * (1 + save.score * 0.35), { kind: 'item', invSlot: slot, uid: save.ally.uid });
+    }
+    case 'linkens-sphere': {
+      const save = lotusSaveTarget(sim, u, 700 + u.stats.castRangeBonus);
+      if (!save || save.score < 1) return null;
+      return finish(w.saveAllies * 1.05 * (1 + save.score * 0.25), { kind: 'item', invSlot: slot, uid: save.ally.uid });
     }
   }
   return scoreItemByIntent(sim, u, slot, focus, profile);
@@ -1141,7 +1449,7 @@ export function chooseUtilityOrder(sim: Sim, u: Unit, focus: Unit | null): Order
     }
   }
 
-  const comboPlan = teamPlan ?? (focus && (u.ctrl.kind === 'gambit' || u.ctrl.kind === 'boss') ? planUnitCombo(sim, u, focus) : null);
+  const comboPlan = teamPlan ?? (focus && canUnitCombo(u) ? planUnitCombo(sim, u, focus) : null);
   let best: Scored | null = null;
   let plannedStepCovered = false;
   for (let slot = 0; slot < u.abilities.length; slot++) {
@@ -1408,6 +1716,7 @@ function shouldHoldBackForEngage(sim: Sim, u: Unit, focus: Unit, profile: Combat
 function urgentSupportAvailable(sim: Sim, u: Unit, profile: CombatProfile): boolean {
   if (profile.weights.saveAllies < 0.8) return false;
   if (lowestWoundedAlly(sim, u, 850 + u.stats.castRangeBonus, TUNING.ai.saveAllyHpPct)) return true;
+  if (teamResetNeed(sim, u, 850 + u.stats.castRangeBonus).lowMana >= 2) return true;
   return woundedAlliesNear(sim, u, 750, 0.7) >= 2;
 }
 

@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { boot, expectNoPageErrors, fastForward, skipActiveCinematic, waitForPlayableUi, watchPageErrors } from './helpers';
+import { boot, clearCinematics, expectNoPageErrors, fastForward, waitForPlayableUi, watchPageErrors } from './helpers';
 
 // ============================================================
 // AFFORDANCE FEEDBACK (e2e) — the player-reachable bugs that the
@@ -27,7 +27,7 @@ test.describe('affordance feedback', () => {
   test('spending a skill point through the hero panel actually ranks an ability', async ({ page }) => {
     const errors = watchPageErrors(page);
     await boot(page, { hero: 'juggernaut', seed: 9301, hud: true });
-    await skipActiveCinematic(page);
+    await clearCinematics(page);
     await focusGame(page);
 
     // Level the active hero so points are pending, then let the HUD repaint.
@@ -72,7 +72,7 @@ test.describe('affordance feedback', () => {
   test('J opens the Quest Journal', async ({ page }) => {
     const errors = watchPageErrors(page);
     await boot(page, { hero: 'juggernaut', seed: 9302, hud: true });
-    await skipActiveCinematic(page);
+    await clearCinematics(page);
     await focusGame(page);
 
     // Closed to start, the J binding opens the Journal (not the menu, which also
@@ -87,7 +87,7 @@ test.describe('affordance feedback', () => {
   test('every interface key opens its panel and closes cleanly', async ({ page }) => {
     const errors = watchPageErrors(page);
     await boot(page, { hero: 'juggernaut', seed: 9304, hud: true });
-    await skipActiveCinematic(page);
+    await clearCinematics(page);
     await focusGame(page);
     // Default boot lands in town, so the Shop (B) is reachable here too.
     expect((await page.evaluate(() => (window as any).__test.state().inTown))).toBe(true);
@@ -106,40 +106,60 @@ test.describe('affordance feedback', () => {
       await page.keyboard.press(panel.key);
       await expect(page.locator(MODAL_CARD), `${panel.label}: ${panel.key} opened a panel`).toBeVisible();
       // Close via the modal's own X so the next key starts from a clean slate.
-      await page.locator('#modal-close').click();
+      await page.locator('#modal-close').click({ force: true });
       await expect(page.locator('#modal-root'), `${panel.label}: closes cleanly`).toHaveClass(/hidden/);
+      await clearCinematics(page);
     }
     expectNoPageErrors(errors);
   });
 
   test('left-clicking a unit pins its inspect card (does not just silently select)', async ({ page }) => {
     // Full WebGL boot under SwiftShader comfortably exceeds the 30s default.
-    test.setTimeout(90_000);
+    test.setTimeout(120_000);
     const errors = watchPageErrors(page);
     // Real renderer so scene.pick() can project the click to a unit.
     await boot(page, { hero: 'juggernaut', seed: 9303, hud: true, webgl: true, quality: 'low' });
-    await skipActiveCinematic(page);
+    await clearCinematics(page);
     await focusGame(page);
 
-    const box = await page.locator('#game-canvas').boundingBox();
-    expect(box).not.toBeNull();
-    const cx = box!.x + box!.width / 2;
-    const cy = box!.y + box!.height / 2;
+    const findPickableUnit = () => page.evaluate(() => {
+      const g = (window as any).__test.game();
+      const t = (window as any).__test;
+      const canvas = document.getElementById('game-canvas') as HTMLCanvasElement | null;
+      if (!canvas) return null;
 
-    // The camera follows the active hero, so the unit sits near screen centre
-    // (slightly low under the angled follow cam). Use REAL mouse moves so the
-    // rAF loop recomputes hover, scanning a vertical strip until it resolves a unit.
-    let target: { x: number; y: number } | null = null;
-    for (let dy = -40; dy <= 180 && !target; dy += 20) {
-      await page.mouse.move(cx, cy + dy);
-      await page.waitForTimeout(120); // let a couple of rAF frames re-pick
-      const hover = await page.evaluate(() => (window as any).__test.inputState()?.hoverUid ?? -1);
-      if (hover >= 0) target = { x: cx, y: cy + dy };
+      t.spawnWildCreepNearActive({ count: 6 });
+      for (let i = 0; i < 8; i++) t.step(33);
+
+      const rect = canvas.getBoundingClientRect();
+      for (let y = rect.top + rect.height * 0.08; y <= rect.top + rect.height * 0.72; y += 24) {
+        for (let x = rect.left + rect.width * 0.08; x <= rect.left + rect.width * 0.92; x += 24) {
+          if ((document.elementFromPoint(x, y) as HTMLElement | null)?.id !== 'game-canvas') continue;
+          const pick = g.scene.pick(x, y, g.inputSim(), []);
+          if (pick.uid >= 0 && !g.npcAt(pick.uid)) return { uid: pick.uid, x, y };
+        }
+      }
+      return null;
+    });
+    let target: { uid: number; x: number; y: number } | null = null;
+    for (let attempt = 0; attempt < 3 && !target; attempt++) {
+      try {
+        target = await findPickableUnit();
+      } catch (err) {
+        if (!String(err).includes('Execution context was destroyed') || attempt === 2) throw err;
+        await page.waitForFunction(() => Boolean((window as any).__test?.ready?.()), null, { timeout: 60_000 });
+      }
     }
-    expect(target, 'a unit was hovered near screen centre').not.toBeNull();
+    expect(target, 'spawned inspect target is pickable in the viewport').not.toBeNull();
 
+    await page.mouse.move(target!.x, target!.y);
+    await page.waitForFunction(
+      (uid) => (window as any).__test.inputState()?.hoverUid === uid,
+      target!.uid,
+      { timeout: 5_000 }
+    );
     await page.mouse.click(target!.x, target!.y, { button: 'left' });
-    await page.waitForTimeout(120);
+    await page.waitForFunction(() => ((window as any).__test.inputState()?.inspectUid ?? -1) >= 0, null, { timeout: 5_000 });
 
     const inspect = await page.evaluate(() => (window as any).__test.inputState()?.inspectUid ?? -1);
     expect(inspect, 'left-click pinned an inspect target').toBeGreaterThanOrEqual(0);

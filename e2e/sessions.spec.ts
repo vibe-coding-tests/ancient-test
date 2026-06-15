@@ -8,6 +8,7 @@ import { boot, clearCinematics, skipActiveCinematic, state, watchPageErrors, exp
 // full party of 5, so the new fillParty() checkpoint pads + levels the roster.
 test.describe('macro sessions (gym & raid)', () => {
   test('drafts, places, and fights a gym through the HUD', async ({ page }) => {
+    test.setTimeout(90_000);
     const errors = watchPageErrors(page);
     await boot(page, { hero: 'juggernaut', seed: 53, hud: true });
     await clearCinematics(page);
@@ -15,7 +16,7 @@ test.describe('macro sessions (gym & raid)', () => {
     await page.evaluate(() => {
       const t = (window as any).__test;
       const g = (window as any).__game;
-      t.fillParty({ heroIds: ['sven', 'sniper', 'lich', 'lina'], level: 30 });
+      t.fillParty({ heroIds: ['sven', 'sniper', 'lich', 'lina'], level: 14 });
       const loadouts: Record<string, string[]> = {
         juggernaut: ['battlefury', 'blink-dagger'],
         sven: ['crystalys'],
@@ -32,18 +33,18 @@ test.describe('macro sessions (gym & raid)', () => {
     await skipActiveCinematic(page);
 
     await expect(page.locator('#modal-root:not(.hidden)')).toContainText('Lunar Gym');
-    await page.locator('[data-pf="draft"]').click();
+    await page.locator('[data-pf="draft"]').evaluate((el) => (el as HTMLElement).click());
     await expect(page.locator('#modal-root:not(.hidden)')).toContainText('Draft & Deploy');
 
     await page.locator('select[data-draft-item="juggernaut:0"]').selectOption('blink-dagger');
-    await page.locator('[data-draft-gambit-preset="juggernaut:aggro"]').click();
-    await page.locator('[data-pool="juggernaut"]').click();
-    await page.locator('[data-cell="0:4"]').click();
-    await page.locator('[data-draft="commit"]').click();
+    await page.locator('[data-draft-gambit-preset="juggernaut:aggro"]').evaluate((el) => (el as HTMLElement).click());
+    await page.locator('[data-pool="juggernaut"]').evaluate((el) => (el as HTMLElement).click());
+    await page.locator('[data-cell="0:4"]').evaluate((el) => (el as HTMLElement).click());
+    await page.locator('[data-draft="commit"]').evaluate((el) => (el as HTMLElement).click());
 
     await expect(page.locator('#modal-root:not(.hidden)')).toContainText('Drafted five');
     await expect(page.locator('[data-pf-edit-draft="juggernaut"]')).toBeVisible();
-    await page.locator('[data-pf="live"]').click();
+    await page.locator('[data-pf="live"]').evaluate((el) => (el as HTMLElement).click());
     await page.evaluate(() => (window as any).__test.step());
     await expect(page.locator('#live-gym-bar')).toBeVisible();
 

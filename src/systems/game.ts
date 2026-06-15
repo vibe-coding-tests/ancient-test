@@ -18,7 +18,7 @@ import { autoPicksForLevel, buildHero } from '../core/hero-setup';
 import { spawnHeroEchoUnit } from '../core/echo-unit';
 import { TrialRunner, trialGateOpen, type TrialGateCtx, type TrialOutcome } from '../core/trials';
 import { freshEchoProgress, normalizeEchoProgress, recordOwnedHeroEchoKill } from '../core/echo';
-import { computeKillReward, overflowSplit, recruitLevelCap, trainerLevelForXp, metaValue, worldLevel, worldLevelDialCap, worldLevelForEncounter, worldLevelScale, worldLevelShieldFraction, type WorldLevelSource } from '../core/progression';
+import { computeKillReward, enemyCompetence, overflowSplit, recruitLevelCap, trainerLevelForXp, metaValue, worldLevel, worldLevelDialCap, worldLevelForEncounter, worldLevelScale, worldLevelShieldFraction, type EnemyCompetenceOpts, type WorldLevelSource } from '../core/progression';
 import { ALL_META_NODES, META_NODES_BY_ID } from '../data/meta-board';
 import {
   bossFightSetupFromDef,
@@ -46,12 +46,13 @@ import { Rng } from '../core/rng';
 import { defaultAudioSettings, defaultCutsceneSettings, defaultGraphicsSettings, defaultInterfaceSettings, defaultPhase4SaveFields } from '../core/phase4';
 import { defaultPhase5SaveFields } from '../core/phase5';
 import { higherDungeonTier, migratePhase6Save } from '../core/phase6';
-import { dungeonDailySeed, dungeonWeeklySeed, pickPackAffixes } from '../core/dungeon';
+import { dungeonDailySeed, dungeonWeeklySeed, pickPackAffixes, tierAtLeast } from '../core/dungeon';
 import { DUNGEON_AFFIXES } from '../data/dungeon-affixes';
 import { type QualityTier } from '../engine/performance';
+import { buildDefaultGambit } from '../core/controllers';
 import { mergeCreeps, newCreepInstanceId, validateEntourage } from '../core/capture';
 import { computeBuyPlan, executeBuy, itemReady, itemSaveOf, itemStateFromSave, sellValue, sortInventory } from '../core/items';
-import { runDomainEncounter, runRaidBattle, runRaidEncounter, runMacroBattle, type RaidEncounterResult } from '../core/macro';
+import { runBossBattle, runDomainEncounter, runRaidEncounter, runMacroBattle, type RaidEncounterResult } from '../core/macro';
 import { ELITE_DRAFT } from '../data/drafts';
 import { isActiveElement, reactionFor, resonanceMods, elementForHero } from '../core/resonance';
 import { levelFromXp, xpForLevel } from '../core/stats';
@@ -106,6 +107,11 @@ const REGION_ELEMENTAL_SHIELDS: Record<string, { element: ActiveElement; weakTo:
   'mad-moon-crater': { element: 'pyro', weakTo: ['hydro', 'cryo'] }
 };
 const DEFAULT_REGION_SHIELD = { element: 'pyro' as ActiveElement, weakTo: ['hydro', 'cryo'] as ActiveElement[] };
+
+// COMBAT_DEPTH_OVERHAUL P3: affixes safe to put on every elite pack member (not just the lead)
+// at high difficulty — pure positional/damage pressure, no summon/lockdown/defensive stacking
+// that would make a whole pack oppressive or unkillable. minTier still gates the eligible subset.
+const OVERWORLD_PACK_SPREAD_AFFIXES = ['fast', 'molten', 'warding', 'reflective'];
 
 /** Top-tier power that only drops from bosses/raids/dungeons — never vended by any shop or gold sink (§6). */
 export const GATED_TOP_TIER: ReadonlySet<string> = new Set([
@@ -481,6 +487,13 @@ export interface CombatReadout {
   live: boolean;       // a live raid/gym session is running (full overlay)
   castBars: { uid: number; name: string; ability: string; pct: number; isUlt: boolean; enemy: boolean }[];
   bossThreat: { bossName: string; targetName: string | null; taunted: boolean } | null;
+  /** PROGRESSION_OVERHAUL §4.1: live raid execution cues. Pure readout only. */
+  raid: {
+    nextAddWave: { atHpPct: number; count: number; summonId: string; activeAdds: number } | null;
+    healerTarget: { name: string; hpPct: number; focused: boolean } | null;
+    dodgeTelegraph: { count: number; secondsRemaining: number; radius: number } | null;
+    enrage: { secondsRemaining: number; active: boolean } | null;
+  } | null;
   sharedFocus: { uid: number; name: string } | null;
   ultReady: { uid: number; name: string }[];
   tagChain: { count: number; pct: number; ampPct: number } | null;
@@ -498,6 +511,10 @@ export interface CombatReadout {
     protect: { peeler: string; ward: string } | null;
     flankTargetName: string | null;
   } | null;
+  /** COMBAT_DEPTH_OVERHAUL: shielded enemies in view and the element that melts each
+   *  wall, so a reaction-demanding elite reads as "bring Pyro" instead of a stat check.
+   *  Only populated when reactions resolve in this sim (resonanceEnabled). */
+  shields: { uid: number; name: string; element: ActiveElement; weakTo: ActiveElement[]; hpPct: number; vulnerable: boolean }[];
 }
 
 interface CampState {
@@ -643,7 +660,7 @@ export function newGameSave(starterHeroId: string): GameSave {
     metaNodes: [],
     worldLevelTier: 0,
     collectionMilestones: [],
-    settings: { quickcast: true, resonance: true, swapCharges: false, minimap: true, worldLevel: true, keyBindings: normalizeKeyBindings(undefined), audio: defaultAudioSettings(), graphics: defaultGraphicsSettings(), cutscene: defaultCutsceneSettings(), interface: defaultInterfaceSettings() }
+    settings: { quickcast: true, resonance: true, swapCharges: false, minimap: true, worldLevel: true, combatDepth: true, keyBindings: normalizeKeyBindings(undefined), audio: defaultAudioSettings(), graphics: defaultGraphicsSettings(), cutscene: defaultCutsceneSettings(), interface: defaultInterfaceSettings() }
   };
 }
 
@@ -999,6 +1016,8 @@ export class Game {
   private liveGymBanCount = 0;
   /** Per-gym committed drafts (AUTOBATTLER_OVERHAUL §4). Empty => the walking party. */
   gymDrafts = new Map<string, DraftTeam>();
+  /** In-session rematch pressure: after a loss, a leader re-fights with mirror-shape (§3.3). */
+  private gymLosses = new Map<string, number>();
   /** The most recent counter-draft swap (§5.4/§6.5), for the reveal beat. Cleared on a no-op. */
   lastCounterDraft: ({ gymId: string } & CounterDraftResult) | null = null;
   liveRaid: LiveRaid | null = null;
@@ -1191,13 +1210,19 @@ export class Game {
       swapCharges: save.settings.swapCharges ?? false,
       minimap: save.settings.minimap ?? true,
       worldLevel: save.settings.worldLevel ?? true,
+      combatDepth: save.settings.combatDepth ?? true,
       keyBindings: normalizeKeyBindings(save.settings.keyBindings),
       audio: { ...defaultAudioSettings(), ...save.settings.audio },
       graphics: { ...defaultGraphicsSettings(), ...save.settings.graphics },
       cutscene: { ...defaultCutsceneSettings(), ...save.settings.cutscene },
       interface: { ...defaultInterfaceSettings(), ...save.settings.interface }
     };
-    this.sim.resonanceEnabled = this.settings.resonance ?? false;
+    // Resonance is the intended way to play the micro overworld/raids — it is always on here
+    // and is not a player toggle. (Macro gyms/Elite Five stay pure Dota by building their own
+    // sims that never enable it; raids force it on in `macro.ts`.) `settings.resonance` is kept
+    // only for save compatibility and to flip the flag in tests via `setResonanceEnabled`.
+    this.settings.resonance = true;
+    this.sim.resonanceEnabled = true;
     this.swapCharges = TUNING.swapChargeMax;       // §2.3: charges are a live resource, full on load
     this.swapChargesAt = this.sim.time;
     this.audio.setSettings(this.settings);
@@ -1217,7 +1242,7 @@ export class Game {
     this.advanceQuests({ kind: 'reach-region', amount: 1, regionId: this.region.id, targetId: this.region.id });
   }
 
-  settings: GameSave['settings'] = { quickcast: true, resonance: true, swapCharges: false, minimap: true, worldLevel: true, keyBindings: normalizeKeyBindings(undefined), audio: defaultAudioSettings(), graphics: defaultGraphicsSettings(), cutscene: defaultCutsceneSettings(), interface: defaultInterfaceSettings() };
+  settings: GameSave['settings'] = { quickcast: true, resonance: true, swapCharges: false, minimap: true, worldLevel: true, combatDepth: true, keyBindings: normalizeKeyBindings(undefined), audio: defaultAudioSettings(), graphics: defaultGraphicsSettings(), cutscene: defaultCutsceneSettings(), interface: defaultInterfaceSettings() };
 
   // §2.3 charge-meter (opt-in): a live 2-charge swap resource, accrued lazily from sim time.
   swapCharges = TUNING.swapChargeMax;
@@ -1420,6 +1445,8 @@ export class Game {
       };
     }
 
+    const raid: CombatReadout['raid'] = this.liveRaid ? this.liveRaid.raidReadout() : null;
+
     let sharedFocus: CombatReadout['sharedFocus'] = null;
     const focusUid = sim.teamMind(playerTeam).focusUid;
     if (focusUid !== null) {
@@ -1490,18 +1517,41 @@ export class Game {
       };
     }
 
+    // COMBAT_DEPTH_OVERHAUL: name the weakness on every visible shielded enemy so the
+    // reaction wall is legible. Only meaningful where reactions resolve (resonanceEnabled).
+    const shields: CombatReadout['shields'] = [];
+    if (sim.resonanceEnabled) {
+      for (const u of sim.unitsArr) {
+        if (!u.alive || u.team === playerTeam || u.kind === 'npc') continue;
+        const sh = u.elementalShield;
+        if (!sh || sh.hp <= 0 || sh.weakTo.length === 0) continue;
+        if (!u.isVisibleTo(playerTeam, now)) continue;
+        shields.push({
+          uid: u.uid,
+          name: u.name,
+          element: sh.element,
+          weakTo: [...sh.weakTo],
+          hpPct: Math.max(0, Math.min(1, sh.hp / Math.max(1, sh.maxHp))),
+          vulnerable: sh.vulnerableUntil > now
+        });
+      }
+      shields.sort((a, b) => a.uid - b.uid);
+    }
+
     return {
       active: !!(this.liveRaid || this.liveGym || this.liveDungeon) || this.inCombat(),
       live: !!(this.liveRaid || this.liveGym),
       castBars,
       bossThreat,
+      raid,
       sharedFocus,
       ultReady,
       tagChain,
       offField: { count: offFieldNames.length, names: offFieldNames },
       nextLink,
       swapCharges: this.swapChargeState(),
-      formation
+      formation,
+      shields
     };
   }
 
@@ -2984,16 +3034,15 @@ export class Game {
    * answer the player's committed shape deterministically; `none` returns the fixed team.
    * Records the swap for the counter-draft reveal (§6.5). Pure over the inputs + seed.
    */
-  private gymEnemyFor(gymId: string, playerTeam: GymMatchHero[], seed: number): MacroHeroSetup[] {
-    const gym = REG.gym(gymId);
+  private gymEnemyFor(gym: GymDef, playerTeam: GymMatchHero[], seed: number): MacroHeroSetup[] {
     const mode = gym.format?.counterDraft ?? 'none';
     if (mode === 'none') {
       this.lastCounterDraft = null;
       return gym.enemyTeam;
     }
     const player: MacroHeroSetup[] = playerTeam.map((h) => ({ heroId: h.heroId, level: h.level, items: h.items }));
-    const result: CounterDraftResult = counterDraft(gym.format, player, gym.enemyTeam, [...REG.heroes.keys()], seed);
-    this.lastCounterDraft = result.swappedIn.length ? { gymId, ...result } : null;
+    const result: CounterDraftResult = counterDraft(gym.format, player, gym.enemyTeam, gym.counterPool ?? [...REG.heroes.keys()], seed);
+    this.lastCounterDraft = result.swappedIn.length ? { gymId: gym.id, ...result } : null;
     if (this.lastCounterDraft && result.reason) {
       const inName = result.swappedIn.map((id) => REG.hero(id).name).join(', ');
       this.msg(`${gym.leader} ${result.reason} — drafts ${inName}.`, 'bark');
@@ -3003,9 +3052,13 @@ export class Game {
 
   /** A gym fight definition with the (possibly counter-drafted) enemy spliced in. */
   private gymForFight(gymId: string, playerTeam: GymMatchHero[], seed: number): GymDef {
-    const gym = REG.gym(gymId);
+    const base = REG.gym(gymId);
+    const rematch = (this.gymLosses.get(gymId) ?? 0) > 0;
+    const gym: GymDef = rematch && base.format && base.format.counterDraft !== 'none'
+      ? { ...base, format: { ...base.format, counterDraft: 'mirror-shape' } }
+      : base;
     if (!gym.format?.counterDraft || gym.format.counterDraft === 'none') return gym;
-    return { ...gym, enemyTeam: this.gymEnemyFor(gymId, playerTeam, seed) };
+    return { ...gym, enemyTeam: this.gymEnemyFor(gym, playerTeam, seed) };
   }
 
   private gymStartGuard(gymId: string): boolean {
@@ -3031,7 +3084,7 @@ export class Game {
     // live path — the leader bans the player's recruited roster and escalates each round.
     const result = runGymMatch(gym, team, seed, formation, {
       playerRoster: this.draftPool(),
-      tier: this.difficulty[gymId]?.tier ?? 'normal',
+      tier: this.difficulty[gymId]?.tier ?? this.overworldActivityTier(),
       playerBonusCaptainCalls: this.metaBonus('refightCaptainCall')
     });
     return this.applyGymResult(gymId, result);
@@ -3049,7 +3102,7 @@ export class Game {
     this.liveGym = new LiveGymFight(gym, team, seed, {
       formationA: formation,
       playerRoster: this.draftPool(),
-      tier: this.difficulty[gymId]?.tier ?? 'normal',
+      tier: this.difficulty[gymId]?.tier ?? this.overworldActivityTier(),
       playerBonusCaptainCalls: this.metaBonus('refightCaptainCall')
     });
     this.liveGymId = gymId;
@@ -3125,6 +3178,7 @@ export class Game {
     const gym = REG.gym(gymId);
     this.msg(`${gym.name}: ${result.playerWins}-${result.enemyWins}`, result.winner === 0 ? 'good' : 'bad');
     if (result.winner === 0) {
+      this.gymLosses.delete(gymId);
       this.defeatedGyms.add(gym.id);
       this.badges.add(gym.badgeId);
       this.advanceQuests({ kind: 'earn-badge', amount: 1, targetId: gym.badgeId });
@@ -3135,6 +3189,7 @@ export class Game {
       this.autosave('badge');
       return true;
     }
+    this.gymLosses.set(gymId, (this.gymLosses.get(gymId) ?? 0) + 1);
     this.msg(`${gym.leader} holds the badge. Tune gambits and try again.`, 'bad');
     return false;
   }
@@ -3204,13 +3259,18 @@ export class Game {
       return { won: false };
     }
     const bossWl = this.featuredWorldLevel('boss');
-    const result = runRaidBattle(bossFightSetupFromDef(
-      boss,
-      this.gymPlayerTeam(),
-      tier,
-      this.region.seed + Math.round(this.playtime) + bossId.length,
-      bossWl
-    ));
+    // COMBAT_DEPTH_OVERHAUL P3: run the boss's authored phase transitions + a soft-enrage
+    // timer instead of a plain auto-resolve, so "harder" reads as more demanding here too.
+    const result = runBossBattle(
+      bossFightSetupFromDef(
+        boss,
+        this.gymPlayerTeam(),
+        tier,
+        this.region.seed + Math.round(this.playtime) + bossId.length,
+        bossWl
+      ),
+      { id: bossId, enrageSec: TUNING.regionalBossSoftEnrageSec, phases: boss.phases }
+    );
     if (result.winner !== 0) {
       this.msg(`${REG.hero(boss.heroId).name} (${tier}) survived — regroup and retry`, 'bad');
       return { won: false };
@@ -3939,6 +3999,9 @@ export class Game {
     if (s.bans.includes(heroId) || s.player.some((h) => h.heroId === heroId) || s.enemy.some((h) => h.heroId === heroId)) return false;
     if (turn.action === 'ban') {
       if (!REG.heroes.has(heroId)) return false;
+      // Mirror the AI guard: a ban must never strand the leader below a fieldable
+      // five, so the draft always stays completable from either side.
+      if (this.eliteBanWouldStrand(s, 1)) return false;
       s.bans.push(heroId);
     } else {
       if (!s.playerPool.includes(heroId)) return false;
@@ -3947,6 +4010,33 @@ export class Game {
     s.step++;
     this.advanceEliteDraftAi();
     return true;
+  }
+
+  /** Remaining 'pick' steps for a side strictly after the current step. */
+  private eliteSidePicksRemaining(s: EliteDraftState, side: 0 | 1): number {
+    let n = 0;
+    for (let i = s.step + 1; i < s.order.length; i++) if ((i % 2) === side && s.order[i] === 'pick') n++;
+    return n;
+  }
+
+  /**
+   * Whether banning one more hero out of `side`'s pool right now would leave that
+   * side unable to field its remaining picks. beginEliteDraft only gates on a
+   * five-hero roster, so without this guard the leader's ban could strand a
+   * minimum-roster player at the final pick with nothing legal to choose — an
+   * uncommittable, unrecoverable soft-lock (only Cancel escapes).
+   */
+  private eliteBanWouldStrand(s: EliteDraftState, side: 0 | 1): boolean {
+    const pool = side === 0 ? s.playerPool : s.enemyPool;
+    const picked = side === 0 ? s.player : s.enemy;
+    const seen = new Set<string>();
+    let avail = 0;
+    for (const id of pool) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      if (!s.bans.includes(id) && !picked.some((h) => h.heroId === id)) avail++;
+    }
+    return avail - 1 < this.eliteSidePicksRemaining(s, side);
   }
 
   /** Resolve every consecutive leader (side 1) step until it is the player's turn or the draft is done. */
@@ -3958,9 +4048,12 @@ export class Game {
       const action = s.order[s.step];
       const stepSeed = s.seed + s.step * 97;
       if (action === 'ban') {
-        // deny the player's strongest legal pick
-        const ban = chooseDraft({ pool: s.playerPool, team: s.player, banned: s.bans, seed: stepSeed });
-        if (ban) s.bans.push(ban);
+        // deny the player's strongest legal pick — but never one they still need
+        // to field a full five (would soft-lock a minimum 5-hero roster).
+        if (!this.eliteBanWouldStrand(s, 0)) {
+          const ban = chooseDraft({ pool: s.playerPool, team: s.player, banned: s.bans, seed: stepSeed });
+          if (ban) s.bans.push(ban);
+        }
       } else {
         const pick = chooseDraft({ pool: s.enemyPool, team: s.enemy, banned: s.bans, seed: stepSeed });
         if (pick) s.enemy.push({ heroId: pick, level: 30, items: ['black-king-bar', 'heart-of-tarrasque'] });
@@ -4045,7 +4138,7 @@ export class Game {
     // Elite Bo5 (§3.1) runs the full asymmetric Captains Series: the member bans the
     // player's recruited roster, escalates each round, takes +`eliteHarderPreBan` pre-bans,
     // and locks the repick budget to 0 — strictly harder than a gym of the same tier.
-    const tier = this.difficulty['elite']?.tier ?? 'normal';
+    const tier = this.difficulty['elite']?.tier ?? this.overworldActivityTier();
     const series = new LiveGymFight(this.eliteSeriesGym(idx, enemy), player as GymMatchHero[], seed, {
       autoPlayer: true,
       bestOf: TUNING.captainsSeries.series.eliteBestOf,
@@ -6474,6 +6567,19 @@ export class Game {
     return Math.max(0, Math.min(this.worldLevelTier, this.worldLevelDialMax()));
   }
 
+  /**
+   * COMBAT_DEPTH_OVERHAUL P4: the difficulty tier for overworld activities that carry no
+   * persisted per-activity difficulty (gyms, the elite series). Derived from the ascension
+   * dial — no new save state — so turning up danger raises their competence + reward too,
+   * not just shield HP. dial 0 returns 'normal', so today's (un-dialed) fights are unchanged.
+   */
+  private overworldActivityTier(): DifficultyTier {
+    const dial = this.effectiveWorldLevelTier();
+    if (dial >= 3) return 'hell';
+    if (dial >= 1) return 'nightmare';
+    return 'normal';
+  }
+
   /** Sum a meta-board effect across the player's purchased nodes (PROGRESSION §4.2). 0 = not bought. */
   metaBonus(key: MetaEffectKey): number {
     return metaValue(this.purchasedMetaNodes(), key);
@@ -6600,6 +6706,16 @@ export class Game {
   }
 
   /**
+   * COMBAT_DEPTH_OVERHAUL: the enemy-competence depth for an encounter, or `undefined`
+   * when the player opted out via `settings.combatDepth` (keeps today's behavior, where
+   * a creep carried no `aiDepth`). Centralizes the opt-out for every enemy spawn site.
+   */
+  combatDepthFor(opts: EnemyCompetenceOpts): number | undefined {
+    if (this.settings.combatDepth === false) return undefined;
+    return enemyCompetence(opts);
+  }
+
+  /**
    * Roll a featured-pack rarity from the World-Level tables (§2.6). Only large/ancient
    * camps can become champions/rares; ordinary trash stays 'normal' so it can be outgrown.
    */
@@ -6634,11 +6750,14 @@ export class Game {
     if (affixCount <= 0) return;
     const tier = creepCombatTier(this.region.id);
     const ids = pickPackAffixes(DUNGEON_AFFIXES, 'champion', tier, rng, affixCount);
-    for (const id of ids) {
-      const affix = DUNGEON_AFFIXES.find((a) => a.id === id);
-      if (!affix || affix.apply.length === 0) continue;
-      execEffects(this.sim, u, { defId: `overworld-affix:${id}`, level: u.level, vfx: { archetype: 'ground-aoe', color: '#ffd27f', color2: '#ffe9c2' } }, affix.apply, { target: u, point: u.pos });
-    }
+    for (const id of ids) this.applyOverworldAffix(u, id);
+  }
+
+  /** Resolve and fire one overworld affix's engage effects onto a creep. */
+  private applyOverworldAffix(u: Unit, id: string): void {
+    const affix = DUNGEON_AFFIXES.find((a) => a.id === id);
+    if (!affix || affix.apply.length === 0) return;
+    execEffects(this.sim, u, { defId: `overworld-affix:${id}`, level: u.level, vfx: { archetype: 'ground-aoe', color: '#ffd27f', color2: '#ffe9c2' } }, affix.apply, { target: u, point: u.pos });
   }
 
   private spawnCampCreeps(campId: string): number[] {
@@ -6649,8 +6768,23 @@ export class Game {
     const rng = new Rng(stableContentSeed(`${this.region.id}:overworld-pack:${camp.id}:${this.playtime}`, 0));
     // Pack rarity is decided once for the camp (the lead creep carries the elite texture).
     const packRarity = this.rollOverworldPackRarity(def.tier, baseWl, rng);
-    const encounterWl = worldLevelForEncounter(baseWl, { source: 'overworld-camp', creepTier: def.tier, packRarity });
+    // Ley-line outcrops are featured progression encounters even when their authored
+    // creep tier is medium trash; ordinary non-ley-line camps still use the trash cap.
+    const source: WorldLevelSource = camp.leyLine ? 'ley-line' : 'overworld-camp';
+    const encounterWl = worldLevelForEncounter(baseWl, { source, creepTier: def.tier, packRarity });
     const elite = packRarity !== 'normal';
+    // COMBAT_DEPTH_OVERHAUL P3: at high difficulty (nightmare+ region and a World Level that
+    // already grants the lead its 2nd affix) the whole pack carries one shared light affix, so
+    // the minions are dangerous too — not just the textured lead. A dedicated rng keeps the
+    // lead's affix stream (below) byte-stable, so today's low-difficulty camps are unchanged.
+    const combatTier = creepCombatTier(this.region.id);
+    const leadAffixCount = TUNING.overworldElite.affixCountByWorldLevel[Math.min(encounterWl, TUNING.overworldElite.affixCountByWorldLevel.length - 1)];
+    let packAffixId: string | null = null;
+    if (elite && tierAtLeast(combatTier, 'nightmare') && leadAffixCount >= 2) {
+      const lightPool = DUNGEON_AFFIXES.filter((a) => OVERWORLD_PACK_SPREAD_AFFIXES.includes(a.id));
+      const packAffixRng = new Rng(stableContentSeed(`${this.region.id}:overworld-pack-affix:${camp.id}:${this.playtime}`, 0));
+      packAffixId = pickPackAffixes(lightPool, 'champion', combatTier, packAffixRng, 1)[0] ?? null;
+    }
     for (let i = 0; i < camp.count; i++) {
       const a = (i / camp.count) * Math.PI * 2;
       const r = camp.radius * 0.55;
@@ -6664,13 +6798,21 @@ export class Game {
         regionId: this.region.id,
         combatTier: creepCombatTier(this.region.id),
         worldLevel: encounterWl,
-        star: elite && isLead ? (packRarity === 'rare' ? 3 : 2) : 1
+        star: elite && isLead ? (packRarity === 'rare' ? 3 : 2) : 1,
+        aiDepth: this.combatDepthFor({
+          tier: creepCombatTier(this.region.id),
+          worldLevel: encounterWl,
+          rarity: packRarity,
+          rank: elite && isLead ? 'elite' : 'creep'
+        })
       });
       u.encounterWorldLevel = encounterWl;
       if (elite && isLead) {
         u.elite = true;
         this.eliteCreepUids.add(u.uid);
         this.textureOverworldElite(u, encounterWl, rng);
+      } else if (elite && packAffixId) {
+        this.applyOverworldAffix(u, packAffixId);
       }
       uids.push(u.uid);
     }
@@ -6708,6 +6850,8 @@ export class Game {
     const level = Math.max(spawn.level, leadLevel - 4);
     const encounterWl = worldLevelForEncounter(this.overworldBaseWorldLevel(), { source: 'echo' });
     // Echo fidelity (§3.3): full kit, gambit controller, ×0.6 HP, no items, echo flag.
+    // COMBAT_DEPTH_OVERHAUL P1: feed the gambit controller enemyCompetence depth so a featured
+    // (high-WL / late-region) echo reacts tighter and sequences combos, not just hits harder.
     const u = spawnHeroEchoUnit(this.sim, {
       heroId: spawn.heroId,
       team: 1,
@@ -6717,7 +6861,8 @@ export class Game {
       leashRadius: TUNING.echoLeashRadius,
       echoFlag: true,
       bountyMult: 1.4,
-      worldLevel: encounterWl
+      worldLevel: encounterWl,
+      aiDepth: this.combatDepthFor({ tier: creepCombatTier(this.region.id), worldLevel: encounterWl, rank: 'elite' })
     });
     u.encounterWorldLevel = encounterWl;
     this.echoHeroes.set(u.uid, spawnId);
@@ -7717,11 +7862,13 @@ export class Game {
     const level = Math.max(4, this.party[this.activeIdx]?.level ?? 4);
     const build = buildHero(def, autoPicksForLevel(level), 0);
     const pos = { x: npc.pos.x + 260, y: npc.pos.y + 80 };
+    // COMBAT_DEPTH_OVERHAUL P1: the binding echo proves the recruit — give it real hero AI
+    // (gambit controller + enemyCompetence depth), not the dumb creep leash it used before.
     const u = this.sim.spawnHero(build.def, {
       team: 1,
       pos,
       level,
-      ctrl: { kind: 'creep', homePos: { ...pos } }
+      ctrl: { kind: 'gambit', rules: buildDefaultGambit(def.roles), homePos: { ...pos }, aiDepth: this.combatDepthFor({ tier: creepCombatTier(this.region.id), rank: 'elite' }) }
     });
     u.name = `${def.name} Binding Echo`;
     u.bounty = { xp: Math.round(def.bounty.xp * 0.8), gold: Math.round(def.bounty.gold * 0.8) };
@@ -8513,7 +8660,10 @@ export class Game {
     if (!killer || killer.team !== 0) return; // only player-team kills pay
     const victim = this.sim.unit(ev.victimUid);
     const encounterWl = victim?.encounterWorldLevel ?? 0;
-    const baseBounty = scaledBounty(ev.bounty, this.region.id, 'normal', victim?.tier, victim?.star ?? 1);
+    // COMBAT_DEPTH_OVERHAUL P4: pay the region's combat tier, not a hardcoded 'normal'. Overworld
+    // creeps scale their HP/damage by creepCombatTier(region), so the reward must use the same
+    // tier or a hell-region kill underpays (broke the danger/reward contract).
+    const baseBounty = scaledBounty(ev.bounty, this.region.id, creepCombatTier(this.region.id), victim?.tier, victim?.star ?? 1);
     // §2.3: a higher featured-encounter World Level pays more gold + xp.
     const wlRewardMult = 1 + encounterWl * TUNING.worldLevel.rewardPerLevel;
     const bounty = { xp: baseBounty.xp * wlRewardMult, gold: Math.round(baseBounty.gold * wlRewardMult) };

@@ -463,6 +463,7 @@ function abilityComboRole(def: AbilityDef): ComboStep['role'] | null {
 }
 
 function itemComboRole(def: ItemDef): ComboStep['role'] | null {
+  if (def.active?.effects?.some((effect) => effect.kind === 'exotic' && effect.id === 'refresh-cooldowns')) return null;
   const arch = itemArchetypes(def);
   if (arch.has('nuke')) return 'payoff';
   if (arch.has('amplify')) return 'amplifier';

@@ -6,10 +6,12 @@ import { defineConfig, devices } from '@playwright/test';
 // uses the real renderer with SwiftShader so it works in CI without a GPU.
 const PORT = Number(process.env.PLAYWRIGHT_PORT ?? 5174);
 const HOST = '127.0.0.1';
+const WORKERS = Number(process.env.PLAYWRIGHT_WORKERS ?? 1);
 
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
+  workers: Number.isFinite(WORKERS) && WORKERS > 0 ? WORKERS : 1,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [['github'], ['list']] : 'list',

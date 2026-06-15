@@ -1,10 +1,9 @@
 import { test, expect } from '@playwright/test';
 import {
-  attachScreenshot,
+  attachElementScreenshot,
   boot,
   clearCinematics,
   expectNoPageErrors,
-  skipActiveCinematic,
   state,
   waitForPlayableUi,
   watchPageErrors
@@ -302,7 +301,7 @@ test.describe('graphical check (WebGL renderer)', () => {
 
     await boot(page, { webgl: true, hero: 'juggernaut', seed: 76, quality: 'low' });
     await waitForPlayableUi(page);
-    await skipActiveCinematic(page);
+    await clearCinematics(page);
 
     // The canvas must hold a live GL context.
     const gl = await page.evaluate(() => {
@@ -323,7 +322,7 @@ test.describe('graphical check (WebGL renderer)', () => {
     await page.waitForTimeout(1500);
 
     const stats = await page.evaluate(() => (window as any).__test.graphicsStats());
-    await attachScreenshot(page, testInfo, 'overworld-fight-webgl');
+    await attachElementScreenshot(page, testInfo, 'overworld-fight-webgl', '#game-canvas');
 
     expect(stats).not.toBeNull();
     // The renderer is actually submitting geometry, not a blank frame.

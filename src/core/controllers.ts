@@ -5,13 +5,13 @@ import { REG } from './registry';
 import { chooseUtilityOrder, dangerousScore, enemyCastSeen, incomingDisable, peelOrder, pickUtilityFocus, spreadSpacingOrder } from './utility';
 import { planUnitCombo } from './combo-planner';
 import { itemArchetypes } from './item-archetype';
-import { dominantRole } from './combat-profile';
+import { combatProfile, dominantRole } from './combat-profile';
 import { tauntToTop } from './threat';
 import { pickBossFocus } from './boss-brain';
 import { isDisabled } from './status';
 import { zoneContainsUnit as collisionZoneContainsUnit } from './collision';
 import type { Unit } from './unit';
-import type { GambitAction, GambitCondition, GambitRule, GambitTargetMode, Vec2 } from './types';
+import type { GambitAction, GambitCondition, GambitRule, GambitTargetMode, Order, Vec2 } from './types';
 import type { Sim } from './sim';
 import type { Zone } from './sim';
 
@@ -84,7 +84,10 @@ function thinkCreep(sim: Sim, u: Unit): void {
   // Aggro on proximity, or on anyone who recently damaged us (even from beyond aggro range).
   const enemy = nearestEnemy(sim, u, aggroR) ?? recentAttacker(sim, u);
   if (enemy) {
-    u.order = chooseUtilityOrder(sim, u, enemy) ?? { kind: 'attack-unit', uid: enemy.uid };
+    // COMBAT_DEPTH_OVERHAUL: a competent pack fights as a unit (shared focus-fire,
+    // spacing, peel) rather than five soloists each chasing its nearest body.
+    if ((c.aiDepth ?? 0) >= TUNING.competence.packCoordMinDepth) thinkCreepPack(sim, u, enemy, home);
+    else u.order = chooseUtilityOrder(sim, u, enemy) ?? { kind: 'attack-unit', uid: enemy.uid };
     return;
   }
 
@@ -110,6 +113,64 @@ function thinkCreep(sim: Sim, u: Unit): void {
       }
     }
   }
+}
+
+/**
+ * COMBAT_DEPTH_OVERHAUL — coordinated pack AI for elite / high-competence camps.
+ * Consumes the shared team-mind the same way a raid party does, so a pack converges
+ * its fire, holds spacing under area threat, and peels for its own casters. The
+ * kit-true scorer still decides the actual ability; this only shapes focus + spacing.
+ */
+function thinkCreepPack(sim: Sim, u: Unit, enemy: Unit, home: Vec2): void {
+  const tm = sim.teamMind(u.team);
+
+  // Shared focus-fire: converge on the team's target, but only while it is inside the
+  // camp's fight (within leash of home) so the pack never abandons its ground to chase.
+  let focus = enemy;
+  if (tm.focusUid !== null) {
+    const shared = sim.unit(tm.focusUid);
+    if (
+      shared && shared.alive && shared.team !== u.team && shared.kind !== 'npc' &&
+      !shared.summary.untargetable && shared.isVisibleTo(u.team, sim.time) &&
+      dist2(shared.pos, home) <= TUNING.creepLeashRadius * TUNING.creepLeashRadius
+    ) {
+      focus = shared;
+    }
+  }
+
+  const profile = combatProfile(u);
+
+  // Spread: a backline caster steps out of stacked area damage instead of feeding it.
+  if (tm.spread && profile.posture !== 'frontline') {
+    const spread = spreadSpacingOrder(sim, u);
+    if (spread) { u.order = spread; return; }
+  }
+
+  // Peel: a frontline body redirects onto whoever is diving a softer packmate.
+  if (profile.posture === 'frontline') {
+    const peel = packPeelOrder(sim, u);
+    if (peel) { u.order = peel; return; }
+  }
+
+  u.order = chooseUtilityOrder(sim, u, focus) ?? { kind: 'attack-unit', uid: focus.uid };
+}
+
+/** A frontline pack body bodies the nearest enemy diving the most-pressured backline packmate. */
+function packPeelOrder(sim: Sim, u: Unit): Order | null {
+  const r = TUNING.ai.peelDiveRadius;
+  let ward: Unit | null = null;
+  let wardPct = Infinity;
+  for (const a of sim.unitsArr) {
+    if (!a.alive || a === u || a.team !== u.team) continue;
+    if (a.kind !== 'creep' && a.kind !== 'hero') continue;
+    if (combatProfile(a).posture === 'frontline') continue;  // only peel for softer packmates
+    if (!nearestEnemyOf(sim, u, a.pos, r)) continue;           // is anyone diving them?
+    const pct = a.hp / Math.max(1, a.stats.maxHp);
+    if (pct < wardPct || (pct === wardPct && (ward === null || a.uid < ward.uid))) { wardPct = pct; ward = a; }
+  }
+  if (!ward) return null;
+  const diver = nearestEnemyOf(sim, u, ward.pos, r);
+  return diver ? { kind: 'attack-unit', uid: diver.uid } : null;
 }
 
 function nearestEnemyOf(sim: Sim, u: Unit, around: Vec2, radius: number): Unit | null {

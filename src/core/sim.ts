@@ -261,14 +261,16 @@ export class Sim {
     return u;
   }
 
-  spawnCreep(def: CreepDef, opts: { team: Team; pos: Vec2; star?: 1 | 2 | 3; wild?: boolean; homePos?: Vec2; ownerUid?: number; regionId?: string; combatTier?: DifficultyTier; worldLevel?: number }): Unit {
+  spawnCreep(def: CreepDef, opts: { team: Team; pos: Vec2; star?: 1 | 2 | 3; wild?: boolean; homePos?: Vec2; ownerUid?: number; regionId?: string; combatTier?: DifficultyTier; worldLevel?: number; aiDepth?: number }): Unit {
     const u = makeCreepUnit(def, { team: opts.team, pos: opts.pos, star: opts.star, wild: opts.wild, regionId: opts.regionId, combatTier: opts.combatTier, worldLevel: opts.worldLevel });
     u.aggroRadius = def.aggroRadius;
     if (opts.ownerUid !== undefined) {
       u.ownerUid = opts.ownerUid;
       u.ctrl = { kind: 'creep', followOwner: true };
     } else {
-      u.ctrl = { kind: 'creep', homePos: opts.homePos ?? { ...opts.pos } };
+      // COMBAT_DEPTH_OVERHAUL: wild packs carry an `aiDepth` (enemy competence) so the
+      // shared scorer's depth-scaled discipline reaches creeps, not just raid units.
+      u.ctrl = { kind: 'creep', homePos: opts.homePos ?? { ...opts.pos }, aiDepth: opts.aiDepth };
     }
     this.addUnit(u);
     return u;

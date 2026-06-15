@@ -71,7 +71,9 @@ describe('Gameplay 2.0 combat scaling', () => {
       combatTier: 'hell'
     });
 
-    expect(late.stats.maxHp).toBeGreaterThan(base.stats.maxHp * 8);
+    // COMBAT_DEPTH_OVERHAUL P4: late-game creeps stay much tankier/deadlier than base, but the
+    // tier sponge was trimmed (hell 2.1->1.85), so the HP floor relaxes from 8x to 7x.
+    expect(late.stats.maxHp).toBeGreaterThan(base.stats.maxHp * 7);
     expect(late.stats.damage).toBeGreaterThan(base.stats.damage * 4);
     expect(late.stats.maxHp).toBeCloseTo(base.stats.maxHp * TUNING.creepCombatScale.hpByRegion['mad-moon-crater'] * TUNING.creepCombatScale.tier.hell, 0);
   });

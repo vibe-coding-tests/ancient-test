@@ -1931,7 +1931,7 @@ export interface GameSave {
   metaNodes?: string[];           // purchased MetaNodeDef ids; default []
   worldLevelTier?: number;        // player-chosen ascension dial; default 0
   collectionMilestones?: string[];// unlocked collection-milestone ids; default []
-  settings: { quickcast: boolean; resonance?: boolean; swapCharges?: boolean; minimap?: boolean; worldLevel?: boolean; keyBindings?: KeyBindings; audio: AudioSettings; graphics?: GraphicsSettings; cutscene?: CutsceneSettings; interface?: InterfaceSettings };
+  settings: { quickcast: boolean; resonance?: boolean; swapCharges?: boolean; minimap?: boolean; worldLevel?: boolean; combatDepth?: boolean; keyBindings?: KeyBindings; audio: AudioSettings; graphics?: GraphicsSettings; cutscene?: CutsceneSettings; interface?: InterfaceSettings };
 }
 
 // ---------- Sim interface available to effect interpreters ----------

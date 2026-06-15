@@ -1,5 +1,6 @@
 import { createRaidMechanicRunner, heroesAlive, setupRaidSim, type RaidEncounterResult } from '../core/macro';
 import { raidSetupFromDef } from '../core/phase3';
+import { REG } from '../core/registry';
 import type { DifficultyTier, MacroHeroSetup, RaidDef, SeasonalModeKind } from '../core/types';
 import type { EffectCtx } from '../core/effects';
 import type { Sim } from '../core/sim';
@@ -11,6 +12,13 @@ export interface LiveRaidFestivalObjective {
   tributeTicks: number;
   timerSec: number;
   nextPressureAt: number;
+}
+
+export interface LiveRaidReadout {
+  nextAddWave: { atHpPct: number; count: number; summonId: string; activeAdds: number } | null;
+  healerTarget: { name: string; hpPct: number; focused: boolean } | null;
+  dodgeTelegraph: { count: number; secondsRemaining: number; radius: number } | null;
+  enrage: { secondsRemaining: number; active: boolean } | null;
 }
 
 export class LiveRaid {
@@ -101,6 +109,58 @@ export class LiveRaid {
       tributeTicks: this.festivalTributeTicks,
       timerSec: Math.max(0, this.maxTicks * this.sim.dt - this.sim.time),
       nextPressureAt: this.nextFestivalPressureAt
+    };
+  }
+
+  /**
+   * PROGRESSION_OVERHAUL §4.1 raid execution readout. This is a pure projection of
+   * authored raid thresholds plus current sim state; it never arms or fires mechanics.
+   */
+  raidReadout(): LiveRaidReadout {
+    const bossHpPct = 100 * this.boss.hp / Math.max(1, this.boss.stats.maxHp);
+    const fired = new Set(this.mechanics.fired.filter((m) => m.kind === 'add-wave').map((m) => m.id));
+    const nextWave = this.def.addWaves
+      .map((w, i) => ({ ...w, key: `wave-${i}` }))
+      .filter((w) => !fired.has(w.key) && w.atHpPct < bossHpPct)
+      .sort((a, b) => b.atHpPct - a.atHpPct)[0];
+    const activeAdds = this.sim.unitsArr.filter((u) => u.alive && u.team === 1 && u.kind !== 'hero' && u.ownerUid === this.boss.uid).length;
+
+    const bossTargetUid = this.boss.attackTargetUid >= 0 ? this.boss.attackTargetUid : this.boss.windupTargetUid;
+    const healerTarget = heroesAlive(this.sim, 0)
+      .map((u) => {
+        const roles = u.heroId ? REG.hero(u.heroId).roles : [];
+        const hpPct = u.hp / Math.max(1, u.stats.maxHp);
+        const supportWeight = roles.includes('support') ? 0.15 : 0;
+        return { u, hpPct, score: (1 - hpPct) + supportWeight };
+      })
+      .filter((x) => x.hpPct < 0.98)
+      .sort((a, b) => b.score - a.score || a.u.uid - b.u.uid)[0];
+
+    const hostileZones = this.sim.zones
+      .filter((z) => z.team !== 0 && !!z.tickEffects?.some((e) => e.kind === 'damage'))
+      .map((z) => ({
+        secondsRemaining: Math.max(0, z.until - this.sim.time),
+        radius: z.radius ?? z.width,
+        zid: z.zid
+      }))
+      .sort((a, b) => a.secondsRemaining - b.secondsRemaining || a.zid - b.zid);
+
+    return {
+      nextAddWave: nextWave
+        ? { atHpPct: nextWave.atHpPct, count: nextWave.count, summonId: nextWave.summon.id, activeAdds }
+        : activeAdds > 0
+          ? { atHpPct: 0, count: 0, summonId: 'active-adds', activeAdds }
+          : null,
+      healerTarget: healerTarget
+        ? { name: healerTarget.u.name, hpPct: healerTarget.hpPct, focused: bossTargetUid === healerTarget.u.uid }
+        : null,
+      dodgeTelegraph: hostileZones.length
+        ? { count: hostileZones.length, secondsRemaining: hostileZones[0].secondsRemaining, radius: hostileZones[0].radius }
+        : null,
+      enrage: {
+        secondsRemaining: Math.max(0, this.def.enrageSec - this.sim.time),
+        active: this.mechanics.fired.some((m) => m.kind === 'enrage')
+      }
     };
   }
 

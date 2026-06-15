@@ -275,6 +275,19 @@ describe('PROGRESSION §3 — the leader drafts against you (asymmetric Captains
     expect(won, 'a deep roster beats the asymmetric series on normal').toBe(true);
   }, 60000);
 
+  it('a thin hell roster with no repicks is locked into its bad five and loses', () => {
+    const gym = ALL_GYMS.find((g) => g.id === 'frost-gym')!;
+    const thin = withRole('support').filter((id) => id !== 'crystal-maiden').slice(0, 5);
+    const passive: GambitRule[] = [{ if: [{ k: 'always' }], then: { k: 'hold' } }];
+    const five = thin.map((heroId) => ({ heroId, level: 17, items: [], gambits: passive }));
+    expect(isLegalDraft(gym.format, five)).toBe(true);
+    const fight = new LiveGymFight(gym, five, 17, { playerRoster: thin, tier: 'hell' });
+    expect(fight.repickBudget).toBe(0);
+    expect(fight.requestRepick(0, STRONG_POOL.find((id) => !thin.includes(id))!)).toBe(false);
+    const result = fight.runHeadless();
+    expect(result.winner).toBe(1);
+  }, 60000);
+
   it('an Elite-style Bo5 needs three round wins and never exceeds five rounds (§3.1)', () => {
     const gym = ALL_GYMS.find((g) => g.id === 'frost-gym')!;
     const five = buildLegalTeam(gym.format, STRONG_POOL, 5, { level: 17, items: () => STRONG_ITEMS })
@@ -415,6 +428,26 @@ describe('AUTOBATTLER §5 — game integration: validate on commit, counter-draf
     expect(enemy1).toEqual(enemy2); // deterministic
     expect(enemy1.slice().sort()).not.toEqual(frost.enemyTeam.map((h) => h.heroId).slice().sort());
   });
+
+  it('every gym authors a valid counter pool instead of falling back to the whole registry', () => {
+    for (const gym of ALL_GYMS) {
+      expect(gym.counterPool?.length, `${gym.id}: counterPool`).toBeGreaterThanOrEqual(5);
+      for (const id of gym.counterPool ?? []) expect(REG.heroes.has(id), `${gym.id}: ${id}`).toBe(true);
+      expect(formatSatisfiable(gym.format, gym.counterPool ?? []), `${gym.id}: counterPool should satisfy its format`).toBe(true);
+    }
+  });
+
+  it('a rematch after a gym loss switches the leader to mirror-shape', () => {
+    const ids = STRONG_POOL;
+    const cap = gymLevelCap(ALL_GYMS.find((g) => g.id === 'frost-gym')!.format);
+    const heroes = buildLegalTeam(ALL_GYMS.find((g) => g.id === 'frost-gym')!.format, ids, 9, { level: cap, items: () => STRONG_ITEMS });
+    const game = Game.headless(fullSave(ids));
+    game.commitGymDraft('frost-gym', { heroes, formation: { placements: {} } });
+    (game as unknown as { gymLosses: Map<string, number> }).gymLosses.set('frost-gym', 1);
+    expect(game.startLiveGym('frost-gym')).toBe(true);
+    expect(game.lastCounterDraft?.reason).toBe('drafts a fresh five to a fixed shape');
+    expect(game.liveGym!.currentEnemyFive().slice().sort()).not.toEqual(ALL_GYMS.find((g) => g.id === 'frost-gym')!.enemyTeam.map((h) => h.heroId).slice().sort());
+  });
 });
 
 // A sane aggressive gambit (mirrors gyms.test.ts) so a drafted five plays its kit.
@@ -517,4 +550,29 @@ describe('AUTOBATTLER §4.2/§10 — the Elite Five is winnable via the interact
     }
     expect(won, 'the first Elite member is winnable via the drafted five').toBe(true);
   }, 120000);
+
+  it('a minimum five-hero roster still completes and commits the draft (no ban soft-lock)', () => {
+    // beginEliteDraft only requires five recruited heroes, so the leader's ban
+    // must never remove one the player needs — otherwise a player who challenges
+    // the gauntlet with exactly five is stranded at the final pick: nothing legal
+    // to choose, and commitEliteDraft refuses (the soft-lock this guards against).
+    const roster = STRONG_POOL.slice(0, 5);
+    const game = Game.headless(recruitSave(roster));
+    expect(game.recruited.size).toBe(5);
+    expect(game.beginEliteDraft()).toBe(true);
+    playInteractiveDraft(game);
+
+    const turn = game.eliteDraftTurn()!;
+    expect(turn.done, 'the draft completes even at the minimum roster').toBe(true);
+    const s = game.eliteDraft!;
+    expect(s.player.length, 'the player fields a full five').toBe(5);
+    expect(s.enemy.length, 'the leader fields a full five').toBe(5);
+    // every recruited hero is fielded: the leader never banned one the player needed
+    const playerIds = s.player.map((h) => h.heroId);
+    for (const id of roster) expect(playerIds, `recruited ${id} must remain fieldable`).toContain(id);
+    for (const banned of s.bans) expect(roster, `ban ${banned} must not strand the player`).not.toContain(banned);
+
+    const result = game.commitEliteDraft();
+    expect(result, 'the completed minimum-roster draft resolves to a match').not.toBeNull();
+  });
 });

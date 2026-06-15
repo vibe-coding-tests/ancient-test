@@ -24,13 +24,21 @@ core (`src/core/`) stays untouched in its resolution layer (no `three`, no DOM,
 deterministic for a seed); everything is additive and reversible; the macro hero
 ceiling (level 30 / 15 ability pts / 14 mastery pts / 6 items) is left intact.
 
-Status: **shipped** (P0–P5, all slices green; see `DECISIONS.md` 2026-06-14 rows).
+Status: **implemented in code** (P0–P5). Focused gates were green on 2026-06-15:
+`combat-scaling.test.ts`, `draft-format.test.ts`, `progression-trainer.test.ts`,
+`save-migration.test.ts`, `raid-execution.test.ts`, `data-lint.test.ts`,
+`progression-interplay.test.ts`, `native-items.test.ts`, and
+`combat-readout.test.ts` passed together. The remaining known cleanup is outside
+these focused gates: old Playwright expectations still assert save version 9, and
+the rerun artifacts include visual/WebGL timing failures.
+
 Tuning lives in `tuning.ts`; the §9 balance pass inverted the World-Level curve so
 `texturePerLevel` dominates the HP term and feeds the reaction-shield wall.
 
-Live baselines this spec builds on: `SAVE_VERSION === 7` (`systems/game.ts`); creep
-scaling is `creepCombatScale()` in `core/unit.ts:613`; the migration chain is
-`migratePhase{3,4,6,7}Save`.
+Live baselines this spec builds on: `SAVE_VERSION === 10` (`systems/game.ts`);
+progression fields were introduced by `migratePhase8Save` (`core/phase8.ts`) and
+are now chained through the current save migration path; creep scaling is
+`creepCombatScale()` in `core/unit.ts:646`.
 
 ---
 
@@ -404,9 +412,11 @@ the player can equip, move, and chase the tools that do it.
 
 ## 6. Data, save & migration
 
-`SAVE_VERSION` **7 → 8**, additive `migratePhase8Save` (new `core/phase8.ts`, chained
-in `migrateSave` after `migratePhase7Save`; `validateSave` accepts 8; `newGameSave`
-sets defaults). All new fields optional so v7 saves load clean.
+Progression introduced a v8 save slice. The current live save version is
+`SAVE_VERSION === 10`; `migratePhase8Save` (`core/phase8.ts`) defaults the Trainer
+track and meta dial, then the current `Game.migrateSave` path normalizes older saves
+up to version 10. `newGameSave` sets the same defaults for fresh saves. All fields
+stay optional at the data boundary so pre-v8 saves load clean.
 
 ```ts
 // GameSave additions (core/types.ts):
@@ -458,7 +468,8 @@ the meta/lock/settings flags are systems-layer).
   pick a tank, taunt overrides threat, healer gambits save the focused ally, add waves
   spawn on schedule, and a dodge telegraph can be avoided without changing loot rolls.
 - **`save-migration.test.ts`** (extend): `migratePhase8Save` defaults all v8 fields;
-  `validateSave` accepts 8.
+  `Game.migrateSave` upgrades older saves and `Game.validateSave` accepts the current
+  `SAVE_VERSION`.
 
 ---
 
@@ -483,7 +494,8 @@ and loot-source cards. A slice is done when the player can see why the system ma
 3. **P2 — Elite Bo5 (§3.1) + macro readability/Captain Call (§3.4) + echo floor (§2.5).**
 4. **P3 — Raid execution + chase legibility + Aghs scepter/shard pipeline (§4.1).**
 5. **P4 — Trainer track + overflow split + meta board + World Level dial + collection
-   milestones (§4.2–4.4).** Includes the `SAVE_VERSION 7→8` migration.
+   milestones (§4.2–4.4).** Includes the v8 Trainer/meta migration, now chained into
+   current `SAVE_VERSION === 10`.
 6. **Original items (§5)** ship with the slice whose loop they serve (XP/collection
    with P4, swap/exploration with P0, raid relics with P3); each is a data `ItemDef`
    plus, only for `Mentor's Standard`, the one `StatMods` field. None blocks its slice.
@@ -516,5 +528,5 @@ is a puzzle; P3–P4 make raids the execution check, the chase, and collection t
   region theme). Both must always leave a legal five.
 - **DECISIONS rows** to add once each slice ships: the World-Level texture-over-HP
   split, the asymmetric Captains Series (enemy-only bans + escalation + difficulty
-  repick budget), the overflow split ratio + `7→8` migration, and the "meta grants no
-  macro stat" invariant.
+  repick budget), the overflow split ratio + v8 Trainer/meta migration, and the
+  "meta grants no macro stat" invariant.

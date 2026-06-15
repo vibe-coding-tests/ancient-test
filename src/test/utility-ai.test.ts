@@ -70,6 +70,28 @@ const TEST_AOE_NUKE: AbilityDef = {
   sound: 'void'
 };
 
+const TEST_CHANNEL_AOE: AbilityDef = {
+  id: 'test-channel-aoe',
+  name: 'Channel AoE',
+  targeting: 'no-target',
+  ult: true,
+  castPoint: 0.8,
+  manaCost: [160],
+  cooldown: [80],
+  values: { damage: [180], radius: [450], dur: [3] },
+  effects: [],
+  channel: {
+    duration: 'dur',
+    tick: {
+      interval: 1,
+      effects: [{ kind: 'damage', dtype: 'magical', amount: 'damage', target: 'enemies-in-radius', radius: 'radius' }]
+    }
+  },
+  vfx: { archetype: 'ground-aoe', color: '#7ddcff', scale: 1.2 },
+  anim: 'staff-cast',
+  sound: 'void'
+};
+
 const TEST_HEX: AbilityDef = {
   id: 'test-hex',
   name: 'Test Hex',
@@ -346,6 +368,260 @@ describe('utility scorer picks actions by value, not slot order', () => {
     sim.rebuildSpatial();
 
     expect(chooseUtilityOrder(sim, support, enemy)).toMatchObject({ kind: 'item', invSlot: 0, uid: ally.uid });
+  });
+
+  it('uses Blink Dagger as an initiator engage, not as a generic support opener', () => {
+    const init = setupMacroSim({
+      seed: 2028,
+      teamA: [{ heroId: 'earthshaker', level: 18, items: ['blink-dagger'] }],
+      teamB: [{ heroId: 'sniper', level: 18 }],
+      maxSec: 30
+    });
+    const shaker = init.unitsArr.find((u) => u.team === 0 && u.heroId === 'earthshaker')!;
+    const target = init.unitsArr.find((u) => u.team === 1)!;
+    installAbilities(shaker, []);
+    shaker.pos = { x: 1000, y: 1500 };
+    target.pos = { x: 2150, y: 1500 };
+    init.rebuildSpatial();
+    expect(chooseUtilityOrder(init, shaker, target)).toMatchObject({ kind: 'item', invSlot: 0 });
+
+    const supportSim = setupMacroSim({
+      seed: 2029,
+      teamA: [{ heroId: 'crystal-maiden', level: 18, items: ['blink-dagger'] }],
+      teamB: [{ heroId: 'sniper', level: 18 }],
+      maxSec: 30
+    });
+    const support = supportSim.unitsArr.find((u) => u.team === 0)!;
+    const enemy = supportSim.unitsArr.find((u) => u.team === 1)!;
+    installAbilities(support, []);
+    support.pos = { x: 1000, y: 1500 };
+    enemy.pos = { x: 2150, y: 1500 };
+    supportSim.rebuildSpatial();
+    expect(chooseUtilityOrder(supportSim, support, enemy)).not.toMatchObject({ kind: 'item', invSlot: 0 });
+  });
+
+  it('uses Black King Bar as a carry/frontline commitment button once the fight is joined', () => {
+    const sim = setupMacroSim({
+      seed: 2030,
+      teamA: [{ heroId: 'juggernaut', level: 24, items: ['black-king-bar'] }],
+      teamB: [{ heroId: 'axe', level: 24 }, { heroId: 'lion', level: 24 }],
+      maxSec: 30
+    });
+    const carry = sim.unitsArr.find((u) => u.team === 0)!;
+    const focus = sim.unitsArr.find((u) => u.team === 1 && u.heroId === 'axe')!;
+    const second = sim.unitsArr.find((u) => u.team === 1 && u.heroId === 'lion')!;
+    installAbilities(carry, []);
+    carry.pos = { x: 2000, y: 1500 };
+    focus.pos = { x: 2250, y: 1500 };
+    second.pos = { x: 2300, y: 1640 };
+    sim.rebuildSpatial();
+
+    expect(chooseUtilityOrder(sim, carry, focus)).toMatchObject({ kind: 'item', invSlot: 0 });
+  });
+
+  it('uses Satanic only when a carry can lifesteal through a dangerous low-HP fight', () => {
+    const sim = setupMacroSim({
+      seed: 2031,
+      teamA: [{ heroId: 'sven', level: 24, items: ['satanic'] }],
+      teamB: [{ heroId: 'axe', level: 24 }],
+      maxSec: 30
+    });
+    const carry = sim.unitsArr.find((u) => u.team === 0)!;
+    const enemy = sim.unitsArr.find((u) => u.team === 1)!;
+    installAbilities(carry, []);
+    carry.pos = { x: 2000, y: 1500 };
+    enemy.pos = { x: 2140, y: 1500 };
+    carry.hp = carry.stats.maxHp * 0.34;
+    carry.lastEnemyDamageAt = sim.time;
+    sim.rebuildSpatial();
+
+    expect(chooseUtilityOrder(sim, carry, enemy)).toMatchObject({ kind: 'item', invSlot: 0 });
+
+    carry.hp = carry.stats.maxHp;
+    expect(chooseUtilityOrder(sim, carry, enemy)).not.toMatchObject({ kind: 'item', invSlot: 0 });
+  });
+
+  it('uses Manta Style to purge a carry before continuing to fight', () => {
+    const sim = setupMacroSim({
+      seed: 2032,
+      teamA: [{ heroId: 'juggernaut', level: 24, items: ['manta-style'] }],
+      teamB: [{ heroId: 'lion', level: 24 }],
+      maxSec: 30
+    });
+    const carry = sim.unitsArr.find((u) => u.team === 0)!;
+    const enemy = sim.unitsArr.find((u) => u.team === 1)!;
+    installAbilities(carry, []);
+    carry.pos = { x: 2000, y: 1500 };
+    enemy.pos = { x: 2350, y: 1500 };
+    carry.addStatus({ status: 'root', tag: 'test-root', sourceUid: enemy.uid, sourceTeam: enemy.team, until: sim.time + 2, isDebuff: true });
+    carry.refresh(sim.time);
+    sim.rebuildSpatial();
+
+    expect(chooseUtilityOrder(sim, carry, enemy)).toMatchObject({ kind: 'item', invSlot: 0 });
+  });
+
+  it('uses Lotus Orb proactively on an ally about to eat a hard disable', () => {
+    const sim = setupMacroSim({
+      seed: 2033,
+      teamA: [
+        { heroId: 'crystal-maiden', level: 24, items: ['lotus-orb'] },
+        { heroId: 'sven', level: 24 }
+      ],
+      teamB: [{ heroId: 'lion', level: 24 }],
+      maxSec: 30
+    });
+    const support = sim.unitsArr.find((u) => u.team === 0 && u.heroId === 'crystal-maiden')!;
+    const ally = sim.unitsArr.find((u) => u.team === 0 && u.heroId === 'sven')!;
+    const enemy = sim.unitsArr.find((u) => u.team === 1)!;
+    installAbilities(support, []);
+    installAbilities(enemy, [TEST_HEX]);
+    support.pos = { x: 2000, y: 1500 };
+    ally.pos = { x: 2150, y: 1500 };
+    enemy.pos = { x: 2450, y: 1500 };
+    enemy.cast = { source: 'ability', slot: 0, fireAt: sim.time + 0.3, targetUid: ally.uid };
+    sim.rebuildSpatial();
+
+    expect(chooseUtilityOrder(sim, support, enemy)).toMatchObject({ kind: 'item', invSlot: 0, uid: ally.uid });
+  });
+
+  it('uses Guardian Greaves and Arcane Boots for real team reset needs', () => {
+    const sim = setupMacroSim({
+      seed: 2034,
+      teamA: [
+        { heroId: 'crystal-maiden', level: 24, items: ['guardian-greaves'] },
+        { heroId: 'sven', level: 24 },
+        { heroId: 'sniper', level: 24 }
+      ],
+      teamB: [{ heroId: 'lich', level: 24 }],
+      maxSec: 30
+    });
+    const support = sim.unitsArr.find((u) => u.team === 0 && u.heroId === 'crystal-maiden')!;
+    const sven = sim.unitsArr.find((u) => u.team === 0 && u.heroId === 'sven')!;
+    const sniper = sim.unitsArr.find((u) => u.team === 0 && u.heroId === 'sniper')!;
+    const enemy = sim.unitsArr.find((u) => u.team === 1)!;
+    installAbilities(support, []);
+    support.pos = { x: 2000, y: 1500 };
+    sven.pos = { x: 2150, y: 1500 };
+    sniper.pos = { x: 2050, y: 1650 };
+    sven.hp = sven.stats.maxHp * 0.5;
+    sniper.hp = sniper.stats.maxHp * 0.62;
+    sniper.mana = sniper.stats.maxMana * 0.25;
+    sim.rebuildSpatial();
+
+    expect(chooseUtilityOrder(sim, support, enemy)).toMatchObject({ kind: 'item', invSlot: 0 });
+
+    const arcane = setupMacroSim({
+      seed: 2035,
+      teamA: [
+        { heroId: 'crystal-maiden', level: 24, items: ['arcane-boots'] },
+        { heroId: 'sven', level: 24 }
+      ],
+      teamB: [{ heroId: 'axe', level: 24 }],
+      maxSec: 30
+    });
+    const cm = arcane.unitsArr.find((u) => u.team === 0 && u.heroId === 'crystal-maiden')!;
+    const ally = arcane.unitsArr.find((u) => u.team === 0 && u.heroId === 'sven')!;
+    const foe = arcane.unitsArr.find((u) => u.team === 1)!;
+    installAbilities(cm, []);
+    cm.pos = { x: 2000, y: 1500 };
+    ally.pos = { x: 2140, y: 1500 };
+    cm.mana = cm.stats.maxMana * 0.2;
+    ally.mana = ally.stats.maxMana * 0.25;
+    arcane.rebuildSpatial();
+
+    expect(chooseUtilityOrder(arcane, cm, foe)).toMatchObject({ kind: 'item', invSlot: 0 });
+  });
+
+  it('targets ally steroid items onto the pressured frontline instead of the enemy focus', () => {
+    const sim = setupMacroSim({
+      seed: 2036,
+      teamA: [
+        { heroId: 'crystal-maiden', level: 24, items: ['solar-crest', 'mjollnir'] },
+        { heroId: 'sven', level: 24 }
+      ],
+      teamB: [{ heroId: 'axe', level: 24 }, { heroId: 'lion', level: 24 }],
+      maxSec: 30
+    });
+    const support = sim.unitsArr.find((u) => u.team === 0 && u.heroId === 'crystal-maiden')!;
+    const ally = sim.unitsArr.find((u) => u.team === 0 && u.heroId === 'sven')!;
+    const enemy = sim.unitsArr.find((u) => u.team === 1 && u.heroId === 'axe')!;
+    const second = sim.unitsArr.find((u) => u.team === 1 && u.heroId === 'lion')!;
+    installAbilities(support, []);
+    support.pos = { x: 2000, y: 1500 };
+    ally.pos = { x: 2150, y: 1500 };
+    enemy.pos = { x: 2280, y: 1500 };
+    second.pos = { x: 2300, y: 1620 };
+    sim.rebuildSpatial();
+
+    expect(chooseUtilityOrder(sim, support, enemy)).toMatchObject({ kind: 'item', invSlot: 0, uid: ally.uid });
+    support.items[0]!.cooldownUntil = sim.time + 10;
+    expect(chooseUtilityOrder(sim, support, enemy)).toMatchObject({ kind: 'item', invSlot: 1, uid: ally.uid });
+  });
+
+  it('uses Refresher only after multiple signature cooldowns are spent', () => {
+    const sim = setupMacroSim({
+      seed: 2037,
+      teamA: [{ heroId: 'zeus', level: 24, items: ['refresher-orb'] }],
+      teamB: [{ heroId: 'axe', level: 24 }, { heroId: 'lion', level: 24 }],
+      maxSec: 30
+    });
+    const hero = sim.unitsArr.find((u) => u.team === 0)!;
+    const enemy = sim.unitsArr.find((u) => u.team === 1)!;
+    installAbilities(hero, [TEST_AOE_NUKE, TEST_CHANNEL_AOE]);
+    hero.pos = { x: 2000, y: 1500 };
+    enemy.pos = { x: 2300, y: 1500 };
+    hero.abilities[0].cooldownUntil = sim.time + 20;
+    sim.rebuildSpatial();
+    expect(chooseUtilityOrder(sim, hero, enemy)).not.toMatchObject({ kind: 'item', invSlot: 0 });
+
+    hero.abilities[1].cooldownUntil = sim.time + 30;
+    expect(chooseUtilityOrder(sim, hero, enemy)).toMatchObject({ kind: 'item', invSlot: 0 });
+  });
+
+  it('redirects lockdown items onto channelers and role-priority targets', () => {
+    const sim = setupMacroSim({
+      seed: 2038,
+      teamA: [{ heroId: 'lion', level: 24, items: ['rod-of-atos'] }],
+      teamB: [{ heroId: 'axe', level: 24 }, { heroId: 'sniper', level: 24 }],
+      maxSec: 30
+    });
+    const lion = sim.unitsArr.find((u) => u.team === 0)!;
+    const axe = sim.unitsArr.find((u) => u.team === 1 && u.heroId === 'axe')!;
+    const sniper = sim.unitsArr.find((u) => u.team === 1 && u.heroId === 'sniper')!;
+    installAbilities(lion, []);
+    lion.pos = { x: 2000, y: 1500 };
+    axe.pos = { x: 2350, y: 1500 };
+    sniper.pos = { x: 2600, y: 1500 };
+    sim.rebuildSpatial();
+
+    expect(chooseUtilityOrder(sim, lion, axe)).toMatchObject({ kind: 'item', invSlot: 0, uid: sniper.uid });
+
+    axe.channel = { source: 'ability', slot: 0, until: sim.time + 2, nextTickAt: sim.time + 0.5, interval: 0.5 };
+    expect(chooseUtilityOrder(sim, lion, sniper)).toMatchObject({ kind: 'item', invSlot: 0, uid: axe.uid });
+  });
+
+  it('balances long channel AoE spells between waiting for position and taking clustered fights', () => {
+    const sim = setupMacroSim({
+      seed: 2039,
+      teamA: [{ heroId: 'sniper', level: 24 }],
+      teamB: [{ heroId: 'axe', level: 24 }, { heroId: 'lion', level: 24 }, { heroId: 'lich', level: 24 }],
+      maxSec: 30
+    });
+    const hero = sim.unitsArr.find((u) => u.team === 0)!;
+    const enemies = sim.unitsArr.filter((u) => u.team === 1);
+    installAbilities(hero, [TEST_CHEAP_NUKE, TEST_CHANNEL_AOE]);
+    hero.pos = { x: 2000, y: 1500 };
+    enemies[0].pos = { x: 2450, y: 1500 };
+    enemies[1].pos = { x: 3800, y: 1500 };
+    enemies[2].pos = { x: 3900, y: 1600 };
+    sim.rebuildSpatial();
+
+    expect(chooseUtilityOrder(sim, hero, enemies[0])).toMatchObject({ kind: 'cast', slot: 0 });
+
+    enemies[1].pos = { x: 2480, y: 1560 };
+    enemies[2].pos = { x: 2400, y: 1620 };
+    sim.rebuildSpatial();
+    expect(chooseUtilityOrder(sim, hero, enemies[0])).toMatchObject({ kind: 'cast', slot: 1 });
   });
 });
 

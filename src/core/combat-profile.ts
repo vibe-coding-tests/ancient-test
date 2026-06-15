@@ -1,7 +1,7 @@
 import { TUNING } from '../data/tuning';
 import { REG } from './registry';
 import type { ItemArchetype } from './item-archetype';
-import type { Attribute } from './types';
+import type { AbilityDef, Attribute, CreepDef, EffectNode, StatusId, TargetSel } from './types';
 import type { Unit } from './unit';
 
 // ============================================================
@@ -74,9 +74,156 @@ export function combatProfile(u: Unit): CombatProfile {
 }
 
 function rolesOf(u: Unit): string[] {
-  if (!u.heroId) return [];
-  const def = REG.heroes.get(u.heroId);
-  return def ? def.roles : [];
+  if (u.heroId) {
+    const def = REG.heroes.get(u.heroId);
+    return def ? def.roles : [];
+  }
+  // COMBAT_DEPTH_OVERHAUL: a wild creep plays its kit, not a flat 'generalist'.
+  // Infer the same role vocabulary heroes use from the creep's authored abilities,
+  // so the shared scorer weights a summoner, aura-totem, ranged nuker, stunner, or
+  // brute body each like itself. Pure + cached by creepId.
+  if (u.creepId) return creepRolesOf(u.creepId);
+  return [];
+}
+
+const CREEP_ROLE_CACHE = new Map<string, string[]>();
+
+function creepRolesOf(creepId: string): string[] {
+  const cached = CREEP_ROLE_CACHE.get(creepId);
+  if (cached) return cached;
+  const def = REG.creeps.get(creepId);
+  const roles = def ? deriveCreepRoles(def) : [];
+  CREEP_ROLE_CACHE.set(creepId, roles);
+  return roles;
+}
+
+/** Hard disables that read as control (mirrors ability-archetype's set). */
+const CREEP_HARD_CC: ReadonlySet<StatusId> = new Set<StatusId>([
+  'stun', 'root', 'hex', 'fear', 'sleep', 'frozen', 'cyclone'
+]);
+
+interface CreepKit {
+  summon: boolean;       // raises bodies (a pusher)
+  allyBuff: boolean;     // an ACTIVE heal/shield/buff cast onto an ally (a support)
+  passiveAura: boolean;  // an always-on ally aura (a buff-totem leans support)
+  attackMod: boolean;    // an on-hit weapon enchant (a sustained-DPS body)
+  damageEnemy: boolean;  // any damage dealt to enemies via a cast
+  aoeDamage: boolean;    // that damage catches an area (a cluster nuker)
+  aoeHardCC: boolean;    // a hard disable lands on an area (an initiator)
+  singleHardCC: boolean; // a hard disable lands on one target (a disabler)
+}
+
+function deriveCreepRoles(def: CreepDef): string[] {
+  const k = creepKit(def);
+  const ranged = def.stats.attackRange >= TUNING.ai.rangedThreshold;
+  const bigBody = def.tier === 'large' || def.tier === 'ancient';
+  const roles: string[] = [];
+  if (k.allyBuff) roles.push('support');
+  if (k.summon) roles.push('pusher');
+  if (k.aoeHardCC) roles.push('initiator');
+  else if (k.singleHardCC) roles.push('disabler');
+  if (k.aoeDamage || (k.damageEnemy && ranged)) roles.push('nuker');
+  // a large/ancient melee body is a frontline tank regardless of an incidental aura
+  if (bigBody && !ranged) roles.push('durable');
+  if (roles.length === 0) {
+    if (k.passiveAura) roles.push('support');        // a pure buff-totem holds near its pack
+    else if (k.attackMod || k.damageEnemy) roles.push('carry'); // a DPS body (kites if ranged)
+    else roles.push(ranged ? 'carry' : 'durable');   // ranged auto-attacker vs melee brute
+  }
+  return roles;
+}
+
+function creepKit(def: CreepDef): CreepKit {
+  const k: CreepKit = {
+    summon: false, allyBuff: false, passiveAura: false, attackMod: false,
+    damageEnemy: false, aoeDamage: false, aoeHardCC: false, singleHardCC: false
+  };
+  for (const ab of def.abilities) {
+    if (ab.attackMod) k.attackMod = true;
+    if (ab.targeting === 'aura' || (ab.aura && ab.aura.affects === 'allies')) k.passiveAura = true;
+    scanCreepEffects(ab, ab.effects, k);
+    if (ab.channel?.tick) scanCreepEffects(ab, ab.channel.tick.effects, k);
+    if (ab.channel?.onEnd) scanCreepEffects(ab, ab.channel.onEnd, k);
+    if (ab.toggle) scanCreepEffects(ab, ab.toggle.effects, k);
+  }
+  return k;
+}
+
+function isEnemyTargetSel(t: TargetSel): boolean {
+  return t === 'target' || t === 'enemies-in-radius' || t === 'random-enemy-in-radius' || t === 'units-in-radius';
+}
+
+function isAllyTargetSel(t: TargetSel): boolean {
+  return t === 'allies-in-radius' || t === 'lowest-hp-ally-in-radius' || t === 'units-in-radius' || t === 'target';
+}
+
+function isAoeSel(t: TargetSel): boolean {
+  return t === 'enemies-in-radius' || t === 'allies-in-radius' || t === 'units-in-radius' || t === 'random-enemy-in-radius';
+}
+
+function scanCreepEffects(ab: AbilityDef, nodes: EffectNode[] | undefined, k: CreepKit): void {
+  if (!nodes) return;
+  for (const n of nodes) {
+    switch (n.kind) {
+      case 'damage': {
+        if (isEnemyTargetSel(n.target)) {
+          k.damageEnemy = true;
+          if (n.radius !== undefined || isAoeSel(n.target)) k.aoeDamage = true;
+        }
+        break;
+      }
+      case 'status': {
+        const aoe = n.radius !== undefined || isAoeSel(n.target);
+        if (CREEP_HARD_CC.has(n.status) && isEnemyTargetSel(n.target)) {
+          if (aoe) k.aoeHardCC = true;
+          else if (n.target === 'target') k.singleHardCC = true;
+        }
+        if ((n.status === 'buff' || n.params?.mods) && n.target !== 'self' && !isEnemyTargetSel(n.target) && isAllyTargetSel(n.target)) {
+          k.allyBuff = true;
+        }
+        if (n.params?.periodic) scanCreepEffects(ab, n.params.periodic.effects, k);
+        break;
+      }
+      case 'displace': {
+        if (n.mode !== 'blink' && isEnemyTargetSel(n.target)) {
+          if (n.radius !== undefined || isAoeSel(n.target)) k.aoeHardCC = true;
+          else if (n.target === 'target') k.singleHardCC = true;
+        }
+        break;
+      }
+      case 'heal':
+        if (n.target !== 'self' && isAllyTargetSel(n.target)) k.allyBuff = true;
+        break;
+      case 'mana':
+        if (n.op === 'restore' && n.target !== 'self' && isAllyTargetSel(n.target)) k.allyBuff = true;
+        break;
+      case 'statmod':
+        if (n.target !== 'self' && isAllyTargetSel(n.target)) k.allyBuff = true;
+        break;
+      case 'purge':
+        if (!isEnemyTargetSel(n.target)) k.allyBuff = true;
+        break;
+      case 'summon':
+        k.summon = true;
+        break;
+      case 'zone': {
+        const tick = n.zone.tick;
+        if (tick && tick.affects !== 'allies') {
+          if (tick.effects.some((e) => e.kind === 'damage')) k.aoeDamage = true;
+          if (tick.effects.some((e) => e.kind === 'status' && CREEP_HARD_CC.has((e as Extract<EffectNode, { kind: 'status' }>).status))) k.aoeHardCC = true;
+        }
+        scanCreepEffects(ab, n.zone.tick?.effects, k);
+        scanCreepEffects(ab, n.zone.onEnter?.effects, k);
+        break;
+      }
+      case 'projectile':
+        scanCreepEffects(ab, n.proj.onHit, k);
+        break;
+      case 'repeat':
+        scanCreepEffects(ab, n.effects, k);
+        break;
+    }
+  }
 }
 
 function derive(u: Unit): CombatProfile {

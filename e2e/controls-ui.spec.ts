@@ -99,7 +99,7 @@ test.describe('controls + HUD UI', () => {
     });
 
     expect(saved.exists).toBe(true);
-    expect(saved.version).toBe(9);
+    expect(saved.version).toBe(10);
     expect(saved.gold).toBeGreaterThanOrEqual(4321);
     expect(saved.regionId).toBe('icewrack');
     expect(saved.heroId).toBe('sniper');
@@ -115,8 +115,12 @@ test.describe('controls + HUD UI', () => {
     await openMenu(page);
     const initial = await page.evaluate(() => {
       const g = (window as any).__game;
-      return { quickcast: g.settings.quickcast, resonance: g.settings.resonance };
+      return { quickcast: g.settings.quickcast, resonance: g.settings.resonance, simResonance: g.sim.resonanceEnabled };
     });
+
+    // Resonance is no longer a player toggle: the overworld is always resonant.
+    expect(initial.resonance).toBe(true);
+    expect(initial.simResonance).toBe(true);
 
     await page.locator('[data-mtab="controls"]').click();
     await page.locator('#opt-quickcast').evaluate((el, checked) => {
@@ -124,24 +128,16 @@ test.describe('controls + HUD UI', () => {
       input.checked = checked as boolean;
       input.dispatchEvent(new Event('change', { bubbles: true }));
     }, !initial.quickcast);
-    await page.locator('[data-mtab="interface"]').click();
-    await page.locator('#opt-resonance').evaluate((el, checked) => {
-      const input = el as HTMLInputElement;
-      input.checked = checked as boolean;
-      input.dispatchEvent(new Event('change', { bubbles: true }));
-    }, !initial.resonance);
     const toggled = await page.evaluate(() => {
       const g = (window as any).__game;
       return {
         quickcast: g.settings.quickcast,
-        resonance: g.settings.resonance,
         simResonance: g.sim.resonanceEnabled
       };
     });
 
     expect(toggled.quickcast).toBe(!initial.quickcast);
-    expect(toggled.resonance).toBe(!initial.resonance);
-    expect(toggled.simResonance).toBe(!initial.resonance);
+    expect(toggled.simResonance).toBe(true);
 
     await page.keyboard.press('Escape');
     await expect(page.locator('#modal-root')).toHaveClass(/hidden/);

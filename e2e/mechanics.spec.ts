@@ -16,18 +16,14 @@ test.describe('mechanics', () => {
     expect(flips.night).toBe(true);
   });
 
-  test('resonance can be toggled on and off', async ({ page }) => {
+  test('the overworld is always resonant (not a player toggle)', async ({ page }) => {
     await boot(page, { seed: 22 });
     const r = await page.evaluate(() => {
       const g = (window as any).__game;
-      g.setResonanceEnabled(false);
-      const off = g.sim.resonanceEnabled;
-      g.setResonanceEnabled(true);
-      const on = g.sim.resonanceEnabled;
-      return { off, on };
+      return { setting: g.settings.resonance, sim: g.sim.resonanceEnabled };
     });
-    expect(r.off).toBe(false);
-    expect(r.on).toBe(true);
+    expect(r.setting).toBe(true);
+    expect(r.sim).toBe(true);
   });
 
   test('killing wild creeps pays the player gold (reward loop)', async ({ page }) => {

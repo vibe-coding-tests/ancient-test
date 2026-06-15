@@ -4128,11 +4128,18 @@ export class Hud {
       r.bossThreat ? `${r.bossThreat.bossName}>${r.bossThreat.targetName ?? '-'}${r.bossThreat.taunted ? '!' : ''}` : '',
       r.sharedFocus?.name ?? '',
       r.ultReady.map((u) => u.name).join('+'),
+      r.raid ? [
+        r.raid.nextAddWave ? `w${r.raid.nextAddWave.atHpPct}:${r.raid.nextAddWave.activeAdds}` : '',
+        r.raid.healerTarget ? `h${r.raid.healerTarget.name}:${Math.round(r.raid.healerTarget.hpPct * 100)}:${r.raid.healerTarget.focused ? 'f' : ''}` : '',
+        r.raid.dodgeTelegraph ? `d${r.raid.dodgeTelegraph.count}:${Math.round(r.raid.dodgeTelegraph.secondsRemaining * 10)}` : '',
+        r.raid.enrage ? `e${Math.round(r.raid.enrage.secondsRemaining)}:${r.raid.enrage.active ? '!' : ''}` : ''
+      ].join('/') : '',
       r.tagChain ? `${r.tagChain.count}:${Math.round(r.tagChain.pct * 12)}:${r.tagChain.ampPct}` : '',
       `${r.offField.count}:${r.offField.names.join('+')}`,
       r.nextLink ? `${r.nextLink.slot}:${r.nextLink.heroId}` : '',
       r.swapCharges ? `sc${Math.floor(r.swapCharges.current)}/${r.swapCharges.max}` : '',
-      r.formation ? `f${r.formation.posture}:${r.formation.protect ? `${r.formation.protect.peeler}>${r.formation.protect.ward}` : '-'}:${r.formation.flankTargetName ?? '-'}` : ''
+      r.formation ? `f${r.formation.posture}:${r.formation.protect ? `${r.formation.protect.peeler}>${r.formation.protect.ward}` : '-'}:${r.formation.flankTargetName ?? '-'}` : '',
+      r.shields.length ? `sh${r.shields.map((s) => `${s.uid}:${Math.round(s.hpPct * 8)}:${s.vulnerable ? 'v' : ''}`).join(',')}` : ''
     ].join('|');
     if (key === this.lastCombatReadoutKey) return;
     this.lastCombatReadoutKey = key;
@@ -4154,6 +4161,14 @@ export class Hud {
     const ultHtml = r.ultReady.length
       ? `<div class="ult-line">Ult ready: ${r.ultReady.map((u) => esc(u.name)).join(', ')}${r.live && !this.game.controlledUnit() ? ' — click a portrait to seize' : ''}</div>`
       : '';
+    const raidHtml = r.raid
+      ? `<div class="raid-line">
+          ${r.raid.nextAddWave ? `<span>Adds ${r.raid.nextAddWave.activeAdds > 0 ? `${r.raid.nextAddWave.activeAdds} active` : `at ${Math.round(r.raid.nextAddWave.atHpPct)}%`}</span>` : ''}
+          ${r.raid.healerTarget ? `<span>Heal ${esc(r.raid.healerTarget.name)} ${Math.round(r.raid.healerTarget.hpPct * 100)}%${r.raid.healerTarget.focused ? ' · focused' : ''}</span>` : ''}
+          ${r.raid.dodgeTelegraph ? `<em>Dodge ${r.raid.dodgeTelegraph.count} zone${r.raid.dodgeTelegraph.count === 1 ? '' : 's'} · ${r.raid.dodgeTelegraph.secondsRemaining.toFixed(1)}s</em>` : ''}
+          ${r.raid.enrage && !r.raid.enrage.active ? `<b>Enrage ${Math.ceil(r.raid.enrage.secondsRemaining)}s</b>` : r.raid.enrage?.active ? '<b>Enraged</b>' : ''}
+        </div>`
+      : '';
     const tagHtml = r.tagChain
       ? `<div class="tag-chain-line ${r.tagChain.count >= 3 ? 'wombo' : ''}">${r.tagChain.count >= 3 ? 'WOMBO' : 'Tag chain'} ×${r.tagChain.count} <span>+${Math.round(r.tagChain.ampPct)}%</span><i><em style="width:${Math.round(r.tagChain.pct * 100)}%"></em></i></div>`
       : '';
@@ -4174,11 +4189,21 @@ export class Hud {
           ${r.formation.flankTargetName ? `<em>flank ▸ ${esc(r.formation.flankTargetName)}</em>` : ''}
         </div>`
       : '';
+    // COMBAT_DEPTH_OVERHAUL: name the reaction wall — which element melts each shielded
+    // elite — so a reaction-demanding fight reads as "bring Pyro", not a blind stat check.
+    const capElem = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+    const shieldHtml = r.shields.length
+      ? `<div class="shield-line">${r.shields.slice(0, 3).map((s) =>
+          s.vulnerable
+            ? `<span class="shield broken"><b>${esc(s.name)}</b> shield down — burst now</span>`
+            : `<span class="shield"><b>${esc(capElem(s.element))}</b> shield ▸ weak to ${s.weakTo.map((w) => esc(capElem(w))).join(' / ')}</span>`
+        ).join('')}</div>`
+      : '';
 
     this.combatReadout.classList.remove('hidden');
     this.combatReadout.innerHTML = `
       <div class="readout-casts">${castHtml}</div>
-      <div class="readout-status">${threatHtml}${focusHtml}${ultHtml}${tagHtml}${offFieldHtml}${nextLinkHtml}${swapChargeHtml}${formationHtml}</div>`;
+      <div class="readout-status">${threatHtml}${focusHtml}${ultHtml}${raidHtml}${tagHtml}${offFieldHtml}${nextLinkHtml}${swapChargeHtml}${formationHtml}${shieldHtml}</div>`;
   }
 
   // §6.5 counter-draft reveal: when a last-pick gym answers the committed five, drop a
@@ -4899,7 +4924,6 @@ export class Hud {
             </select>
           </label>
           <h3>Gameplay</h3>
-          <label class="opt-row"><input type="checkbox" id="opt-resonance" ${g.settings.resonance ? 'checked' : ''}> Resonance mode (micro/raids)</label>
           <label class="opt-row"><input type="checkbox" id="opt-swap-charges" ${g.settings.swapCharges ? 'checked' : ''}> Swap charges (high-skill: 2 charges, no floor)</label>`;
 
     const audioBody = `
@@ -5065,9 +5089,6 @@ export class Hud {
     });
     this.modal.querySelector('#opt-quest-tracker-max')?.addEventListener('change', (e) => {
       this.interfaceSettings().questTrackerMax = Math.round(clampNum(Number((e.target as HTMLSelectElement).value), 1, 3));
-    });
-    this.modal.querySelector('#opt-resonance')?.addEventListener('change', (e) => {
-      g.setResonanceEnabled((e.target as HTMLInputElement).checked);
     });
     this.modal.querySelector('#opt-swap-charges')?.addEventListener('change', (e) => {
       g.setSwapChargesEnabled((e.target as HTMLInputElement).checked);

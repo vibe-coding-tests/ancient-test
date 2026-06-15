@@ -477,6 +477,19 @@ describe('shared hero bases (WS-A0)', () => {
     }
   });
 
+  it('ships every enabled cohort hero GLB and matching hand weapon GLB', () => {
+    for (const asset of PHASE5_STARTER_ASSETS) {
+      const heroFile = path.join(process.cwd(), 'public', asset.modelUrl.replace(/^\//, ''));
+      expect(existsSync(heroFile), `${asset.heroId} cohort hero file`).toBe(true);
+      expect(statSync(heroFile).size, `${asset.heroId} cohort hero size`).toBeGreaterThan(0);
+
+      expect(asset.weaponUrl, `${asset.heroId} cohort weapon url`).toBeTruthy();
+      const weaponFile = path.join(process.cwd(), 'public', asset.weaponUrl!.replace(/^\//, ''));
+      expect(existsSync(weaponFile), `${asset.heroId} cohort weapon file`).toBe(true);
+      expect(statSync(weaponFile).size, `${asset.heroId} cohort weapon size`).toBeGreaterThan(0);
+    }
+  });
+
   it('ships the generated P3 signature item weapons and wires them to marquee artifacts', () => {
     // Each generated signature weapon exists on disk with real bytes.
     for (const id of ['daedalus', 'radiance', 'battlefury', 'divine-rapier', 'butterfly', 'scythe-of-vyse', 'eye-of-skadi', 'monkey-king-bar', 'abyssal-blade', 'mjollnir', 'satanic', 'bloodthorn', 'desolator']) {

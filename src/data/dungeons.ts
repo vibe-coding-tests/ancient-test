@@ -117,8 +117,8 @@ export const FROST_HOLLOW: DungeonDef = {
     { creepId: 'polar-furbolg', weight: 2, cost: 28, minDepth: 2 },
     { creepId: 'granite-golem', weight: 1, cost: 42, minDepth: 4, rarity: 'rare' }
   ],
-  affixPool: ['jailer', 'frozen', 'vortex', 'fast', 'molten', 'waller', 'shielding', 'health-link'],
-  affixes: dungeonAffixes(['jailer', 'frozen', 'vortex', 'fast', 'molten', 'waller', 'shielding', 'health-link']),
+  affixPool: ['jailer', 'frozen', 'vortex', 'fast', 'molten', 'waller', 'shielding', 'health-link', 'volatile', 'reflective', 'warding', 'summoner', 'hexer'],
+  affixes: dungeonAffixes(['jailer', 'frozen', 'vortex', 'fast', 'molten', 'waller', 'shielding', 'health-link', 'volatile', 'reflective', 'warding', 'summoner', 'hexer']),
   modifiers: [
     {
       id: 'packed-halls',
@@ -259,8 +259,8 @@ export const SEVERED_DARK: DungeonDef = {
     { creepId: 'enraged-wildkin', weight: 2, cost: 30, minDepth: 2 },
     { creepId: 'rock-golem', weight: 1, cost: 46, minDepth: 4, rarity: 'rare' }
   ],
-  affixPool: ['jailer', 'vortex', 'fast', 'waller', 'shielding', 'health-link', 'molten'],
-  affixes: dungeonAffixes(['jailer', 'vortex', 'fast', 'waller', 'shielding', 'health-link', 'molten']),
+  affixPool: ['jailer', 'vortex', 'fast', 'waller', 'shielding', 'health-link', 'molten', 'volatile', 'reflective', 'warding', 'summoner', 'hexer'],
+  affixes: dungeonAffixes(['jailer', 'vortex', 'fast', 'waller', 'shielding', 'health-link', 'molten', 'volatile', 'reflective', 'warding', 'summoner', 'hexer']),
   modifiers: MARQUEE_MODIFIERS,
   guardian: 'marquee-void-prelate',
   loot: marqueeRoomLoot({ id: 'severed-dark', elitePool: ['demon-edge', 'eaglesong', 'ultimate-orb', 'point-booster'], guardianGuaranteed: 'eaglesong', guardianAnchors: ['butterfly', 'eye-of-skadi', 'bloodthorn', 'abyssal-blade', 'diffusal-blade'] }),
@@ -282,8 +282,8 @@ export const WORLDSTONE_VAULT: DungeonDef = {
     { creepId: 'thunderhide', weight: 2, cost: 30, minDepth: 2 },
     { creepId: 'ancient-thunderhide', weight: 1, cost: 48, minDepth: 4, rarity: 'rare' }
   ],
-  affixPool: ['jailer', 'molten', 'vortex', 'fast', 'waller', 'shielding', 'health-link'],
-  affixes: dungeonAffixes(['jailer', 'molten', 'vortex', 'fast', 'waller', 'shielding', 'health-link']),
+  affixPool: ['jailer', 'molten', 'vortex', 'fast', 'waller', 'shielding', 'health-link', 'volatile', 'reflective', 'warding', 'summoner', 'hexer'],
+  affixes: dungeonAffixes(['jailer', 'molten', 'vortex', 'fast', 'waller', 'shielding', 'health-link', 'volatile', 'reflective', 'warding', 'summoner', 'hexer']),
   modifiers: MARQUEE_MODIFIERS,
   guardian: 'boss-wraith-king',
   loot: marqueeRoomLoot({ id: 'worldstone-vault', elitePool: ['reaver', 'demon-edge', 'point-booster', 'ultimate-orb'], guardianGuaranteed: 'reaver', guardianAnchors: ['heart-of-tarrasque', 'satanic', 'radiance', 'assault-cuirass'] }),
@@ -305,8 +305,8 @@ export const EMBER_CALDERA: DungeonDef = {
     { creepId: 'elder-jungle-stalker', weight: 2, cost: 34, minDepth: 2 },
     { creepId: 'granite-golem', weight: 1, cost: 50, minDepth: 4, rarity: 'rare' }
   ],
-  affixPool: ['molten', 'jailer', 'vortex', 'fast', 'waller', 'shielding', 'health-link'],
-  affixes: dungeonAffixes(['molten', 'jailer', 'vortex', 'fast', 'waller', 'shielding', 'health-link']),
+  affixPool: ['molten', 'jailer', 'vortex', 'fast', 'waller', 'shielding', 'health-link', 'volatile', 'reflective', 'warding', 'summoner', 'hexer'],
+  affixes: dungeonAffixes(['molten', 'jailer', 'vortex', 'fast', 'waller', 'shielding', 'health-link', 'volatile', 'reflective', 'warding', 'summoner', 'hexer']),
   modifiers: MARQUEE_MODIFIERS,
   guardian: 'marquee-last-eldwurm',
   loot: marqueeRoomLoot({ id: 'ember-caldera', elitePool: ['mystic-staff', 'reaver', 'sacred-relic', 'demon-edge'], guardianGuaranteed: 'reaver', guardianAnchors: ['heart-of-tarrasque', 'radiance', 'octarine-core', 'aghanims-scepter', 'aghanims-blessing'] }),
