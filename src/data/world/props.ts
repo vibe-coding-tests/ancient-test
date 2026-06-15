@@ -106,6 +106,18 @@ export const DRESSING_PROP_COLLISION = {
   market: { mode: 'soft', radius: 110, layer: 'trigger', blocksProjectiles: false, label: 'Market stand' }
 } as const satisfies Record<keyof typeof DRESSING_PROP_SIZES, WorldCollisionSpec>;
 
+// Solid-looking town dressing that previously had no collider, so the hero
+// walked straight through it (the "some objects are solid, others aren't"
+// inconsistency). Each now blocks movement so it reads as physical and A* routes
+// around it. Radii are kept tight to the visible footprint so they don't choke
+// the plaza.
+export const LAMP_POST_COLLISION: WorldCollisionSpec = {
+  mode: 'solid', radius: 34, layer: 'static', blocksProjectiles: false, label: 'Lamp post'
+};
+export const CRATE_COLLISION: WorldCollisionSpec = {
+  mode: 'solid', radius: 40, layer: 'static', blocksProjectiles: false, label: 'Crate'
+};
+
 /** Instanced foliage fit targets — replaces the 4.6 / 1.5 literals in terrain.ts. */
 export const FOLIAGE_SIZES = {
   tree: { heightM: 4.6, footprintM: 1.2, sizeClass: 'structure', pose: 'static' },

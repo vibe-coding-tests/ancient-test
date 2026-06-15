@@ -380,7 +380,41 @@ describe('quests wired into Game (headless)', () => {
     const xpBefore = hero.xp;
 
     expect(game.claimQuest('bounty-cull-wilds')).toBe(true);
-    expect(game.activeUnit()!.xp).toBeGreaterThan(xpBefore);
+    expect(game.activeUnit()!.xp).toBe(xpBefore + 320);
+    expect(game.activeUnit()!.level).toBe(2);
+  });
+
+  it('grants party-scope XP rewards to every party member on claim', () => {
+    const team = ['juggernaut', 'sven', 'sniper'];
+    const save = newGameSave(team[0]);
+    save.party = [...team];
+    save.recruited = [...team];
+    save.roster = team.map((heroId) => ({
+      heroId,
+      level: 1,
+      xp: xpForLevel(1),
+      items: [null, null, null, null, null, null],
+      neutralSlot: null,
+      talentPicks: [null, null, null, null],
+      gambits: [],
+      echo: freshEchoProgress(),
+      facetIdx: 0,
+      hpPct: 1,
+      manaPct: 1,
+      abilityCooldowns: [0, 0, 0, 0],
+      tagGaugeReadyAt: 0
+    }));
+    save.quests = { 'chapter-vale-roster': { status: 'complete', progress: [4], completions: 0 } };
+    const game = Game.headless(save);
+
+    expect(game.claimQuest('chapter-vale-roster')).toBe(true);
+
+    for (const rec of game.party) {
+      expect(rec.xp).toBe(900);
+      expect(rec.level).toBe(3);
+    }
+    expect(game.activeUnit()!.xp).toBe(900);
+    expect(game.activeUnit()!.level).toBe(3);
   });
 
   it('a recruit reward adds the hero to the roster', () => {
@@ -561,8 +595,13 @@ describe('quest givers wired into Game (headless)', () => {
     const game = Game.headless(newGameSave('juggernaut'));
     game.refreshQuests();
     const views = game.questGiverViews();
-    // Only the Vale's givers (region keeper + 2 hubs) show in the Vale.
-    expect(views.length).toBe(3);
+    // The Vale's givers (region keeper + 2 hubs) plus the town-service markers
+    // (recovery / armory / tinker) all surface as map affordances. Givers are the
+    // non-`service:` entries.
+    const givers = views.filter((v) => !v.id.startsWith('service:'));
+    const services = views.filter((v) => v.id.startsWith('service:'));
+    expect(givers.length).toBe(3);
+    expect(services.length).toBe(3);
     expect(views.every((v) => Number.isFinite(v.x) && Number.isFinite(v.y))).toBe(true);
     // Drive First Light to completion: its herald should now flag a claimable.
     game.advanceQuests({ kind: 'recruit-heroes', amount: 1 });

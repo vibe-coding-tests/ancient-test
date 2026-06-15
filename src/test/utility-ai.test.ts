@@ -285,6 +285,25 @@ describe('utility scorer picks actions by value, not slot order', () => {
     expect(order).toMatchObject({ kind: 'cast', slot: 0, uid: channeler.uid });
   });
 
+  it('toggles Pudge Rot back off when there is nothing to damage (stops self-draining)', () => {
+    const { sim, hero, enemies } = sim1v1('pudge', ['sniper'], 18);
+    const rotSlot = hero.abilities.findIndex((a) => a.def.id === 'pudge-rot');
+    expect(rotSlot).toBeGreaterThanOrEqual(0);
+    hero.abilities[rotSlot].toggled = true;
+    hero.pos = { x: 2000, y: 2000 };
+
+    // An enemy is inside Rot's radius — keep it running, the self-drain is paid for.
+    enemies[0].pos = { x: 2150, y: 2000 };
+    sim.rebuildSpatial();
+    expect(chooseUtilityOrder(sim, hero, enemies[0])).not.toMatchObject({ kind: 'cast', slot: rotSlot });
+
+    // Enemy walks out of reach: nothing to hurt, so switch Rot off rather than
+    // bleed down to the 1-HP floor while idle.
+    enemies[0].pos = { x: 7000, y: 2000 };
+    sim.rebuildSpatial();
+    expect(chooseUtilityOrder(sim, hero, enemies[0])).toMatchObject({ kind: 'cast', slot: rotSlot });
+  });
+
   it('uses a nuker playbook to lead with amplify before burst items', () => {
     const sim = setupMacroSim({
       seed: 2026,

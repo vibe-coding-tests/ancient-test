@@ -32,6 +32,7 @@ export class InputController {
   hoverUid = -1;
   hoverItemUid = -1;
   hoverGround: Vec2 | null = null;
+  inspectUid = -1;
   targeting: TargetingState = { kind: 'none' };
 
   /** UI layers can grab the keyboard (shop search etc.) */
@@ -44,7 +45,6 @@ export class InputController {
   onToggleCodex: () => void = () => {};
   onToggleCharacter: () => void = () => {};
   onToggleHelp: () => void = () => {};
-  onToggleServices: () => void = () => {};
 
   private rmbHeld = false;
   private lastMoveOrderAt = 0;
@@ -144,6 +144,7 @@ export class InputController {
     if (e.button === 2) {
       this.targeting = { kind: 'none' };
       this.attackMovePending = false;
+      this.inspectUid = -1;
       this.rmbHeld = this.rightClick();
       this.lastMoveOrderAt = performance.now();
     } else if (e.button === 0) {
@@ -155,7 +156,7 @@ export class InputController {
     const g = this.game;
     const sim = g.inputSim();
     const driver = g.controlledUnit();
-    if (this.hoverItemUid >= 0 && g.pickupGroundItem(this.hoverItemUid)) return true;
+    if (this.hoverItemUid >= 0) return g.tryPickupGroundItem(this.hoverItemUid) || true;
     if (this.hoverUid >= 0) {
       const target = sim.unit(this.hoverUid);
       if (!target) return false;
@@ -184,6 +185,7 @@ export class InputController {
     const g = this.game;
     if (this.attackMovePending) {
       this.attackMovePending = false;
+      this.inspectUid = -1;
       if (this.hoverUid >= 0) {
         const target = g.inputSim().unit(this.hoverUid);
         if (target && target.team !== 0 && target.alive) g.orderAttack(this.hoverUid, this.clickQueued);
@@ -196,19 +198,32 @@ export class InputController {
     if (this.targeting.kind !== 'none') {
       this.fire(this.targeting);
       this.targeting = { kind: 'none' };
+      this.inspectUid = -1;
       return;
     }
     // select hovered unit (info only; control stays on the hero)
     if (this.hoverItemUid >= 0) {
-      g.pickupGroundItem(this.hoverItemUid);
+      g.tryPickupGroundItem(this.hoverItemUid);
+      this.inspectUid = -1;
       return;
     }
     if (this.hoverUid >= 0) {
       if (g.liveGym) g.selectLiveGymUnit(this.hoverUid);
-      g.scene.selectedUid = this.hoverUid;
+      // Recruit NPCs already say everything in the hover card; left-clicking one
+      // used to just paint a green selection ring with no payoff, so leave the
+      // selection on the hero and let right-click drive recruitment instead.
+      if (g.npcAt(this.hoverUid)) {
+        const u = g.controlledUnit() ?? g.activeUnit();
+        if (u) g.scene.selectedUid = u.uid;
+        this.inspectUid = -1;
+      } else {
+        g.scene.selectedUid = this.hoverUid;
+        this.inspectUid = this.hoverUid;
+      }
     } else {
       const u = g.controlledUnit() ?? g.activeUnit();
       if (u) g.scene.selectedUid = u.uid;
+      this.inspectUid = -1;
     }
   }
 
@@ -427,10 +442,6 @@ export class InputController {
       case 'shop':
         if (g.liveGym || g.liveRaid) return;
         this.onToggleShop();
-        return;
-      case 'services':
-        if (g.liveGym || g.liveRaid) return;
-        this.onToggleServices();
         return;
       case 'neutral':
         if (g.liveGym || g.liveRaid) return;

@@ -1,15 +1,19 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { Rng, hashString } from '../core/rng';
 import { contactCircleObstacle, staticCircleObstacle } from '../core/collision';
-import type { CollisionObstacleInput, RegionDef } from '../core/types';
+import type { CollisionObstacleInput, RegionDef, Vec2 } from '../core/types';
+import { TUNING } from '../data/tuning';
 import { WORLD_SCALE } from './scale';
 import { loadTex, loadModel, instancedFromModel } from './asset-loaders';
 import {
   CHEST_COLLISION,
+  CRATE_COLLISION,
   DRESSING_PROP_COLLISION,
   DRESSING_PROP_SIZES,
   FOLIAGE_COLLISION,
   FOLIAGE_SIZES,
+  LAMP_POST_COLLISION,
   REGION_TRIGGER_COLLISION,
   SHRINE_COLLISION,
   TOWN_BUILDING_COLLISION,
@@ -66,6 +70,104 @@ function markStaticShadowCaster(obj: THREE.Object3D, enabled: boolean): void {
   obj.userData.staticPropCaster = true;
   const mesh = obj as THREE.Mesh;
   if (mesh.isMesh) mesh.castShadow = enabled;
+}
+
+/** Signature that groups visually identical `MeshStandardMaterial`s built inline
+ *  by the procedural prop builders, so a merge can reuse one material instance. */
+function standardMaterialKey(m: THREE.MeshStandardMaterial): string {
+  return [
+    m.color.getHex(),
+    m.emissive ? m.emissive.getHex() : 0,
+    m.emissiveIntensity ?? 0,
+    (m.roughness ?? 1).toFixed(3),
+    (m.metalness ?? 0).toFixed(3),
+    m.flatShading ? 1 : 0,
+    m.side,
+    m.transparent ? 1 : 0,
+    (m.opacity ?? 1).toFixed(3)
+  ].join('|');
+}
+
+interface StaticBatchEntry {
+  obj: THREE.Object3D;
+  /** Whether this prop should feed the sun's shadow map (small dressing opts out). */
+  shadow: boolean;
+}
+
+function isEmissiveMaterial(m: THREE.MeshStandardMaterial): boolean {
+  const e = m.emissive;
+  return !!e && e.r + e.g + e.b > 0 && (m.emissiveIntensity ?? 0) > 0;
+}
+
+/** Collapse a set of static, never-animated meshes into far fewer draw calls —
+ *  in the beauty *and* shadow passes — without changing what's on screen.
+ *
+ *  Non-emissive geometry is merged by material: each mesh's world transform is
+ *  baked into a shared `BufferGeometry`, so the merged mesh sits at the world
+ *  origin with identity transform (the geometry already carries the placement).
+ *  Emissive meshes are kept individual and reparented with their world transform
+ *  intact, so they stay countable by the plaza bloom-budget guard
+ *  (`town-layout.test.ts`) and read at their real positions. Only shadow-casting
+ *  batches are tagged so the runtime quality toggle still reaches them. */
+function batchStaticProps(entries: StaticBatchEntry[], staticPropShadows: boolean): THREE.Object3D[] {
+  const buckets = new Map<string, { material: THREE.Material; geos: THREE.BufferGeometry[]; shadow: boolean }>();
+  const out: THREE.Object3D[] = [];
+  for (const { obj, shadow } of entries) {
+    obj.updateWorldMatrix(true, true);
+    obj.traverse((node) => {
+      const mesh = node as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const material = mesh.material as THREE.MeshStandardMaterial;
+      mesh.receiveShadow = true;
+      if (isEmissiveMaterial(material)) {
+        // Keep the glow as its own mesh, re-seated at its true world transform.
+        mesh.matrixWorld.decompose(mesh.position, mesh.quaternion, mesh.scale);
+        mesh.matrixAutoUpdate = true;
+        mesh.matrixWorldNeedsUpdate = true;
+        if (shadow) {
+          mesh.userData.staticPropCaster = true;
+          mesh.castShadow = staticPropShadows;
+        } else {
+          mesh.castShadow = false;
+        }
+        out.push(mesh);
+        return;
+      }
+      const geo = mesh.geometry.clone();
+      geo.applyMatrix4(mesh.matrixWorld);
+      const key = `${shadow ? 's' : '_'}|${standardMaterialKey(material)}`;
+      let bucket = buckets.get(key);
+      if (!bucket) {
+        bucket = { material, geos: [], shadow };
+        buckets.set(key, bucket);
+      }
+      bucket.geos.push(geo);
+    });
+  }
+  for (const { material, geos, shadow } of buckets.values()) {
+    const merged = geos.length === 1 ? geos[0] : mergeGeometries(geos, false);
+    if (!merged) {
+      // mergeGeometries can bail on mismatched attributes; fall back to one mesh
+      // per geometry so nothing silently disappears from the town.
+      for (const geo of geos) out.push(makeBatchedMesh(geo, material, shadow, staticPropShadows));
+      continue;
+    }
+    out.push(makeBatchedMesh(merged, material, shadow, staticPropShadows));
+  }
+  return out;
+}
+
+function makeBatchedMesh(geo: THREE.BufferGeometry, material: THREE.Material, shadow: boolean, staticPropShadows: boolean): THREE.Mesh {
+  const mesh = new THREE.Mesh(geo, material);
+  mesh.matrixAutoUpdate = false;
+  mesh.receiveShadow = true;
+  if (shadow) {
+    mesh.userData.staticPropCaster = true;
+    mesh.castShadow = staticPropShadows;
+  } else {
+    mesh.castShadow = false;
+  }
+  return mesh;
 }
 
 // Generated grayscale ground-detail texture (GRAPHICS_SPEC §5.1): mostly white
@@ -211,7 +313,10 @@ function crossQuadGeometry(w: number, h: number): THREE.BufferGeometry {
     -hw, 0, 0, hw, 0, 0, hw, h, 0, -hw, h, 0,
     0, 0, -hw, 0, 0, hw, 0, h, hw, 0, h, -hw
   ];
-  const uv = [0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0];
+  // Ground-level vertices (y=0) take v=0 and the tips (y=h) take v=1 so the
+  // blade roots sample the bottom of the (flipY) canvas, not the tips. Without
+  // this the tufts render upside down.
+  const uv = [0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1];
   const index = [0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7];
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
@@ -413,6 +518,53 @@ export const TREE_MODELS: Record<string, string[]> = {
 };
 export const ROCK_MODELS = ['rock_1', 'rock_2', 'rock_3'];
 export const TOWN_BUILDINGS = ['house_1', 'house_2', 'house_3', 'inn', 'blacksmith'];
+
+/** Buildings sit on an evenly-spaced ring around the plaza. */
+export const TOWN_BUILDING_COUNT = 6;
+
+/** Phase of the building ring. Chosen so a *street* (not a building) faces the +y
+ *  direction, which is where every standard spawn sits (new game spawns at town
+ *  +(0,500); shrine respawns just inside). With six evenly-spaced buildings the
+ *  gaps sit at `offset + PI/6 + k*(PI/3)`; PI/3 puts one of those gaps at +y (PI/2),
+ *  so a respawned party always faces an open lane out of the plaza. */
+const TOWN_BUILDING_ANGLE_OFFSET = Math.PI / 3;
+
+/** Compute the building-ring radius (sim units) for a town of the given radius.
+ *
+ *  The historical `town.radius * 0.76` packed six radius-300 buildings so tightly
+ *  that adjacent collision circles nearly touched: for the smaller towns the gaps
+ *  shrank below a hero's diameter, sealing a respawned party inside the ring (most
+ *  visibly in Moonwake, the second town). We instead clamp the ring outward so the
+ *  street between neighbours always clears a comfortable lane, regardless of how
+ *  small a region authors its `town.radius`.
+ */
+export function townBuildingRingRadius(townRadiusSim: number): number {
+  // Adjacent centres on an N-ring sit `2 * R * sin(pi/N)` apart. Require that to
+  // exceed two building radii plus a walkable lane.
+  const lane = TUNING.unitRadiusHero * 2 * 3; // hero diameter * 3: a clearly passable street
+  const minSpacing = 2 * TOWN_BUILDING_COLLISION.radius + lane;
+  const minRing = minSpacing / (2 * Math.sin(Math.PI / TOWN_BUILDING_COUNT));
+  return Math.max(townRadiusSim * 0.76, minRing);
+}
+
+/** Deterministic plan of town-building collision footprints (sim coords). Shared
+ *  by the mesh build and by tests that assert every town stays escapable. */
+export function planTownBuildings(region: RegionDef): { pos: Vec2; radius: number; angle: number }[] {
+  const ring = townBuildingRingRadius(region.town.radius);
+  const out: { pos: Vec2; radius: number; angle: number }[] = [];
+  for (let i = 0; i < TOWN_BUILDING_COUNT; i++) {
+    const angle = (i / TOWN_BUILDING_COUNT) * Math.PI * 2 + TOWN_BUILDING_ANGLE_OFFSET;
+    out.push({
+      pos: {
+        x: region.town.pos.x + Math.cos(angle) * ring,
+        y: region.town.pos.y + Math.sin(angle) * ring
+      },
+      radius: TOWN_BUILDING_COLLISION.radius,
+      angle
+    });
+  }
+  return out;
+}
 
 function modelUrls(base: string, names: string[]): string[] {
   return names.map((n) => `${base}/${n}.glb`);
@@ -635,23 +787,30 @@ function buildTownDressing(
     z: wz + Math.sin(ang) * radius,
     baseY: heightAt(t.x + Math.cos(ang) * (radius * WORLD_SCALE), t.y + Math.sin(ang) * (radius * WORLD_SCALE))
   });
-  const dress = (obj: THREE.Object3D, p: { x: number; z: number; baseY: number }, rotY: number): void => {
+  // The procedural dressing is static, so it is merged by material into a few
+  // draw calls instead of ~30 tiny meshes (see batchStaticProps). Small props
+  // (lamps, board, banner, crates, villagers) opt out of the sun shadow map:
+  // their shadows read as noise at this scale and dominate the town shadow pass.
+  const batch: StaticBatchEntry[] = [];
+  const dress = (obj: THREE.Object3D, p: { x: number; z: number; baseY: number }, rotY: number, shadow = false): void => {
     obj.position.set(p.x, p.baseY, p.z);
     obj.rotation.y = rotY;
-    obj.traverse((o) => {
-      const m = o as THREE.Mesh;
-      if (m.isMesh) {
-        markStaticShadowCaster(m, staticPropShadows);
-        m.receiveShadow = true;
-      }
-    });
-    g.add(obj);
+    batch.push({ obj, shadow });
   };
 
   // Lamp posts ringed between the buildings, facing the plaza.
-  for (let i = 0; i < 6; i++) {
-    const ang = (i / 6) * Math.PI * 2 + 0.4 + Math.PI / 6;
-    dress(buildLampPost(), at(ang, townRadius * 0.6), ang + Math.PI);
+  for (let i = 0; i < TOWN_BUILDING_COUNT; i++) {
+    // Offset from the exact gap centre so the street lane itself stays clear for
+    // town spawns and respawns.
+    const ang = (i / TOWN_BUILDING_COUNT) * Math.PI * 2 + TOWN_BUILDING_ANGLE_OFFSET + Math.PI / 6 + Math.PI / 12;
+    const lp = at(ang, townRadius * 0.6);
+    dress(buildLampPost(), lp, ang + Math.PI);
+    pushWorldContactObstacle(obstacles, {
+      id: `town-dressing:lamp:${i}`,
+      pos: { x: lp.x * WORLD_SCALE, y: lp.z * WORLD_SCALE },
+      source: 'terrain:town-dressing',
+      spec: LAMP_POST_COLLISION
+    });
   }
 
   // Quest / notice board — a visible marker for the town's quest-board service.
@@ -756,6 +915,14 @@ function buildTownDressing(
   // Crate cluster near the market.
   const crateMat = new THREE.MeshStandardMaterial({ color: 0x7a5630, roughness: 0.88, metalness: 0.03, flatShading: true });
   const cratePos = at(shopAng - 0.5, townRadius * 0.34);
+  // One collider covering the cluster (the third crate is stacked on top, so the
+  // ground footprint is the two base crates plus their scatter).
+  pushWorldContactObstacle(obstacles, {
+    id: 'town-dressing:crates',
+    pos: { x: cratePos.x * WORLD_SCALE, y: cratePos.z * WORLD_SCALE },
+    source: 'terrain:town-dressing',
+    spec: CRATE_COLLISION
+  });
   for (let i = 0; i < 3; i++) {
     const s = 0.45 + rng.next() * 0.18;
     const crate = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), crateMat);
@@ -763,9 +930,7 @@ function buildTownDressing(
     const oz = (rng.next() - 0.5) * 0.7;
     crate.position.set(cratePos.x + ox, cratePos.baseY + s / 2 + (i === 2 ? 0.45 : 0), cratePos.z + oz);
     crate.rotation.y = rng.next() * Math.PI;
-    markStaticShadowCaster(crate, staticPropShadows);
-    crate.receiveShadow = true;
-    g.add(crate);
+    batch.push({ obj: crate, shadow: false });
   }
 
   // Villager standees by the board and the market (vendor / quest-giver presence).
@@ -781,6 +946,7 @@ function buildTownDressing(
     dress(v, p, spot.ang + Math.PI + (rng.next() - 0.5) * 0.8);
   });
 
+  for (const merged of batchStaticProps(batch, staticPropShadows)) g.add(merged);
   return g;
 }
 
@@ -1021,13 +1187,26 @@ export function buildTerrain(region: RegionDef, isLive: SceneLiveCheck = () => t
     return hx0 + (hx1 - hx0) * fz;
   };
 
-  // scatter props (deterministic), keeping clearings around town/shrine/camps/spawns
+  // scatter props (deterministic), keeping clearings around towns and authored POIs.
   const obstacles: CollisionObstacleInput[] = [];
   const clearings: { x: number; y: number; r: number }[] = [
     { x: region.town.pos.x, y: region.town.pos.y, r: region.town.radius + 250 },
+    { x: region.shrine.pos.x, y: region.shrine.pos.y, r: SHRINE_COLLISION.radius + 180 },
     ...region.camps.map((c) => ({ x: c.pos.x, y: c.pos.y, r: c.radius + 320 })),
     ...region.heroSpawns.map((h) => ({ x: h.pos.x, y: h.pos.y, r: 420 })),
-    ...(region.dungeons ?? []).map((d) => ({ x: d.pos.x, y: d.pos.y, r: d.radius + 260 }))
+    ...(region.echoSpawns ?? []).map((e) => ({ x: e.pos.x, y: e.pos.y, r: 420 })),
+    ...(region.gates ?? []).map((g) => ({ x: g.pos.x, y: g.pos.y, r: g.radius + 260 })),
+    ...(region.gyms ?? []).map((g) => ({ x: g.pos.x, y: g.pos.y, r: g.radius + 260 })),
+    ...(region.dungeons ?? []).map((d) => ({ x: d.pos.x, y: d.pos.y, r: d.radius + 260 })),
+    ...(region.chests ?? []).map((c) => ({ x: c.pos.x, y: c.pos.y, r: CHEST_COLLISION.radius + 180 })),
+    ...(region.waypoints ?? []).map((w) => ({ x: w.pos.x, y: w.pos.y, r: (w.radius ?? 420) + 180 })),
+    ...(region.discoveries ?? []).map((d) => ({ x: d.pos.x, y: d.pos.y, r: d.radius + 180 })),
+    ...(region.shards ?? []).map((s) => ({ x: s.pos.x, y: s.pos.y, r: 360 })),
+    ...(region.climbPoints ?? []).map((p) => ({ x: p.pos.x, y: p.pos.y, r: 360 })),
+    ...(region.glidePoints ?? []).map((p) => ({ x: p.pos.x, y: p.pos.y, r: 360 })),
+    ...(region.elementSources ?? []).map((e) => ({ x: e.pos.x, y: e.pos.y, r: e.radius + 180 })),
+    ...(region.elementPuzzles ?? []).flatMap((p) => p.nodes.map((n) => ({ x: n.x, y: n.y, r: (p.radius ?? 260) + 180 }))),
+    ...(region.secretShop ? [{ x: region.secretShop.pos.x, y: region.secretShop.pos.y, r: 520 }] : [])
   ];
   const isClear = (x: number, y: number) => clearings.every((c) => Math.hypot(x - c.x, y - c.y) > c.r);
 
@@ -1180,13 +1359,15 @@ function buildTown(
   const roofMat = new THREE.MeshStandardMaterial({ color: 0xb84a32, flatShading: true, roughness: 0.7, metalness: 0.05 });
   const hutMeshes: THREE.Object3D[] = [];
   const townPlacements: { x: number; z: number; baseY: number; rotY: number }[] = [];
-  const buildingRadius = townRadius * 0.76;
-  for (let i = 0; i < 6; i++) {
-    const ang = (i / 6) * Math.PI * 2 + 0.4;
-    const hx = wx + Math.cos(ang) * buildingRadius;
-    const hz = wz + Math.sin(ang) * buildingRadius;
+  // Ring radius is clamped so neighbouring buildings always leave a walkable lane
+  // (see townBuildingRingRadius); a respawned party must never be sealed in town.
+  const townBuildings = planTownBuildings(region);
+  townBuildings.forEach((b, i) => {
+    const ang = b.angle;
+    const hx = b.pos.x / WORLD_SCALE;
+    const hz = b.pos.y / WORLD_SCALE;
     const hut = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.8, 2.4), hutMat);
-    const hutBaseY = heightAt(t.x + Math.cos(ang) * (buildingRadius * WORLD_SCALE), t.y + Math.sin(ang) * (buildingRadius * WORLD_SCALE));
+    const hutBaseY = heightAt(b.pos.x, b.pos.y);
     hut.position.set(hx, hutBaseY + 1.0, hz);
     hut.rotation.y = ang;
     const roof = new THREE.Mesh(new THREE.ConeGeometry(2.1, 1.4, 4), roofMat);
@@ -1195,11 +1376,8 @@ function buildTown(
     g.add(hut, roof);
     hutMeshes.push(hut, roof);
     obstacles?.push(staticCircleObstacle({
-      pos: {
-        x: t.x + Math.cos(ang) * (buildingRadius * WORLD_SCALE),
-        y: t.y + Math.sin(ang) * (buildingRadius * WORLD_SCALE)
-      },
-      radius: TOWN_BUILDING_COLLISION.radius,
+      pos: { ...b.pos },
+      radius: b.radius,
       id: `town-building:${i}`,
       source: 'terrain:town',
       layer: TOWN_BUILDING_COLLISION.layer,
@@ -1209,7 +1387,7 @@ function buildTown(
     }));
     // Buildings face the plaza centre.
     townPlacements.push({ x: hx, z: hz, baseY: hutBaseY, rotY: ang + Math.PI });
-  }
+  });
   for (const mesh of hutMeshes) {
     const m = mesh as THREE.Mesh;
     if (m.isMesh) {
@@ -1287,11 +1465,9 @@ function buildTown(
   sign.position.copy(shopPoint(0, 3.0, -0.65));
   sign.rotation.y = counter.rotation.y;
   sign.name = 'shop-sign';
-  for (const mesh of [counter, awning, pole1, pole2, sign]) {
-    markStaticShadowCaster(mesh, staticPropShadows);
-    mesh.receiveShadow = true;
+  for (const merged of batchStaticProps([counter, awning, pole1, pole2, sign].map((obj) => ({ obj, shadow: true })), staticPropShadows)) {
+    g.add(merged);
   }
-  g.add(counter, awning, pole1, pole2, sign);
   pushWorldContactObstacle(obstacles, {
     id: 'town-market-stall',
     pos: { x: shopX * WORLD_SCALE, y: shopZ * WORLD_SCALE },

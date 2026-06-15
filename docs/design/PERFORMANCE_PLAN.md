@@ -1,5 +1,13 @@
 # PERFORMANCE PLAN
 
+**Goal:** Make the local asset path fast and predictable as the renderer shifts
+from procedural art to authored models, textures, and audio. **Success looks
+like:** asset checks, browser debug numbers, and headless perf tests show bounded
+load time, cache size, draw cost, and animation work while the default game view
+shows real unit models at distance. **Constraints:** assets stay local and
+optional, the core stays renderer-free, and low-detail settings remain available
+for weak hardware.
+
 This is the next performance plan for the current renderer and asset pipeline.
 The game now treats local assets as the normal path: optimized files live under
 `public/assets/` and runtime code loads them through `/assets/...` URLs. The
@@ -159,10 +167,11 @@ Hold the frame budget as the scene becomes more authored.
 - Bucket static props by material where possible.
 - Add distance LOD for authored GLBs:
   - Full near the camera.
-  - Reduced animation rate or simplified scene farther away.
-  - Procedural fallback or hidden beyond far distance.
-- Avoid mounting high-detail creep GLBs for units that start far outside the
-  camera focus.
+  - Reduced animation rate farther away.
+  - Cosmetic animation stops beyond far distance.
+- Keep the default crowd path on authored unit views at every visible distance.
+  Cheap impostors are opt-in through the crowd-detail setting, not the normal
+  load-state for distant creeps.
 - Use shadow tiers aggressively. Many props can receive shadows without casting
   them, and low tier should skip expensive shadow work.
 - Keep post-processing tiered. Bloom and grade are high value; AO stays high or
@@ -186,7 +195,9 @@ Animated authored models can become expensive even when loading is solved.
 - Update animation mixers only for visible or near-visible units.
 - Keep the current LOD rule: full units animate every frame, reduced units
   animate less often, culled units skip cosmetic animation.
-- For far creeps, consider staying procedural until the player gets close.
+- Default far creeps use authored views before the player gets close. Use the
+  `balanced` or `reduced` crowd-detail modes when the player explicitly wants
+  cheaper impostors.
 - Audit skinned mesh counts and bone counts per hero/creep asset during the
   asset build report.
 - Avoid per-frame material mutation on shared materials. Clone materials only

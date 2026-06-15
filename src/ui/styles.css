@@ -470,6 +470,11 @@ button:disabled { opacity: 0.45; cursor: default; }
 .qt-obj { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: 5px; color: #dcd6c8; font-size: 11px; }
 .qt-obj i { grid-column: 1 / -1; height: 4px; overflow: hidden; border-radius: 3px; background: rgba(255, 255, 255, 0.12); }
 .qt-obj em { display: block; height: 100%; background: linear-gradient(90deg, #73d9ff, #ffd24a); }
+/* Recruitment leads (Find→Trial→Bind) ride the same card but have no pin column. */
+.qt-row.recruit { grid-template-columns: 1fr; }
+.qt-row.recruit strong span { font-weight: 600; }
+.qt-row.recruit .qt-open > i { display: block; margin-top: 5px; height: 4px; overflow: hidden; border-radius: 3px; background: rgba(255, 255, 255, 0.12); }
+.qt-row.recruit .qt-open > i > em { display: block; height: 100%; margin: 0; background: linear-gradient(90deg, #9be37b, #ffd24a); }
 
 /* ---------- party column ---------- */
 
@@ -864,7 +869,6 @@ button:disabled { opacity: 0.45; cursor: default; }
 }
 .skill-points b { animation: skill-ready-pulse 1.15s ease-in-out infinite; }
 .skill-points.spent { color: var(--dim); }
-.attr-btn { padding: 1px 6px; font-size: 10px; }
 .mastery-panel {
   margin-top: 5px;
   padding: 5px;
@@ -1119,6 +1123,12 @@ button:disabled { opacity: 0.45; cursor: default; }
 .toast.good { border-color: #2e6b3d; color: var(--good); }
 .toast.bad { border-color: #6b2e2e; color: var(--bad); }
 .toast.bark { border-color: #4a3e6b; color: #cdb8ff; font-style: italic; }
+.toast.quest {
+  border-color: #b88a2e;
+  color: #f4d58a;
+  box-shadow: 0 0 0 1px rgba(184, 138, 46, 0.35), 0 4px 14px rgba(0, 0, 0, 0.45);
+}
+.toast.quest .toast-icon { background: rgba(244, 213, 138, 0.18); color: #f4d58a; }
 
 #killfeed-lane {
   position: absolute;
@@ -1800,14 +1810,6 @@ button:disabled { opacity: 0.45; cursor: default; }
 .shop-item.sell { display: flex; align-items: center; gap: 8px; padding: 4px 8px; }
 .shop-item.sell img { width: 34px; height: 34px; }
 
-/* talents */
-.talent-choice { display: flex; align-items: center; gap: 16px; justify-content: center; padding: 18px 0; }
-.talent-opt { flex: 1; max-width: 300px; padding: 18px 14px; font-size: 15px; }
-.talent-opt b, .talent-opt em { display: block; }
-.talent-opt em { margin-top: 6px; color: var(--dim); font-size: 11px; font-style: normal; line-height: 1.35; }
-.talent-opt:hover { border-color: var(--gold); }
-.talent-or { color: var(--dim); }
-
 /* journal / codex */
 .journal-summary {
   padding: 8px 10px;
@@ -1817,6 +1819,27 @@ button:disabled { opacity: 0.45; cursor: default; }
   border-radius: 8px;
   font-size: 13px;
 }
+.journal-section { margin-bottom: 8px; border-top: 1px solid rgba(255, 255, 255, 0.07); }
+.journal-section > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 9px 4px;
+  color: var(--brass-lite);
+  font-family: var(--font-display);
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.journal-section > summary::-webkit-details-marker { display: none; }
+.journal-section > summary::before {
+  content: '▸';
+  color: var(--dim);
+  font-size: 11px;
+  transition: transform 0.12s ease;
+}
+.journal-section[open] > summary::before { transform: rotate(90deg); }
+.journal-section > summary:hover { color: var(--gold); }
 .journal-row {
   display: grid;
   grid-template-columns: 92px 1fr;
@@ -2046,8 +2069,13 @@ button:disabled { opacity: 0.45; cursor: default; }
 }
 .opt-row select:focus { outline: 1px solid var(--brass); }
 .opt-row input[type="range"] { margin-left: auto; accent-color: var(--brass); }
-.menu-grid .btn { display: block; width: 100%; margin-bottom: 8px; text-align: center; }
-.menu-grid section h3 { font-family: var(--font-display); color: var(--brass-lite); letter-spacing: 0.04em; margin: 18px 0 10px; }
+.menu-grid .btn,
+.menu-tab-body .btn { display: block; width: 100%; margin-bottom: 8px; text-align: center; }
+.menu-grid section h3,
+.menu-tab-body section h3 { font-family: var(--font-display); color: var(--brass-lite); letter-spacing: 0.04em; margin: 18px 0 10px; }
+.menu-tab-body section h3:first-child { margin-top: 0; }
+.menu-tabs { flex-wrap: wrap; }
+.menu-tab-body { max-height: 60vh; overflow-y: auto; padding-right: 6px; }
 .keybind-panel {
   display: grid;
   grid-template-columns: 1fr 1fr;

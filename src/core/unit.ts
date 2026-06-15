@@ -249,6 +249,29 @@ export class Unit {
   lastEnemyDamageAt = -999;  // for blink lockout + save combat lock
   lastDealtDamageAt = -999;
   lastMovementBlockEventAt = -999;
+  /**
+   * Transient A* path-follow state (pathfind.ts), never serialized. The mover
+   * routes around solid obstacles by chasing `waypoints[index]`, replanning when
+   * the goal moves, on a timer, or when stuck. `noPathAt` rate-limits the
+   * give-up feedback so a truly unreachable goal stops cleanly instead of
+   * wiggling forever.
+   */
+  nav: {
+    goal: Vec2 | null;
+    waypoints: Vec2[];
+    index: number;
+    replanAt: number;
+    lastProgressAt: number;
+    progressRef: Vec2 | null;
+    noPathAt: number;
+  } = { goal: null, waypoints: [], index: 0, replanAt: 0, lastProgressAt: 0, progressRef: null, noPathAt: -999 };
+
+  clearNav(): void {
+    this.nav.goal = null;
+    this.nav.waypoints = [];
+    this.nav.index = 0;
+    this.nav.progressRef = null;
+  }
   recentDamagers: { uid: number; at: number }[] = [];
   lastAbilityCastId: string | null = null;
   lastAbilityCastAt = -999;

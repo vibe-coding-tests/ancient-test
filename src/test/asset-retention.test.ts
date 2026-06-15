@@ -4,6 +4,7 @@ import { newGameSave } from '../systems/game';
 import { heroAssetEntry } from '../engine/assets';
 import {
   preloadPathsForRegion,
+  propPreloadPathsForRegion,
   retainedAssetUrlsForRegion,
   retainedModelUrlsForSave
 } from '../systems/asset-retention';
@@ -41,12 +42,27 @@ describe('region-travel asset retention (leak guard)', () => {
     // A region's retained texture footprint is a fixed, small set regardless of
     // how many regions the player has visited — that's what stops accumulation.
     const full = preloadPathsForRegion('tranquil-vale', true, true);
-    const terrainOnly = preloadPathsForRegion('tranquil-vale', false, false);
+    const terrainOnly = preloadPathsForRegion('devarshi-desert', false, false);
     expect(terrainOnly).toHaveLength(3); // color + normal + roughness
-    expect(full.length).toBeLessThanOrEqual(6); // + env hdr + 2 vfx atlases
+    expect(full.length).toBeLessThanOrEqual(7); // + water normal + env hdr + 2 vfx atlases
     // Low tier (no env/vfx) retains strictly less than the enhanced tier.
     expect(retainedAssetUrlsForRegion('tranquil-vale', false, false).size)
       .toBeLessThan(retainedAssetUrlsForRegion('tranquil-vale', true, true).size);
+  });
+
+  it('preloads water, night IBL, and enhanced critters only when the scene will need them', () => {
+    const water = preloadPathsForRegion('nightsilver-woods', true, false, true);
+    expect(water).toContain('textures/water/water_normal.webp');
+    expect(water).toContain('env/night_1k.hdr');
+
+    const dry = preloadPathsForRegion('devarshi-desert', true, false, false);
+    expect(dry).not.toContain('textures/water/water_normal.webp');
+    expect(dry).not.toContain('env/night_1k.hdr');
+
+    const lowProps = propPreloadPathsForRegion('tranquil-vale', false);
+    const enhancedProps = propPreloadPathsForRegion('tranquil-vale', true);
+    expect(lowProps.some((path) => path.startsWith('creeps/'))).toBe(false);
+    expect(enhancedProps).toEqual(expect.arrayContaining(['creeps/alpaca.glb', 'creeps/fox.glb', 'creeps/frog.glb']));
   });
 
   it('retains party hero models but not benched heroes (so swapped-out models evict)', () => {

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
-import { applyAuthoredSilhouette, applyHeroLikeness, applyItemAppearances, attachHeroWeaponModel, attachHoldoutSignatureModel, attachSignatureItemWeapon, buildUnitRig, heroProportions, heroSilhouetteKit, modelGeometryCacheSize, mountHeroModel, recolorToPalette } from '../engine/models';
+import { applyAuthoredSilhouette, applyHeroLikeness, applyItemAppearances, attachHeroWeaponModel, attachHoldoutSignatureModel, attachSignatureItemWeapon, buildUnitRig, disableFrustumCulling, heroProportions, heroSilhouetteKit, modelGeometryCacheSize, mountHeroModel, recolorToPalette } from '../engine/models';
 import { BESPOKE_HERO_MODEL_ASSETS, BESPOKE_HERO_MODELS, ENABLED_HERO_MODELS, ENABLED_HERO_BASES, ENABLED_HOLDOUT_MODELS, ENABLED_HOLDOUT_SIGNATURES, HERO_BASE, creepCreatureUrl, heroAssetEntry, heroBaseId, heroBaseUrl, holdoutReplacementUrl, holdoutSignatureUrl, itemWeaponGlbUrl, PHASE5_STARTER_ASSETS } from '../engine/assets';
 import { ALL_HEROES } from '../data/index';
 
@@ -164,6 +164,37 @@ describe('pluggable hero rig (Phase 5)', () => {
     expect(heroWeapon.parent).toBe(hand);
   });
 
+  it('keeps the body and a hand weapon intact when two item appearances refresh at once (Bug 7)', () => {
+    // Simulates using two items in the same beat: the visual layer refreshes with
+    // multiple appearance specs. The hero body must survive and exactly one weapon
+    // must remain hosted (no empty hand, no deleted model).
+    const rig = buildUnitRig({ build: 'biped', scale: 1, weapon: 'sword' }, ['#888899', '#666677', '#aaaabb']);
+    const model = new THREE.Group();
+    const torso = new THREE.Mesh(new THREE.BoxGeometry(2, 6, 2), new THREE.MeshStandardMaterial());
+    const hand = new THREE.Object3D(); hand.name = 'Hand_R';
+    model.add(torso, hand);
+    mountHeroModel(rig, model);
+    attachHeroWeaponModel(rig, new THREE.Group());
+    const bodyCount = rig.body.children.length;
+
+    const twoWeaponItems: Parameters<typeof applyItemAppearances>[1] = [
+      { weapon: { kind: 'glowing-blade', color: '#ffd86a' } },
+      { weapon: { kind: 'cleaver', color: '#c8d0e0' }, parts: ['pauldrons'] }
+    ];
+    applyItemAppearances(rig, twoWeaponItems);
+    applyItemAppearances(rig, twoWeaponItems); // a second, back-to-back refresh
+
+    expect(rig.body.children).toContain(model);
+    expect(rig.body.children.length).toBe(bodyCount); // authored body not deleted
+    expect(rig.weapon, 'a weapon stays hosted').toBeTruthy();
+    expect(rig.weapon?.parent, 'weapon is attached to the rig, not orphaned').toBeTruthy();
+
+    // Unequipping everything restores the hero's default weapon rather than emptying the hand.
+    applyItemAppearances(rig, []);
+    expect(rig.weapon).toBe(rig.defaultWeapon);
+    expect(rig.weapon?.parent).toBe(hand);
+  });
+
   it('attaches holdout signature GLBs additively without hiding the procedural rig (A6)', () => {
     const rig = buildUnitRig({ build: 'blob', scale: 1.25 }, ['#88aaff', '#446688', '#ffffff']);
     const proceduralCount = rig.body.children.length;
@@ -184,6 +215,113 @@ describe('pluggable hero rig (Phase 5)', () => {
     expect(signatureA.parent).toBeNull();
     expect(signatureB.parent).toBe(rig.body);
     expect(rig.body.children.filter((c) => c.userData.holdoutSignatureModel)).toHaveLength(1);
+  });
+});
+
+// The "model pops out of view at certain camera angles" class of bug: skinned
+// meshes (and meshes far from the world origin) frustum-cull against a stale
+// bind-pose bounding sphere, so authored geometry vanishes mid-frame. Every mount
+// path clears frustumCulled to make it robust; nothing asserted it before, which is
+// exactly how that regression slipped through. These lock the contract per path.
+describe('authored mounts disable frustum culling (pop-out regression)', () => {
+  function allMeshes(root: THREE.Object3D): THREE.Mesh[] {
+    const out: THREE.Mesh[] = [];
+    root.traverse((o) => { if ((o as THREE.Mesh).isMesh) out.push(o as THREE.Mesh); });
+    return out;
+  }
+
+  it('mountHeroModel clears culling on every authored mesh, however nested', () => {
+    const rig = buildUnitRig({ build: 'biped', scale: 1 }, ['#888899', '#666677', '#aaaabb']);
+    const model = new THREE.Group();
+    const torso = new THREE.Mesh(new THREE.BoxGeometry(2, 6, 2), new THREE.MeshStandardMaterial());
+    const inner = new THREE.Group();
+    const pauldron = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial());
+    inner.add(pauldron);
+    model.add(torso, inner);
+    // Default Three.js meshes start frustum-culled; the mount must flip every one.
+    expect(allMeshes(model).every((m) => m.frustumCulled)).toBe(true);
+
+    mountHeroModel(rig, model);
+
+    const meshes = allMeshes(model);
+    expect(meshes.length).toBe(2);
+    expect(meshes.every((m) => m.frustumCulled === false), 'all authored meshes opt out of culling').toBe(true);
+  });
+
+  it('every weapon/signature attach path clears culling too', () => {
+    const rig = buildUnitRig({ build: 'biped', scale: 1, weapon: 'sword' }, ['#888899', '#666677', '#aaaabb']);
+    const base = new THREE.Group();
+    const torso = new THREE.Mesh(new THREE.BoxGeometry(2, 6, 2), new THREE.MeshStandardMaterial());
+    const hand = new THREE.Object3D(); hand.name = 'Hand_R';
+    base.add(torso, hand);
+    mountHeroModel(rig, base);
+
+    const makeMeshGroup = (): THREE.Group => {
+      const g = new THREE.Group();
+      g.add(new THREE.Mesh(new THREE.BoxGeometry(1, 0.1, 0.1), new THREE.MeshStandardMaterial()));
+      return g;
+    };
+
+    const heroWeapon = makeMeshGroup();
+    attachHeroWeaponModel(rig, heroWeapon);
+    expect(allMeshes(heroWeapon).every((m) => m.frustumCulled === false), 'hero weapon').toBe(true);
+
+    const sigWeapon = makeMeshGroup();
+    attachSignatureItemWeapon(rig, sigWeapon);
+    expect(allMeshes(sigWeapon).every((m) => m.frustumCulled === false), 'signature item weapon').toBe(true);
+
+    const holdout = makeMeshGroup();
+    attachHoldoutSignatureModel(rig, holdout);
+    expect(allMeshes(holdout).every((m) => m.frustumCulled === false), 'holdout signature').toBe(true);
+  });
+
+  it('disableFrustumCulling flips a whole subtree, leaving non-meshes alone', () => {
+    const root = new THREE.Group();
+    const m1 = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial());
+    const branch = new THREE.Group();
+    const m2 = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial());
+    const bone = new THREE.Object3D();
+    branch.add(m2, bone);
+    root.add(m1, branch);
+
+    disableFrustumCulling(root);
+
+    expect(m1.frustumCulled).toBe(false);
+    expect(m2.frustumCulled).toBe(false);
+  });
+});
+
+// The "recruited model is broken → invisible hero" class: a malformed/empty GLB or
+// one with a degenerate bounding box would otherwise hide the procedural fallback
+// and/or collapse to a NaN/Infinity scale that never renders. mountHeroModel guards
+// both; these pin the guards so a future loader change can't silently re-break them.
+describe('mountHeroModel keeps a broken model from erasing the hero', () => {
+  it('leaves the procedural body showing when the model carries no mesh', () => {
+    const rig = buildUnitRig({ build: 'biped', scale: 1 }, ['#888899', '#666677', '#aaaabb']);
+    applyHeroLikeness(rig, 'juggernaut');
+    const proceduralCount = rig.body.children.length;
+
+    const empty = new THREE.Group(); // a clone of a failed/empty GLB load
+    empty.add(new THREE.Object3D()); // bones only, no renderable geometry
+    mountHeroModel(rig, empty);
+
+    // Nothing hidden, nothing mounted, no authored model committed → fallback stays.
+    expect(rig.body.children.length).toBe(proceduralCount);
+    expect(rig.body.children.every((c) => c.visible)).toBe(true);
+    expect(rig.body.children).not.toContain(empty);
+    expect(rig.authoredModel).toBeUndefined();
+  });
+
+  it('falls back to a finite scale when the model has a degenerate (zero-height) bound', () => {
+    const rig = buildUnitRig({ build: 'biped', scale: 1 }, ['#888899', '#666677', '#aaaabb']);
+    // A flat, zero-height mesh → size.y === 0 would make rig.height / size.y blow up.
+    const flat = new THREE.Mesh(new THREE.BoxGeometry(2, 0, 2), new THREE.MeshStandardMaterial());
+    mountHeroModel(rig, flat);
+
+    expect(Number.isFinite(flat.scale.x)).toBe(true);
+    expect(flat.scale.x).toBe(1); // explicit fallback, not NaN/Infinity collapse
+    expect(rig.body.children).toContain(flat); // it has a mesh, so it still mounts
+    expect(rig.authoredModel).toBe(flat);
   });
 });
 

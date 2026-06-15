@@ -457,6 +457,14 @@ export class VfxManager {
         if (p) this.burst(p.x, p.y, '#9aa6b2', 0.5, 0.18, '#c8d0d8', 'soft');
         break;
       }
+      case 'hero-tag': {
+        // Genshin-style tag-in: an element-colored ground ring, a rising pillar and
+        // a soft burst frame the incoming hero's drop-in (driven on the rig itself).
+        this.impactDecal(ev.pos.x, ev.pos.y, ev.color, ev.boon ? 1.2 : 0.95, 0.55);
+        this.pillar(ev.pos.x, ev.pos.y, ev.color, ev.boon ? 0.42 : 0.32);
+        this.burst(ev.pos.x, ev.pos.y, ev.color, ev.boon ? 1.3 : 1.0, 0.4, '#ffffff', 'soft');
+        break;
+      }
       case 'immune-block': {
         const p = unitPos(ev.uid);
         if (p) this.burst(p.x, p.y, '#ffffff', 0.65, 0.22, '#7adf6a');

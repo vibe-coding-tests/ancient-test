@@ -138,6 +138,7 @@ function inferredSource(rel) {
   if (rel.startsWith('ui/fonts/')) return 'Cinzel font — OFL 1.1';
   if (rel.startsWith('vfx/')) return 'generated in-repo: vfx asset generators';
   if (rel.startsWith('audio/sfx/kenney/')) return 'Kenney audio packs — CC0';
+  if (rel.startsWith('audio/music/')) return 'curated CC0 / public-domain music — see public/assets/audio/music/CREDITS.md';
   if (rel.startsWith('audio/')) return 'generated in-repo: generate_audio.mjs';
   if (rel.startsWith('textures/water/')) return 'generated in-repo: generate_water_normal.mjs';
   if (rel.startsWith('textures/terrain/')) return 'ambientCG terrain textures — CC0';

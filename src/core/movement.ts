@@ -2,6 +2,7 @@ import { TUNING } from '../data/tuning';
 import { angleDelta, clamp, closestOnSeg, dist, dist2, fromAngle, norm, pointSegDist, sub, turnToward, v2 } from './math2d';
 import { cannotMove } from './status';
 import { collisionBodyPushOut, obstacleBlocksMovement } from './collision';
+import { directWalkable, findPath } from './pathfind';
 import type { Unit } from './unit';
 import type { Vec2 } from './types';
 import type { Sim } from './sim';
@@ -116,6 +117,87 @@ export function steerToward(sim: Sim, u: Unit, point: Vec2, dt: number, arriveRa
     });
   }
   return dist(u.pos, point) <= arriveRadius;
+}
+
+/**
+ * Move toward `goal` by following an A* route around solid obstacles, falling
+ * back to `steerToward` for the straight-line segments between waypoints (which
+ * still does local moving-unit avoidance). Replans when the goal shifts, on a
+ * timer, or when the unit stops making progress (stuck). When no route exists it
+ * emits a one-shot `no-path` and reports arrival so the order ends cleanly
+ * instead of wiggling against the obstacle forever.
+ *
+ * Returns true when the goal (or the nearest reachable point) has been reached
+ * or the move was abandoned.
+ */
+export function followPath(sim: Sim, u: Unit, goal: Vec2, dt: number, arriveRadius: number): boolean {
+  if (cannotMove(u.summary)) return false;
+  if (dist(u.pos, goal) <= arriveRadius) {
+    u.clearNav();
+    return true;
+  }
+
+  const nav = u.nav;
+  const goalMoved = !nav.goal || dist(nav.goal, goal) > Math.max(48, u.radius * 1.5);
+  const due = sim.time >= nav.replanAt;
+  // Stuck detection: if we haven't advanced meaningfully in a while, replan.
+  let stuck = false;
+  if (nav.progressRef) {
+    if (dist(u.pos, nav.progressRef) > Math.max(24, u.radius)) {
+      nav.progressRef = { ...u.pos };
+      nav.lastProgressAt = sim.time;
+    } else if (sim.time - nav.lastProgressAt > 0.8) {
+      stuck = true;
+    }
+  } else {
+    nav.progressRef = { ...u.pos };
+    nav.lastProgressAt = sim.time;
+  }
+
+  if (goalMoved || due || stuck || nav.waypoints.length === 0) {
+    // Common case first: a clear straight shot needs no grid search.
+    if (directWalkable(sim, u.pos, goal, u.radius)) {
+      nav.waypoints = [{ ...goal }];
+      nav.index = 0;
+    } else {
+      const path = findPath(sim, u.pos, goal, u.radius);
+      if (path && path.length > 0) {
+        nav.waypoints = path;
+        nav.index = 0;
+      } else {
+        // No route: stop cleanly and surface it (rate-limited), then steer once
+        // toward the goal so a transient blocker still lets us nudge forward.
+        if (sim.time - nav.noPathAt > 1.5) {
+          nav.noPathAt = sim.time;
+          sim.events.emit({ t: 'movement-blocked', uid: u.uid, pos: { ...u.pos }, reason: 'no-path' });
+        }
+        u.clearNav();
+        steerToward(sim, u, goal, dt, arriveRadius);
+        return true;
+      }
+    }
+    nav.goal = { ...goal };
+    nav.replanAt = sim.time + 0.6;
+    nav.progressRef = { ...u.pos };
+    nav.lastProgressAt = sim.time;
+  }
+
+  // Advance past any waypoints we've already reached.
+  const wpRadius = Math.max(arriveRadius, u.radius * 0.8);
+  while (nav.index < nav.waypoints.length - 1 && dist(u.pos, nav.waypoints[nav.index]) <= wpRadius) {
+    nav.index++;
+  }
+  const isFinal = nav.index >= nav.waypoints.length - 1;
+  const wp = nav.waypoints[Math.min(nav.index, nav.waypoints.length - 1)] ?? goal;
+  const reached = steerToward(sim, u, wp, dt, isFinal ? arriveRadius : wpRadius);
+  if (reached) {
+    if (isFinal) {
+      u.clearNav();
+      return true;
+    }
+    nav.index++;
+  }
+  return false;
 }
 
 export function faceToward(u: Unit, point: Vec2, dt: number): boolean {

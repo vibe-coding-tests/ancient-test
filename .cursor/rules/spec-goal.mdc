@@ -1,0 +1,33 @@
+---
+description: Every design/spec doc must open with an explicit Goal statement
+globs: docs/design/**/*.md,SPEC.md,*_OVERHAUL.md,*_SPEC.md,DECISIONS.md
+alwaysApply: false
+---
+
+# Specs must state their goal
+
+Any time you author or substantially revise a spec/design doc, open it with an
+explicit **Goal** statement — before the design details. The reader (human or agent)
+must know *why this exists* and *what done looks like* without inferring it.
+
+State, near the top:
+
+- **Goal** — the problem this spec solves / the outcome it targets, in plain terms.
+- **Success looks like** — the observable end state (ideally how it's verified, e.g.
+  which tests or acceptance checks prove it).
+- **Non-goals / constraints** when relevant — what this explicitly does *not* change
+  (e.g. "headless core untouched", "no save migration", "macro ceiling intact").
+
+Keep it tight (a short paragraph or a few bullets), then move into the design.
+
+```markdown
+# FOO OVERHAUL — one-line framing
+
+**Goal:** <the problem and the targeted outcome>. **Success looks like:** <observable
+end state, provable by <tests/acceptance>>. <Optional: key non-goals/constraints.>
+
+<design details follow…>
+```
+
+This applies to new specs and to meaningful edits of existing ones — if a spec you're
+editing has no goal statement, add one.

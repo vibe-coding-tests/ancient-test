@@ -21,6 +21,7 @@ import { ENABLED_HOLDOUT_SIGNATURES, holdoutReplacementUrl } from './engine/asse
 import {
   preloadPathsForRegion,
   prewarmModelPathsForSave,
+  propPreloadPathsForRegion,
   retainedAssetUrlsForRegion,
   retainedModelUrlsForSave
 } from './systems/asset-retention';
@@ -86,7 +87,10 @@ function startGame(save: GameSave, opts: { headless?: boolean; hud?: boolean } =
   }
   const tier = resolveQuality(save.settings.graphics?.quality);
   const enhancedAssets = tier !== 'low';
-  const retainedAssetUrls = retainedAssetUrlsForRegion(save.regionId, enhancedAssets, enhancedAssets);
+  // The scene reads the clock as night at dayTime >= 0.5 (scene.ts), which
+  // decides whether the night IBL is the one on screen at arrival.
+  const night = save.dayTime >= 0.5;
+  const retainedAssetUrls = retainedAssetUrlsForRegion(save.regionId, enhancedAssets, enhancedAssets, night);
   evictTextureAssets((url) => !retainedAssetUrls.has(url));
   const retainedModelUrls = retainedModelUrlsForSave(save);
   evictModelAssets((url) => !retainedModelUrls.has(url));
@@ -96,7 +100,15 @@ function startGame(save: GameSave, opts: { headless?: boolean; hud?: boolean } =
     await preloadAssetGroups(enhancedAssets ? ['terrain', 'env', 'vfx'] : ['terrain'], {
       label: `${regionName} assets`,
       skipModels: true,
-      paths: preloadPathsForRegion(save.regionId, enhancedAssets, enhancedAssets),
+      paths: preloadPathsForRegion(save.regionId, enhancedAssets, enhancedAssets, night),
+      onProgress: progress
+    });
+    // Preload the region's scenery GLBs (biome trees/rocks + town buildings)
+    // so they're already cached when the terrain build instances them, instead
+    // of popping in over the procedural fallback during the arrival cinematic.
+    await preloadAssetGroups(['terrain', 'town'], {
+      label: `${regionName} scenery`,
+      paths: propPreloadPathsForRegion(save.regionId, enhancedAssets),
       onProgress: progress
     });
     if (enhancedAssets) {
@@ -117,7 +129,11 @@ function startGame(save: GameSave, opts: { headless?: boolean; hud?: boolean } =
         });
       }
     }
-    game = new Game(canvas, save);
+    // deferArrival: hold the region's arrival cinematic out of the constructor so
+    // the camera doesn't start its move while the scene is still settling. We
+    // fire it from main.ts after a few warm frames (below). Headless/test boots
+    // keep firing it at construction, so the sim/e2e contract is unchanged.
+    game = new Game(canvas, save, { deferArrival: true });
     game.prewarm();
     (window as unknown as { __game: Game }).__game = game;
     input = new InputController(game, canvas);
@@ -142,6 +158,11 @@ function startGame(save: GameSave, opts: { headless?: boolean; hud?: boolean } =
       frame();
     };
     rafId = requestAnimationFrame(loop);
+    // Let the preloaded scenery/hero swaps land and a couple of frames render
+    // (warming shader programs) before the arrival cinematic takes the camera,
+    // so the intro plays over a settled world rather than one mid-assembly.
+    const arrivalGame = game;
+    requestAnimationFrame(() => requestAnimationFrame(() => arrivalGame.playArrivalCinematics()));
     // rAF stops entirely while the tab/view is hidden; keep simulating so the
     // world doesn't freeze mid-fight (Game.update clamps dt internally).
     tickTimer = window.setInterval(() => {

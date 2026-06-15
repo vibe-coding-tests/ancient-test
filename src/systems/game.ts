@@ -59,6 +59,7 @@ import { dist, fromAngle, norm, sub } from '../core/math2d';
 import { circleBody, nearestPointOutsideCollisionBody, obstacleBlocksMovement } from '../core/collision';
 import { defaultFormation } from '../core/board';
 import { chooseDraft, counterDraft, runPickBan, validateDraft, type CounterDraftResult, type DraftValidation } from '../core/draft';
+import { isDisabled, summarize } from '../core/status';
 import type { ActiveElement, ArmoryLoadouts, BossDef, CollisionObstacleInput, CreepTier, CreepInstanceSave, CutsceneDef, DifficultyTier, DishDef, DomainDef, DraftFormat, DraftTeam, DropSource, DungeonDef, DungeonModifierDef, DungeonProgressSave, DungeonRoom, EchoProgress, EchoSpawnDef, EffectNode, GambitRule, GameSave, Formation, GraphicsSettings, GymDef, GroundItemDrop, HeroAugments, HeroLoadoutSlots, HeroSave, ItemDef, ItemDropTable, ItemGrade, ItemQuality, ItemRarity, ItemSave, ItemTier, LootBand, LoreEntryDef, MacroHeroSetup, NeutralItemDef, NeutralStashEntry, Order, QuestDef, QuestGiverDef, QuestKind, QuestProgress, QuestReward, QuestSave, QuestStatus, RaidDef, RegionDef, RolledAffix, RoomTemplate, RoomType, SeasonalEventDef, SimEvent, StingerId, StatModMap, StatusParams, TagArchetype, ValueRef, Vec2, ZoneSpec } from '../core/types';
 import { advance as questAdvance, chosenBranch as questChosenBranch, claim as questClaim, normalizeQuestSave, questGiverPos, refreshAvailability, type QuestContext, type QuestEvent } from '../core/quests';
 import { migratePhase7Save } from '../core/phase7';
@@ -96,6 +97,70 @@ export const GATED_TOP_TIER: ReadonlySet<string> = new Set([
 ]);
 
 const RECRUIT_INTERACT_RANGE = 350;
+const TOWN_SERVICE_INTERACT_RANGE = 330;
+export type TownServiceKind = 'armory' | 'tinker' | 'adventure' | 'market' | 'recovery';
+export interface TownServicePoint {
+  id: string;
+  kind: TownServiceKind;
+  name: string;
+  title: string;
+  pos: Vec2;
+  radius: number;
+}
+
+// Each service NPC stands at a fixed polar slot around the plaza. The angles are
+// chosen to sit in the clear lanes *between* the town's solid dressing props
+// (crates ~5deg, cart ~57deg, barrels ~68deg, the well ~213deg, and six lamp
+// posts at 45/105/165/225/285/345deg) and inside the building ring (inner edge
+// ~444 sim for every town). Each kind owns a distinct slot so any subset of
+// services in a town never overlaps. Placement is asserted clear of every solid
+// in town-layout.test.ts. Markers carry no collider, so they never block paths.
+// Angles (radians) are the clear lanes between the town's solid props; verified
+// with >=89 sim clearance in every region by town-layout.test.ts. Blocked slots
+// (cart/barrels ~60-90deg, the well ~225-240deg) are deliberately skipped.
+const DEG = Math.PI / 180;
+const TOWN_SERVICE_LAYOUT: Record<TownServiceKind, { angle: number; radiusPct: number; name: string; title: string }> = {
+  recovery: { angle: 270 * DEG, radiusPct: 0.42, name: 'Innkeeper', title: 'rest, food, tomes, and respecs' },
+  armory: { angle: 345 * DEG, radiusPct: 0.42, name: 'Town Armorer', title: 'gear, loadouts, and assembly' },
+  adventure: { angle: 45 * DEG, radiusPct: 0.42, name: 'War Board', title: 'bosses, raids, and festivals' },
+  tinker: { angle: 135 * DEG, radiusPct: 0.42, name: 'Tinker', title: 'neutral items and socket work' },
+  market: { angle: 195 * DEG, radiusPct: 0.42, name: 'Black-Market Broker', title: 'marks, relic wheels, and gambles' }
+};
+
+// Recovery (the heal/buyback "fountain") is in every town; the other four trades
+// are spread so no town has everything but each trade appears in several towns.
+const DEFAULT_TOWN_SERVICES: TownServiceKind[] = ['recovery', 'armory', 'adventure'];
+const TOWN_SERVICE_ROSTER: Record<string, TownServiceKind[]> = {
+  'tranquil-vale': ['recovery', 'armory', 'tinker'],
+  'nightsilver-woods': ['recovery', 'tinker', 'adventure'],
+  icewrack: ['recovery', 'armory', 'adventure'],
+  'devarshi-desert': ['recovery', 'armory', 'market'],
+  shadeshore: ['recovery', 'market', 'adventure'],
+  'vile-reaches': ['recovery', 'tinker', 'market'],
+  quoidge: ['recovery', 'tinker', 'armory', 'adventure'],
+  'hidden-wood': ['recovery', 'tinker', 'adventure'],
+  'mount-joerlak': ['recovery', 'armory', 'adventure'],
+  'mad-moon-crater': ['recovery', 'armory', 'market', 'adventure']
+};
+
+/** Pure placement of a region's town-service NPCs (sim coords). Shared by the
+ *  Game accessor and by town-layout.test.ts so the no-collision guarantee is
+ *  verified against the real terrain solids. */
+export function townServicePointsFor(region: RegionDef): TownServicePoint[] {
+  const roster = TOWN_SERVICE_ROSTER[region.id] ?? DEFAULT_TOWN_SERVICES;
+  return roster.map((kind) => {
+    const spec = TOWN_SERVICE_LAYOUT[kind];
+    const offset = fromAngle(spec.angle, region.town.radius * spec.radiusPct);
+    return {
+      id: `${region.id}:${kind}`,
+      kind,
+      name: spec.name,
+      title: spec.title,
+      pos: { x: region.town.pos.x + offset.x, y: region.town.pos.y + offset.y },
+      radius: TOWN_SERVICE_INTERACT_RANGE
+    };
+  });
+}
 
 const RARITY_RANK: Record<ItemRarity, number> = {
   common: 0,
@@ -179,6 +244,12 @@ export interface RosterEntry {
   resonanceMods: Record<string, number>;
   neutralMods?: Record<string, number>; // currently-applied neutral-slot passive mods
   unit: Unit | null;
+}
+
+interface ActiveDishBuff {
+  dishId: string;
+  until: number;
+  mods: Record<string, number>;
 }
 
 function cloneItemSave(item: ItemSave | null | undefined): ItemSave | null {
@@ -362,8 +433,9 @@ function freshHeroSave(heroId: string, level = 1): HeroSave {
 }
 
 export interface Toast {
+  id: number;
   text: string;
-  kind: 'info' | 'good' | 'bad' | 'bark';
+  kind: 'info' | 'good' | 'bad' | 'bark' | 'quest';
   at: number;
   color?: string;   // optional accent (LOOT L6: rarity-tinted loot toasts)
 }
@@ -629,6 +701,8 @@ export function eventWorldPos(ev: SimEvent, sim: Sim): Vec2 | undefined {
     case 'attack-impact':
     case 'miss':
       return sim.unit(ev.target)?.pos ?? sim.unit(ev.uid)?.pos;
+    case 'attack-windup':
+      return sim.unit(ev.uid)?.pos ?? sim.unit(ev.target)?.pos;
     case 'blink':
       return ev.to ?? ev.from;
     case 'capture-start':
@@ -766,6 +840,10 @@ export class HeadlessAudio implements AudioLike {
 export interface GameDeps {
   scene?: SceneLike;
   audio?: AudioLike;
+  /** Hold the region's arrival/prologue cinematic out of the constructor; the
+   *  rendered boot fires it via playArrivalCinematics() once the scene settles.
+   *  Default (false) plays it immediately, which the sim/test boot relies on. */
+  deferArrival?: boolean;
 }
 
 export class Game {
@@ -781,6 +859,7 @@ export class Game {
   party: RosterEntry[] = [];
   /** Saved records for recruited heroes outside the fielded party. */
   private benchRoster = new Map<string, HeroSave>();
+  private activeDishBuffs: ActiveDishBuff[] = [];
   activeIdx = 0;
   swapReadyAt = 0;
   // §8.3 swap-cancel grace: a swap pressed during the active hero's cast point is
@@ -852,6 +931,8 @@ export class Game {
   private activeTrialHeroId: string | null = null;
   private activeTrialNpcUid: number | null = null;
   private pendingRecruitNpcUid: number | null = null;
+  /** Ground drop the player right-clicked from afar: walk to it, then auto-pick. */
+  private pendingPickupUid: number | null = null;
   /** heroId -> how many times its trial has relocated (cycles relocateSpots) */
   private trialRelocations = new Map<string, number>();
 
@@ -898,8 +979,10 @@ export class Game {
   onOpenGymPrefight: ((gymId: string) => void) | null = null;
   onOpenDungeonEntry: ((dungeonId: string) => void) | null = null;
   onOpenQuestGiver: ((giverId: string) => void) | null = null;
+  onOpenTownService: ((service: TownServiceKind) => void) | null = null;
 
   toasts: Toast[] = [];
+  private nextToastId = 1;
   /** events the HUD wants this frame (damage floaters, gold, barks) */
   frameEvents: SimEvent[] = [];
   private queuedPresentationEvents: SimEvent[] = [];
@@ -1071,8 +1154,11 @@ export class Game {
     this.refreshResonanceMods(true);
     this.applyGraphics();
     this.applyCutsceneSettings();
-    if (save.playtimeSec === 0 && this.region.id === 'tranquil-vale') this.playCutscene('prologue-moon-breaks');
-    this.playRegionArrival();
+    this.pendingArrival = () => {
+      if (save.playtimeSec === 0 && this.region.id === 'tranquil-vale') this.playCutscene('prologue-moon-breaks');
+      this.playRegionArrival();
+    };
+    if (!deps?.deferArrival) this.playArrivalCinematics();
 
     // Quests (QUEST.md): unlock anything whose prereq is already met, then count
     // "reach this region" since entering a region constructs a fresh Game.
@@ -1469,6 +1555,42 @@ export class Game {
     return true;
   }
 
+  /**
+   * Proximity-gated pickup. A drop within `pickupRadius` is collected at once;
+   * a farther one issues a walk-to-it move and arms `pendingPickupUid`, which
+   * `updatePendingPickup` completes on arrival. This replaces the old "right-click
+   * anywhere with line of sight teleports it into your bag" behaviour — loot now
+   * has to be reached. Returns true when the drop was collected immediately.
+   */
+  tryPickupGroundItem(uid: number): boolean {
+    const drop = this.groundItemDrops.find((d) => d.uid === uid);
+    const u = this.activeUnit();
+    if (!drop || !u) return false;
+    if (dist(u.pos, drop.pos) <= TUNING.exploration.pickupRadius) {
+      this.pendingPickupUid = null;
+      return this.pickupGroundItem(uid);
+    }
+    this.orderMove({ ...drop.pos });
+    this.pendingPickupUid = uid;
+    this.msg(`Walking to ${REG.item(drop.item.id).name}…`, 'info');
+    return false;
+  }
+
+  private updatePendingPickup(): void {
+    const uid = this.pendingPickupUid;
+    if (uid === null) return;
+    const u = this.activeUnit();
+    const drop = this.groundItemDrops.find((d) => d.uid === uid);
+    if (!u || !u.alive || !drop) {
+      this.pendingPickupUid = null;
+      return;
+    }
+    if (dist(u.pos, drop.pos) <= TUNING.exploration.pickupRadius) {
+      this.pendingPickupUid = null;
+      this.pickupGroundItem(uid);
+    }
+  }
+
   pickupGroundItem(uid: number): boolean {
     const idx = this.groundItemDrops.findIndex((drop) => drop.uid === uid);
     if (idx < 0) return false;
@@ -1525,6 +1647,27 @@ export class Game {
     const dropPos = pos ? this.clampDropPos(pos) : this.scatterDropPos(u.pos, 1);
     this.spawnGroundItems([saved], dropPos, { source: 'inventory', visual: false });
     this.msg(`Dropped ${REG.item(saved.id).name}`, 'info', this.dropAccent([saved]));
+    return true;
+  }
+
+  /** Manual slot-to-slot reorder (HUD drag-and-drop). Swaps the two slots
+   *  without re-running the active/passive auto-sort, so the player's chosen
+   *  order persists until they next acquire an item. */
+  moveHeroItem(from: number, to: number): boolean {
+    const u = this.activeUnit();
+    if (!u) return false;
+    if (from === to) return false;
+    if (from < 0 || to < 0 || from >= u.items.length || to >= u.items.length) return false;
+    const a = u.items[from] ?? null;
+    const b = u.items[to] ?? null;
+    if (!a && !b) return false;
+    u.items[to] = a;
+    u.items[from] = b;
+    u.markStatsDirty();
+    u.markVisualDirty();
+    u.refresh(this.sim.time);
+    const rec = this.party[this.activeIdx];
+    if (rec) rec.items = u.items.map((slot) => itemSaveOf(slot, this.sim.time));
     return true;
   }
 
@@ -1746,7 +1889,7 @@ export class Game {
   }
 
   msg(text: string, kind: Toast['kind'] = 'info', color?: string): void {
-    this.toasts.push({ text, kind, at: performance.now() / 1000, color });
+    this.toasts.push({ id: this.nextToastId++, text, kind, at: performance.now() / 1000, color });
     if (this.toasts.length > 60) this.toasts.splice(0, this.toasts.length - 60);
     // A blocked/invalid action buzzes (§11). Throttled so a burst of 'bad'
     // toasts (e.g. repeated illegal orders) never machine-guns the UI bus.
@@ -1943,6 +2086,19 @@ export class Game {
       ...(raid.signatureExotic ? [50] : [])
     ];
     return [...new Set(thresholds)].sort((a, b) => b - a);
+  }
+
+  private pendingArrival: (() => void) | null = null;
+
+  /**
+   * Play the region's arrival (and first-boot prologue) cinematic. Run from the
+   * constructor unless deferArrival was set, in which case the rendered boot
+   * calls this once the scene has warmed. Idempotent — only the first call fires.
+   */
+  playArrivalCinematics(): void {
+    const run = this.pendingArrival;
+    this.pendingArrival = null;
+    run?.();
   }
 
   private playRegionArrival(): void {
@@ -2268,7 +2424,11 @@ export class Game {
 
   private emitPresentationEvent(ev: SimEvent, routeNow = false): void {
     if (routeNow) this.frameEvents.push(ev);
-    else this.queuedPresentationEvents.push(ev);
+    else if (!this.presentationEventsAreDeferred()) this.queuedPresentationEvents.push(ev);
+  }
+
+  private presentationEventsAreDeferred(): boolean {
+    return this.paused || this.cinematic.active || !!this.liveGym || !!this.liveRaid || !!this.liveDungeon;
   }
 
   private playPresentationEventNow(ev: SimEvent, sim: Sim = this.sim): void {
@@ -2378,6 +2538,10 @@ export class Game {
     return !!u && dist(u.pos, this.region.town.pos) <= this.region.town.radius;
   }
 
+  townServicePoints(region: RegionDef = this.region): TownServicePoint[] {
+    return townServicePointsFor(region);
+  }
+
   inCombat(): boolean {
     const u = this.activeUnit();
     if (!u) return false;
@@ -2407,6 +2571,21 @@ export class Game {
     const u = this.activeUnit();
     if (!u) return null;
     return (this.region.gyms ?? []).find((g) => dist(u.pos, g.pos) <= g.radius) ?? null;
+  }
+
+  nearbyTownService(): TownServicePoint | null {
+    const u = this.activeUnit();
+    if (!u) return null;
+    let best: TownServicePoint | null = null;
+    let bestDist = Infinity;
+    for (const service of this.townServicePoints()) {
+      const d = dist(u.pos, service.pos);
+      if (d <= service.radius && d < bestDist) {
+        best = service;
+        bestDist = d;
+      }
+    }
+    return best;
   }
 
   /** The walking quest giver (if any) whose current patrol spot is in reach. */
@@ -2512,6 +2691,11 @@ export class Game {
       }
       return this.challengeGym(gym.gymId);
     }
+    const service = this.nearbyTownService();
+    if (service) {
+      this.onOpenTownService?.(service.kind);
+      return true;
+    }
     const giver = this.nearbyQuestGiver();
     if (giver) {
       this.onOpenQuestGiver?.(giver.id);
@@ -2562,8 +2746,9 @@ export class Game {
     }
     const u = this.activeUnit();
     if (!u) return false;
-    u.pos = { ...waypoint.pos };
-    u.prevPos = { ...waypoint.pos };
+    const pos = this.nearestWalkablePoint(this.sim, u, waypoint.pos);
+    u.pos = { ...pos };
+    u.prevPos = { ...pos };
     this.scene.selectedUid = u.uid;
     this.msg(`Fast traveled to ${waypoint.name}`, 'good');
     return true;
@@ -2760,9 +2945,10 @@ export class Game {
       this.routeEventAudio(ev, fight.sim);
     }
     this.observeStory(this.frameEvents, { sim: fight.sim });
+    const cinematicView = this.cinematicPresentationView();
     this.audio.update?.({ biome: this.region.biome, dayTime: 0.5, inCombat: true, dt });
     this.scene.syncQuestGivers?.([]);
-    this.scene.update(fight.sim, fight.cameraFollow(), dt, 0.5, this.cinematicPresentationView(), []);
+    this.scene.update(fight.sim, fight.cameraFollow(), dt, 0.5, cinematicView, []);
     if (fight.done && fight.result) {
       const id = this.liveGymId!;
       const result = fight.result;
@@ -3122,9 +3308,10 @@ export class Game {
         bossPhaseHpPct: this.raidPhaseThresholds(this.liveRaidId)
       });
     }
+    const cinematicView = this.cinematicPresentationView();
     this.audio.update?.({ biome: this.region.biome, dayTime: 0.5, inCombat: true, dt });
     this.scene.syncQuestGivers?.([]);
-    this.scene.update(raid.sim, raid.cameraFollow(), dt, 0.5, this.cinematicPresentationView(), []);
+    this.scene.update(raid.sim, raid.cameraFollow(), dt, 0.5, cinematicView, []);
     if (raid.done && raid.result) {
       const id = this.liveRaidId!;
       const tier = this.liveRaidTier;
@@ -3279,12 +3466,13 @@ export class Game {
       bossHeroId: guardian?.heroId,
       bossPhaseHpPct: this.bossPhaseThresholdsForBossId(dungeon.def.guardian)
     });
-    this.audio.update?.({ biome: this.region.biome, dayTime: 0.5, inCombat: true, dt });
     for (const room of dungeon.drainCompletedRooms()) {
       this.grantDungeonRoomReward(dungeon.def, dungeon.tier, room, dungeon.selectedModifiers());
     }
+    const cinematicView = this.cinematicPresentationView();
+    this.audio.update?.({ biome: this.region.biome, dayTime: 0.5, inCombat: true, dt });
     this.scene.syncQuestGivers?.([]);
-    this.scene.update(dungeon.sim, dungeon.cameraFollow(), dt, 0.5, this.cinematicPresentationView(), this.visibleGroundItemDrops());
+    this.scene.update(dungeon.sim, dungeon.cameraFollow(), dt, 0.5, cinematicView, this.visibleGroundItemDrops());
     if (dungeon.done && dungeon.result) {
       const id = this.liveDungeonId!;
       const tier = this.liveDungeonTier;
@@ -3922,7 +4110,7 @@ export class Game {
     for (const def of REG.questDefs.values()) {
       const { save, justCompleted } = questAdvance(def, this.questSaveFor(def), ev);
       this.storeQuestState(def, save);
-      if (justCompleted) this.msg(`Quest ready to claim: ${def.name} — open the Journal (J).`, 'good');
+      if (justCompleted) this.msg(`Quest ready to claim: ${def.name} — open the Journal (J).`, 'quest');
     }
   }
 
@@ -3952,7 +4140,7 @@ export class Game {
     const nextWasLocked = nextDef ? this.questSaveFor(nextDef).status === 'locked' : false;
     this.refreshQuests();
     if (nextDef && nextWasLocked && this.questSaveFor(nextDef).status !== 'locked') {
-      this.msg(`New chapter available: ${nextDef.name} — open the Journal (J).`, 'good');
+      this.msg(`New chapter available: ${nextDef.name} — open the Journal (J).`, 'quest');
     }
     this.autosave('quest');
     return true;
@@ -3967,6 +4155,8 @@ export class Game {
         rec.attributePoints = normalizeAttributePoints(rec.heroId, rec.unit.level, rec.abilityLevels, rec.talentPicks, rec.attributePoints);
         rec.masteryRanks = normalizeRosterMasteryRanks(rec.heroId, rec.unit.level, rec.abilityLevels, rec.masteryRanks, rec.talentPicks, rec.attributePoints);
         rec.unit.refresh(this.sim.time);
+        this.playPresentationEventNow({ t: 'levelup', uid: rec.unit.uid, level: rec.unit.level });
+        this.msg(`${REG.hero(rec.heroId).name} reached level ${rec.unit.level}! Skill point available.`, 'good');
       }
       rec.level = rec.unit.level;
       rec.xp = rec.unit.xp;
@@ -3978,6 +4168,7 @@ export class Game {
         rec.abilityLevels = normalizeAbilityLevels(REG.hero(rec.heroId), rec.abilityLevels, rec.level);
         rec.attributePoints = normalizeAttributePoints(rec.heroId, rec.level, rec.abilityLevels, rec.talentPicks, rec.attributePoints);
         rec.masteryRanks = normalizeRosterMasteryRanks(rec.heroId, rec.level, rec.abilityLevels, rec.masteryRanks, rec.talentPicks, rec.attributePoints);
+        this.msg(`${REG.hero(rec.heroId).name} reached level ${newLevel}! Skill point available.`, 'good');
       }
     }
   }
@@ -4125,6 +4316,16 @@ export class Game {
         y: p.y,
         hasClaimable: posted.some((q) => q.claimable),
         hasActive: posted.some((q) => q.status === 'active')
+      });
+    }
+    for (const service of this.townServicePoints()) {
+      out.push({
+        id: `service:${service.id}`,
+        name: service.name,
+        x: service.pos.x,
+        y: service.pos.y,
+        hasClaimable: false,
+        hasActive: true
       });
     }
     return out;
@@ -5813,24 +6014,7 @@ export class Game {
     }
     this.gold = res.gold;
     this.goldSinks.tomesUsed = res.tomesUsed;
-    const cap = this.recruitLevelCap();
-    if (rec.unit) {
-      const gained = rec.unit.addXp(res.xp, cap);
-      if (gained > 0) {
-        rec.abilityLevels = normalizeAbilityLevels(REG.hero(rec.heroId), rec.abilityLevels, rec.unit.level);
-        rec.attributePoints = normalizeAttributePoints(rec.heroId, rec.unit.level, rec.abilityLevels, rec.talentPicks, rec.attributePoints);
-        rec.masteryRanks = normalizeRosterMasteryRanks(rec.heroId, rec.unit.level, rec.abilityLevels, rec.masteryRanks, rec.talentPicks, rec.attributePoints);
-        rec.unit.refresh(this.sim.time);
-      }
-      rec.level = rec.unit.level;
-      rec.xp = rec.unit.xp;
-    } else {
-      rec.xp = Math.min(rec.xp + res.xp, xpForLevel(TUNING.levelCap));
-      rec.level = Math.min(levelFromXp(rec.xp), cap);
-      rec.abilityLevels = normalizeAbilityLevels(REG.hero(rec.heroId), rec.abilityLevels, rec.level);
-      rec.attributePoints = normalizeAttributePoints(rec.heroId, rec.level, rec.abilityLevels, rec.talentPicks, rec.attributePoints);
-      rec.masteryRanks = normalizeRosterMasteryRanks(rec.heroId, rec.level, rec.abilityLevels, rec.masteryRanks, rec.talentPicks, rec.attributePoints);
-    }
+    this.grantHeroXp(rec, res.xp, this.recruitLevelCap());
     this.msg(`Tome of Knowledge → ${REG.hero(rec.heroId).name} (+${res.xp} XP, -${res.tomesUsed} used)`, 'good');
     return true;
   }
@@ -5860,7 +6044,7 @@ export class Game {
       rec.abilityLevels = REG.hero(rec.heroId).abilities.map(() => 0);
       rec.attributePoints = 0;
       rec.talentPicks = [null, null, null, null];
-        rec.masteryRanks = Array(16).fill(0);
+      rec.masteryRanks = Array(16).fill(0);
       this.sim.removeUnit(rec.unit.uid);
       const u = this.spawnHeroFromRecord(rec, pos);
       rec.unit = u;
@@ -5874,7 +6058,7 @@ export class Game {
       rec.talentPicks = [null, null, null, null];
       rec.masteryRanks = Array(16).fill(0);
     }
-    this.msg(`${REG.hero(rec.heroId).name} respecced skills and talents (-${cost}g)`, 'good');
+    this.msg(`${REG.hero(rec.heroId).name} respecced skills and masteries (-${cost}g)`, 'good');
     return true;
   }
 
@@ -5977,25 +6161,46 @@ export class Game {
     return true;
   }
 
-  /** Apply a cooked exploration buff to every fielded party hero through the statmod path. */
+  private pruneExpiredDishBuffs(): void {
+    this.activeDishBuffs = this.activeDishBuffs.filter((buff) => buff.until > this.sim.time);
+  }
+
+  private applyDishBuffToUnit(u: Unit, buff: ActiveDishBuff): void {
+    if (!u.alive || buff.until <= this.sim.time) return;
+    u.addStatus({
+      status: 'buff',
+      tag: `dish:${buff.dishId}`,
+      sourceUid: u.uid,
+      sourceTeam: u.team,
+      until: buff.until,
+      isDebuff: false,
+      mods: { ...buff.mods }
+    });
+    u.markStatsDirty();
+    u.refresh(this.sim.time);
+  }
+
+  private applyActiveDishBuffs(u: Unit): void {
+    this.pruneExpiredDishBuffs();
+    for (const buff of this.activeDishBuffs) this.applyDishBuffToUnit(u, buff);
+  }
+
+  /** Apply a cooked exploration buff to the whole party through the statmod path. */
   private applyDishBuff(def: DishDef): void {
     if (!def.buff) return;
     const mods: Record<string, number> = {};
     for (const [k, v] of Object.entries(def.buff.mods)) mods[k] = v as number;
+    const buff: ActiveDishBuff = {
+      dishId: def.id,
+      until: this.sim.time + def.buff.durationSec,
+      mods
+    };
+    this.pruneExpiredDishBuffs();
+    this.activeDishBuffs = this.activeDishBuffs.filter((active) => active.dishId !== def.id);
+    this.activeDishBuffs.push(buff);
     for (const rec of this.party) {
       const u = rec.unit;
-      if (!u || !u.alive) continue;
-      u.addStatus({
-        status: 'buff',
-        tag: `dish:${def.id}`,
-        sourceUid: u.uid,
-        sourceTeam: u.team,
-        until: this.sim.time + def.buff.durationSec,
-        isDebuff: false,
-        mods: { ...mods }
-      });
-      u.markStatsDirty();
-      u.refresh(this.sim.time);
+      if (u) this.applyDishBuffToUnit(u, buff);
     }
   }
 
@@ -6125,6 +6330,11 @@ export class Game {
       ctrl: { kind: 'player' },
       abilityLevels: rec.abilityLevels
     });
+    // Never materialise a hero inside a solid (e.g. a town building or prop): a
+    // respawn or hero-swap onto an overlapping point would otherwise trap the unit.
+    const safePos = this.nearestWalkablePoint(this.sim, u, u.pos);
+    u.pos = { ...safePos };
+    u.prevPos = { ...safePos };
     for (const k in build.externalMods) {
       u.externalMods[k] = (u.externalMods[k] ?? 0) + build.externalMods[k];
     }
@@ -6159,6 +6369,7 @@ export class Game {
     u.markStatsDirty();
     u.markVisualDirty();
     u.refresh(this.sim.time);
+    this.applyActiveDishBuffs(u);
     u.tagGaugeReadyAt = rec.tagGaugeReadyAt;   // mirror for the core 'tag-in-ready' gambit read
     u.hp = u.stats.maxHp * Math.max(0.05, rec.hpPct);
     u.mana = u.stats.maxMana * rec.manaPct;
@@ -6431,9 +6642,17 @@ export class Game {
       this.msg(`${REG.hero(rec.heroId).name} respawns in ${Math.ceil(rec.respawnAt - this.sim.time)}s`, 'bad');
       return false;
     }
+    const activeUnit = this.party[this.activeIdx]?.unit;
+    const activeSummary = activeUnit
+      ? summarize(activeUnit.statuses.filter((s) => this.sim.time < s.until), this.sim.time)
+      : null;
+    if (activeSummary && isDisabled(activeSummary)) {
+      this.msg('Cannot swap while disabled', 'bad');
+      return false;
+    }
     // §8.3: if the active hero is mid cast-point, queue the swap until the cast fires
     // rather than discarding the cast. flushPendingSwap() re-issues it next frame.
-    const casting = this.party[this.activeIdx]?.unit?.cast;
+    const casting = activeUnit?.cast;
     if (casting && this.sim.time < casting.fireAt) {
       this.pendingSwapIdx = idx;
       this.pendingSwapAt = this.sim.time;
@@ -6483,8 +6702,9 @@ export class Game {
     let u = rec.unit;
     if (u && u.offFieldUntil !== undefined) {
       this.clearOffField(u);
-      u.pos = { ...pos };
-      u.prevPos = { ...pos };
+      const safePos = this.nearestWalkablePoint(this.sim, u, pos);
+      u.pos = { ...safePos };
+      u.prevPos = { ...safePos };
     } else {
       u = this.spawnHeroFromRecord(rec, pos);
     }
@@ -6500,6 +6720,16 @@ export class Game {
     // §9: a swap that paid no boon (gauge down) gets the dull arrival beat, so the
     // player learns the difference between a timed tag and a bare reposition.
     if (!fired && combatEligible) this.sim.events.emit({ t: 'swap-flat', uid: u.uid });
+    // Genshin-style tag-in: a presentation-only arrival flourish on every overworld
+    // swap (rig drop-in + element VFX/audio), independent of whether a boon fired.
+    this.emitPresentationEvent({
+      t: 'hero-tag',
+      uid: u.uid,
+      heroId: rec.heroId,
+      pos: { ...pos },
+      color: tagBoonVfx(REG.hero(rec.heroId)).color,
+      boon: fired
+    });
     this.sim.playerActiveUid = u.uid;
     this.scene.selectedUid = u.uid;
     this.retargetEntourage();
@@ -6719,8 +6949,13 @@ export class Game {
       return;
     }
     if (dist(u.pos, npc.pos) > RECRUIT_INTERACT_RANGE) {
+      // Far right-click: walk over and auto-continue on arrival (updatePendingRecruit).
+      // Announce it so the player knows the click registered and what's coming, instead
+      // of a silent move order that looks like nothing happened.
       this.orderMove({ ...npc.pos });
+      const wasPending = this.pendingRecruitNpcUid === uid;
       this.pendingRecruitNpcUid = uid;
+      if (!wasPending) this.msg(`Approaching ${REG.hero(heroId).name}…`, 'info');
       return;
     }
     if (this.pendingRecruitNpcUid === uid) this.pendingRecruitNpcUid = null;
@@ -6796,6 +7031,7 @@ export class Game {
   private applyRecruitCeiling(): void {
     const cap = this.recruitLevelCap();
     for (const rec of this.party) {
+      const prevLevel = rec.level;
       const natural = levelFromXp(rec.unit ? rec.unit.xp : rec.xp);
       const lvl = Math.min(natural, cap);
       if (rec.unit && rec.unit.level !== lvl) {
@@ -6811,6 +7047,12 @@ export class Game {
       rec.abilityLevels = normalizeAbilityLevels(REG.hero(rec.heroId), rec.abilityLevels, lvl);
       rec.attributePoints = normalizeAttributePoints(rec.heroId, lvl, rec.abilityLevels, rec.talentPicks, rec.attributePoints);
       rec.masteryRanks = normalizeRosterMasteryRanks(rec.heroId, lvl, rec.abilityLevels, rec.masteryRanks, rec.talentPicks, rec.attributePoints);
+      // The new ceiling let banked XP catch up: surface the level gain like any
+      // other so the player sees the freed skill points.
+      if (lvl > prevLevel) {
+        if (rec.unit) this.playPresentationEventNow({ t: 'levelup', uid: rec.unit.uid, level: lvl });
+        this.msg(`${REG.hero(rec.heroId).name} reached level ${lvl}! Skill point available.`, 'good');
+      }
     }
   }
 
@@ -6878,7 +7120,7 @@ export class Game {
       qp.stage = 'trial-complete';
       qp.trialCompletions += 1;
       this.questProgress[questId] = qp;
-      this.msg(`${REG.hero(heroId).name}'s trial complete. ${quest.bindText}`, 'good');
+      this.msg(`${REG.hero(heroId).name}'s trial complete. ${quest.bindText}`, 'quest');
       if (runner.trial.dialogue?.[1]) {
         this.playCutscene('trial-dialogue-stinger', {
           trial: `${runner.trial.name} complete`,
@@ -7186,34 +7428,6 @@ export class Game {
     return true;
   }
 
-  maxAttributePoints(rec: RosterEntry): number {
-    void rec;
-    return 0;
-  }
-
-  canSpendAttributePoint(recIdx: number): boolean {
-    void recIdx;
-    return false;
-  }
-
-  applyAttributePoint(recIdx: number): boolean {
-    void recIdx;
-    this.msg('Attribute points were replaced by Masteries', 'info');
-    return false;
-  }
-
-  pendingTalentTier(rec: RosterEntry): number {
-    void rec;
-    return -1;
-  }
-
-  applyTalent(recIdx: number, tier: number, pick: 0 | 1): void {
-    void tier;
-    void pick;
-    const rec = this.party[recIdx];
-    this.msg(rec ? `${REG.hero(rec.heroId).name}: talents were replaced by Masteries` : 'Talents were replaced by Masteries', 'info');
-  }
-
   canBuyMasteryNode(recIdx: number, nodeIdx: number): boolean {
     const rec = this.party[recIdx];
     if (!rec) return false;
@@ -7323,10 +7537,10 @@ export class Game {
     if (qp.attunement >= needed && qp.stage === 'unfound') {
       qp.stage = 'found';
       this.questProgress[questId] = qp;
-      this.msg(`${def.name}'s trial marker reveals — seek them out! (${Math.min(qp.attunement, needed)}/${needed})`, 'good');
+      this.msg(`${def.name}'s trial marker reveals — seek them out! (${Math.min(qp.attunement, needed)}/${needed})`, 'quest');
     } else {
       this.questProgress[questId] = qp;
-      this.msg(`${def.name} attunement shard ${Math.min(qp.attunement, needed)}/${needed}${quest ? ` — ${quest.findText}` : ''}`, 'good');
+      this.msg(`${def.name} attunement shard ${Math.min(qp.attunement, needed)}/${needed}${quest ? ` — ${quest.findText}` : ''}`, 'quest');
     }
   }
 
@@ -7918,28 +8132,7 @@ export class Game {
   private awardPartyXp(xp: number): void {
     if (xp <= 0) return;
     const cap = this.recruitLevelCap();
-    for (const rec of this.party) {
-      if (rec.unit) {
-        const gained = rec.unit.addXp(xp, cap);
-        if (gained > 0) {
-          rec.abilityLevels = normalizeAbilityLevels(REG.hero(rec.heroId), rec.abilityLevels, rec.unit.level);
-          rec.attributePoints = normalizeAttributePoints(rec.heroId, rec.unit.level, rec.abilityLevels, rec.talentPicks, rec.attributePoints);
-          rec.masteryRanks = normalizeRosterMasteryRanks(rec.heroId, rec.unit.level, rec.abilityLevels, rec.masteryRanks, rec.talentPicks, rec.attributePoints);
-          rec.unit.refresh(this.sim.time);
-        }
-        rec.level = rec.unit.level;
-        rec.xp = rec.unit.xp;
-      } else {
-        rec.xp = Math.min(rec.xp + xp, xpForLevel(TUNING.levelCap));
-        const newLevel = Math.min(levelFromXp(rec.xp), cap);
-        if (newLevel > rec.level) {
-          rec.level = newLevel;
-          rec.abilityLevels = normalizeAbilityLevels(REG.hero(rec.heroId), rec.abilityLevels, rec.level);
-          rec.attributePoints = normalizeAttributePoints(rec.heroId, rec.level, rec.abilityLevels, rec.talentPicks, rec.attributePoints);
-          rec.masteryRanks = normalizeRosterMasteryRanks(rec.heroId, rec.level, rec.abilityLevels, rec.masteryRanks, rec.talentPicks, rec.attributePoints);
-        }
-      }
-    }
+    for (const rec of this.party) this.grantHeroXp(rec, xp, cap);
   }
 
   private updateEchoes(): void {
@@ -7965,16 +8158,29 @@ export class Game {
   // ---------- shrine ----------
 
   private updateShrine(dt: number): void {
-    const u = this.activeUnit();
-    if (!u || !u.alive || this.inCombat()) return;
-    if (dist(u.pos, this.region.shrine.pos) > 500) return;
-    const rate = TUNING.shrineHealPctPerSec;
-    u.hp = Math.min(u.stats.maxHp, u.hp + u.stats.maxHp * rate * dt);
-    u.mana = Math.min(u.stats.maxMana, u.mana + u.stats.maxMana * rate * dt);
+    // Resting at home regenerates the whole party. The active hero only needs to
+    // be in town (out of combat); which hero is active doesn't matter since the
+    // shrine sits inside the town zone.
+    if (this.inCombat() || !this.inTown()) return;
+    const pct = TUNING.shrineHealPctPerSec * dt;
+    // Off-field heroes regen via their stored percentages; live units also heal
+    // in place.
+    for (const rec of this.party) {
+      if (rec.respawnAt > this.sim.time) continue;
+      rec.hpPct = Math.min(1, rec.hpPct + pct);
+      rec.manaPct = Math.min(1, rec.manaPct + pct);
+      const u = rec.unit;
+      if (u && u.alive) {
+        u.hp = Math.min(u.stats.maxHp, u.hp + u.stats.maxHp * pct);
+        u.mana = Math.min(u.stats.maxMana, u.mana + u.stats.maxMana * pct);
+      }
+    }
+    // Captured entourage units rest alongside the party.
     for (const [, simUid] of this.fieldedUnits) {
       const c = this.sim.unit(simUid);
-      if (c && c.alive && dist(c.pos, this.region.shrine.pos) <= 500) {
-        c.hp = Math.min(c.stats.maxHp, c.hp + c.stats.maxHp * rate * dt);
+      if (c && c.alive) {
+        c.hp = Math.min(c.stats.maxHp, c.hp + c.stats.maxHp * pct);
+        c.mana = Math.min(c.stats.maxMana, c.mana + c.stats.maxMana * pct);
       }
     }
   }
@@ -8278,13 +8484,31 @@ export class Game {
       return;
     }
     if (this.cinematic.active) {
+      // No sim step runs this frame; clear presentation buffers so the HUD
+      // doesn't re-spawn stale floaters or dump delayed ones after the cutscene.
+      this.frameEvents = [];
+      this.queuedPresentationEvents = [];
+      // Resolve the cut-scene view first (this sets the cinematic music mix via
+      // setCinematicMix), then tick the mixer so that duck/silence actually
+      // reaches the music bed. Without this, the mix flag is set but never
+      // applied (the gains stay frozen at their pre-cut-scene level), so
+      // overworld cut-scenes never duck the score.
+      const cinematicView = this.cinematicPresentationView();
+      this.audio.update?.({ biome: this.region.biome, dayTime: this.dayTime, inCombat: this.inCombat(), dt: 0 });
       this.scene.syncQuestGivers?.(this.questGiverViews());
-      this.scene.update(this.sim, this.activeUnit(), 0, this.dayTime, this.cinematicPresentationView(), this.visibleGroundItemDrops());
+      this.scene.update(this.sim, this.activeUnit(), 0, this.dayTime, cinematicView, this.visibleGroundItemDrops());
       return;
     }
     if (this.paused) {
+      this.frameEvents = [];
+      this.queuedPresentationEvents = [];
+      // Keep the audio mixer ticking while paused so settings changed in the
+      // menu (e.g. the music/volume sliders) take effect live instead of being
+      // stuck at the gain they held when the game paused.
+      const cinematicView = this.cinematicPresentationView();
+      this.audio.update?.({ biome: this.region.biome, dayTime: this.dayTime, inCombat: this.inCombat(), dt: 0 });
       this.scene.syncQuestGivers?.(this.questGiverViews());
-      this.scene.update(this.sim, this.activeUnit(), 0, this.dayTime, this.cinematicPresentationView(), this.visibleGroundItemDrops());
+      this.scene.update(this.sim, this.activeUnit(), 0, this.dayTime, cinematicView, this.visibleGroundItemDrops());
       return;
     }
     const slowmo = this.realClock < this.lootSlowmoUntil ? TUNING.loot.signatureSlowmoScale : 1;
@@ -8312,6 +8536,7 @@ export class Game {
     this.reapOffFieldUnits();
     this.flushPendingSwap();
     this.updatePendingRecruit();
+    this.updatePendingPickup();
 
     // participation tracking for the active hero
     const activeRec = this.party[this.activeIdx];
@@ -8419,8 +8644,9 @@ export class Game {
       if (!this.inCombat()) this.autosave('timer');
     }
 
+    const cinematicView = this.cinematicPresentationView();
     this.audio.update?.({ biome: this.region.biome, dayTime: this.dayTime, inCombat: this.inCombat(), dt });
     this.scene.syncQuestGivers?.(this.questGiverViews());
-    this.scene.update(this.sim, this.activeUnit(), dt, this.dayTime, this.cinematicPresentationView(), this.visibleGroundItemDrops());
+    this.scene.update(this.sim, this.activeUnit(), dt, this.dayTime, cinematicView, this.visibleGroundItemDrops());
   }
 }

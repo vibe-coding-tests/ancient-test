@@ -183,3 +183,64 @@ export async function state(page: Page): Promise<GameState> {
 export async function fastForward(page: Page, seconds: number): Promise<void> {
   await page.evaluate((s) => (window as any).__test.fastForward(s), seconds);
 }
+
+export interface PartyInvariantViolation {
+  uid: number;
+  heroId: string;
+  field: string;
+  detail: string;
+}
+
+/**
+ * Read-side state-corruption check for the live party — the browser analog of
+ * the headless `checkSimInvariants` pressure suite. Asserts the contract a
+ * living hero must always satisfy: finite, in-bounds HP/mana, sane derived
+ * stats, a real position, and alive/HP agreement. Returns every violation so a
+ * caller can fail with full diagnostics instead of a bare boolean.
+ *
+ * Deliberately one-directional where the reverse is legal: a unit may be dead
+ * with a non-zero HP field (corpse bookkeeping), so we only flag *alive* units
+ * sitting at non-positive HP, never the converse.
+ */
+export async function partyInvariants(page: Page): Promise<PartyInvariantViolation[]> {
+  return page.evaluate(() => {
+    const g = (window as any).__game;
+    const out: PartyInvariantViolation[] = [];
+    if (!g) return [{ uid: -1, heroId: '', field: 'game', detail: 'no live game' }];
+    const fin = (n: number) => typeof n === 'number' && Number.isFinite(n);
+    const EPS = 1e-3;
+    for (const rec of g.party) {
+      const u = rec.unit;
+      const heroId = rec.heroId ?? '';
+      if (!u) continue;
+      const s = u.stats;
+      const push = (field: string, detail: string) => out.push({ uid: u.uid ?? -1, heroId, field, detail });
+
+      if (!fin(s?.maxHp) || s.maxHp <= 0) push('maxHp', `non-positive/NaN maxHp ${s?.maxHp}`);
+      if (!fin(s?.maxMana) || s.maxMana < 0) push('maxMana', `negative/NaN maxMana ${s?.maxMana}`);
+      if (!fin(s?.moveSpeed) || s.moveSpeed < 0) push('moveSpeed', `negative/NaN moveSpeed ${s?.moveSpeed}`);
+
+      if (!fin(u.hp)) push('hp', `NaN hp ${u.hp}`);
+      else if (u.hp < -EPS) push('hp', `negative hp ${u.hp}`);
+      else if (fin(s?.maxHp) && u.hp > s.maxHp + EPS) push('hp', `hp over max ${u.hp}/${s.maxHp}`);
+
+      if (!fin(u.mana)) push('mana', `NaN mana ${u.mana}`);
+      else if (u.mana < -EPS) push('mana', `negative mana ${u.mana}`);
+      else if (fin(s?.maxMana) && u.mana > s.maxMana + EPS) push('mana', `mana over max ${u.mana}/${s.maxMana}`);
+
+      if (u.alive && fin(u.hp) && u.hp <= 0) push('alive', `living hero at non-positive hp (${u.hp})`);
+
+      if (!u.pos || !fin(u.pos.x) || !fin(u.pos.y)) push('pos', `non-finite position ${JSON.stringify(u.pos)}`);
+    }
+    return out;
+  });
+}
+
+/** Fail with full diagnostics if any party member is in a corrupt state. */
+export async function expectPartyWellFormed(page: Page, label: string): Promise<void> {
+  const violations = await partyInvariants(page);
+  if (violations.length > 0) {
+    const lines = violations.map((v) => `  uid ${v.uid} (${v.heroId}) ${v.field}: ${v.detail}`).join('\n');
+    throw new Error(`[${label}] party invariants violated:\n${lines}`);
+  }
+}

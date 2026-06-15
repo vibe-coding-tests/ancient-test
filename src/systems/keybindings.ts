@@ -15,6 +15,8 @@ export const INPUT_ACTIONS: InputAction[] = [
   'item-2',
   'item-3',
   'item-4',
+  'item-5',
+  'item-6',
   'swap-1',
   'swap-2',
   'swap-3',
@@ -23,7 +25,6 @@ export const INPUT_ACTIONS: InputAction[] = [
   'capture',
   'interact',
   'shop',
-  'services',
   'neutral',
   'party',
   'journal',
@@ -50,6 +51,8 @@ export const DEFAULT_BINDINGS: Record<InputAction, string> = {
   'item-2': 'x',
   'item-3': 'c',
   'item-4': 'v',
+  'item-5': 'o',
+  'item-6': 'p',
   'swap-1': '1',
   'swap-2': '2',
   'swap-3': '3',
@@ -58,7 +61,6 @@ export const DEFAULT_BINDINGS: Record<InputAction, string> = {
   capture: 't',
   interact: 'g',
   shop: 'b',
-  services: 'y',
   neutral: 'n',
   party: 'tab',
   journal: 'j',
@@ -85,6 +87,8 @@ export const ACTION_META: Record<InputAction, { label: string; group: 'Movement'
   'item-2': { label: 'Item 2', group: 'Items' },
   'item-3': { label: 'Item 3', group: 'Items' },
   'item-4': { label: 'Item 4', group: 'Items' },
+  'item-5': { label: 'Item 5', group: 'Items' },
+  'item-6': { label: 'Item 6', group: 'Items' },
   'swap-1': { label: 'Swap hero 1', group: 'Party' },
   'swap-2': { label: 'Swap hero 2', group: 'Party' },
   'swap-3': { label: 'Swap hero 3', group: 'Party' },
@@ -93,7 +97,6 @@ export const ACTION_META: Record<InputAction, { label: string; group: 'Movement'
   capture: { label: 'Capture', group: 'Interface' },
   interact: { label: 'Interact / travel', group: 'Interface' },
   shop: { label: 'Shop', group: 'Interface' },
-  services: { label: 'Town services', group: 'Interface' },
   neutral: { label: 'Neutral active', group: 'Items' },
   party: { label: 'Party', group: 'Interface' },
   journal: { label: 'Journal', group: 'Interface' },
@@ -107,6 +110,9 @@ export const ACTION_META: Record<InputAction, { label: string; group: 'Movement'
 
 const ACTION_SET = new Set<InputAction>(INPUT_ACTIONS);
 const RESERVED_KEYS = new Set(['escape']);
+// Actions removed from the game but still tolerated in legacy saves so a stored
+// rebind doesn't invalidate the whole save. normalizeKeyBindings drops them on load.
+const RETIRED_ACTIONS = new Set<string>(['services']);
 
 export function normalizeKeyName(key: string): string {
   const lower = key.trim().toLowerCase();
@@ -217,6 +223,7 @@ export function isValidKeyBindings(value: unknown): value is KeyBindings {
   if (kb.bindings !== undefined) {
     if (!kb.bindings || typeof kb.bindings !== 'object') return false;
     for (const [action, key] of Object.entries(kb.bindings)) {
+      if (RETIRED_ACTIONS.has(action)) continue;
       const normalized = typeof key === 'string' ? normalizeKeyName(key) : '';
       if (!ACTION_SET.has(action as InputAction) || normalized === '' || RESERVED_KEYS.has(normalized)) return false;
     }

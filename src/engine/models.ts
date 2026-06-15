@@ -102,6 +102,21 @@ function resolveSockets(model: THREE.Object3D): Partial<Record<HeroSocket, THREE
   return sockets;
 }
 
+/**
+ * Skinned (and far-from-origin) meshes cull against a bind-pose bounding sphere,
+ * so an authored sub-model can pop out of view when the hero stands far from the
+ * world origin (e.g. away from town). The body already gets this in
+ * collectStandardMaterials; this is the same robust fix for every other authored
+ * piece we mount over the rig (weapons, signature kits, holdout signatures,
+ * creature bodies). Cheap at the ≤30-unit overworld budget.
+ */
+export function disableFrustumCulling(root: THREE.Object3D): void {
+  root.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (m.isMesh) m.frustumCulled = false;
+  });
+}
+
 function collectStandardMaterials(rig: UnitRig, model: THREE.Object3D): void {
   const add = (mat: THREE.Material): void => {
     if (mat instanceof THREE.MeshStandardMaterial && !rig.materials.includes(mat)) rig.materials.push(mat);
@@ -111,6 +126,10 @@ function collectStandardMaterials(rig: UnitRig, model: THREE.Object3D): void {
     if (!m.isMesh) return;
     m.castShadow = true;
     m.receiveShadow = true;
+    // Skinned meshes cull against their bind-pose bounding sphere, so an animated
+    // hero pops out of view at certain camera angles/poses. Disabling per-mesh
+    // frustum culling is the cheap, robust fix at the ≤30-unit budget.
+    m.frustumCulled = false;
     const mat = m.material;
     if (Array.isArray(mat)) mat.forEach(add);
     else if (mat) add(mat);
@@ -591,18 +610,30 @@ export function mountHeroModel(
   clipNames?: Partial<Record<AuthoredActionName, string>>,
   opts: { hideProcedural?: boolean } = {}
 ): void {
+  // Only commit to the authored model if it actually carries renderable geometry.
+  // A malformed/empty GLB clone would otherwise hide the procedural body and
+  // leave an invisible hero (the "recruited model is broken" symptom). With no
+  // mesh we leave the procedural floor showing and skip the mount entirely.
+  let hasMesh = false;
+  model.traverse((o) => { if ((o as THREE.Mesh).isMesh) hasMesh = true; });
+  if (!hasMesh) return;
+
   if (opts.hideProcedural ?? true) {
     for (const child of rig.body.children) child.visible = false;
   }
   if (rig.authoredModel?.parent) rig.authoredModel.parent.remove(rig.authoredModel);
 
   // Fit authored height to the procedural silhouette and seat feet on the ground.
+  // Guard the fit: a degenerate/empty bounding box (skinned mesh with no computed
+  // bounds, or a malformed GLB) would otherwise yield a 0/Infinity/NaN scale that
+  // collapses the model to a point or blows it up past the near plane — both read
+  // as "the model never renders". Fall back to scale 1 and skip the re-seat then.
   const pre = new THREE.Box3().setFromObject(model);
   const size = pre.getSize(new THREE.Vector3());
-  const k = rig.height / (size.y || 1);
+  const k = size.y > 1e-4 && Number.isFinite(size.y) ? rig.height / size.y : 1;
   model.scale.setScalar(k);
   const post = new THREE.Box3().setFromObject(model);
-  model.position.y -= post.min.y;
+  if (Number.isFinite(post.min.y)) model.position.y -= post.min.y;
 
   collectStandardMaterials(rig, model);
   model.userData.heroModel = true;
@@ -1085,6 +1116,7 @@ export function applyAuthoredSilhouette(
     model.position.y -= post.min.y;
   }
   applyIdentityOverlay(rig, heroId, palette);
+  disableFrustumCulling(rig.body);
 }
 
 type PaletteRole = 'primary' | 'secondary' | 'accent';
@@ -2904,6 +2936,7 @@ export function attachHeroWeaponModel(rig: UnitRig, weapon: THREE.Object3D): voi
     if (!m.isMesh) return;
     m.castShadow = true;
     m.receiveShadow = true;
+    m.frustumCulled = false;
   });
   weapon.userData.heroWeapon = true;
   rig.defaultWeapon = weapon;
@@ -2935,6 +2968,7 @@ export function attachSignatureItemWeapon(rig: UnitRig, model: THREE.Object3D | 
     if (!m.isMesh) return;
     m.castShadow = true;
     m.receiveShadow = true;
+    m.frustumCulled = false;
   });
   model.userData.signatureItemWeapon = true;
   hostWeapon(rig, model);
@@ -2949,9 +2983,15 @@ export function attachHoldoutSignatureModel(rig: UnitRig, signature: THREE.Objec
     if (!m.isMesh) return;
     m.castShadow = true;
     m.receiveShadow = true;
+    m.frustumCulled = false;
   });
   signature.userData.holdoutSignatureModel = true;
   signature.scale.setScalar(rig.scale);
+  // Signature holdouts can be authored around their own origin; seat the lowest
+  // point on the body origin just like full hero GLBs so extra geometry never
+  // starts below the floor line.
+  const post = new THREE.Box3().setFromObject(signature);
+  if (Number.isFinite(post.min.y)) signature.position.y -= post.min.y;
   rig.body.add(signature);
 }
 
@@ -2960,12 +3000,18 @@ function replaceWeapon(rig: UnitRig, weapon: ItemAppearanceSpec['weapon'] | unde
     restoreDefaultWeapon(rig);
     return;
   }
-  if (rig.weapon?.parent) rig.weapon.parent.remove(rig.weapon);
   rig.attackWeapon = weapon.kind;
   const matS = lam(weapon.color ?? '#d8dce8', weapon.emissive ? 0x111111 : 0);
   const matA = lam(weapon.emissive ?? '#ffe27d', weapon.emissive ? 0x181818 : 0);
+  // Build the replacement BEFORE detaching the current weapon so an unbuildable
+  // weapon kind never leaves the hand empty (which reads as a vanished model on
+  // melee heroes whose weapon dominates the silhouette).
   const next = buildWeapon(weapon.kind, rig.scale, matS, matA);
-  if (!next) return;
+  if (!next) {
+    restoreDefaultWeapon(rig);
+    return;
+  }
+  if (rig.weapon?.parent) rig.weapon.parent.remove(rig.weapon);
   // WS-B: when a base mesh resolved a weapon bone, hang the weapon off it; that
   // socket lives inside the height-fitted model, so counter-scale by the fit factor
   // to keep the weapon at rig size. With no hand bone (procedural rig, or a base

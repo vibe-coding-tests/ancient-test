@@ -18,8 +18,8 @@ export function isActiveItem(def: ItemDef): boolean {
 }
 
 /**
- * Auto-sort actives into keyed slots 1–4 (Z/X/C/V), passives into 5–6,
- * preserving relative order (SPEC §5).
+ * Auto-sort actives into the low (keyed) slots, passives toward the back,
+ * preserving relative order. All 6 slots are key-bound (Z/X/C/V + item-5/6).
  */
 export function sortInventory(items: (ItemState | null)[]): (ItemState | null)[] {
   const present = items.filter((i): i is ItemState => i !== null);

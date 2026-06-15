@@ -118,11 +118,13 @@ test.describe('controls + HUD UI', () => {
       return { quickcast: g.settings.quickcast, resonance: g.settings.resonance };
     });
 
+    await page.locator('[data-mtab="controls"]').click();
     await page.locator('#opt-quickcast').evaluate((el, checked) => {
       const input = el as HTMLInputElement;
       input.checked = checked as boolean;
       input.dispatchEvent(new Event('change', { bubbles: true }));
     }, !initial.quickcast);
+    await page.locator('[data-mtab="interface"]').click();
     await page.locator('#opt-resonance').evaluate((el, checked) => {
       const input = el as HTMLInputElement;
       input.checked = checked as boolean;

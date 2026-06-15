@@ -361,6 +361,23 @@ describe('ground item pickups', () => {
     expect(g.buildSave().groundItemDrops).toHaveLength(0);
   });
 
+  it('only auto-collects a ground drop within pickup range; a far drop is walked to first', () => {
+    const g = Game.headless(soloSave('juggernaut', 20));
+    const u = g.activeUnit()!;
+    const farPos = { x: u.pos.x + 2000, y: u.pos.y };
+    const [farDrop] = g.spawnGroundItems([{ id: 'broadsword' }], farPos, { source: 'creep' });
+
+    // Far right-click: walks toward it (issues a move), does NOT teleport into the bag.
+    expect(g.tryPickupGroundItem(farDrop.uid)).toBe(false);
+    expect(g.groundItemDrops.some((d) => d.uid === farDrop.uid)).toBe(true);
+    expect(u.order.kind).toBe('move');
+
+    // A drop already underfoot is collected immediately.
+    const [nearDrop] = g.spawnGroundItems([{ id: 'gauntlets-of-strength' }], { x: u.pos.x + 10, y: u.pos.y }, { source: 'creep' });
+    expect(g.tryPickupGroundItem(nearDrop.uid)).toBe(true);
+    expect(g.groundItemDrops.some((d) => d.uid === nearDrop.uid)).toBe(false);
+  });
+
   it('leaves a pickup on the ground when the active hero inventory is full', () => {
     const save = soloSave('juggernaut', 20);
     save.roster[0].items = rosterItems(['broadsword', 'mithril-hammer', 'ogre-axe', 'platemail', 'chainmail', 'hyperstone']);
@@ -594,6 +611,17 @@ describe('gold-sinks-faithful (test 12)', () => {
     const secondGain = g.activeUnit()!.xp - xpMid;
     expect(secondGain).toBeLessThan(firstGain);
     expect(g.goldSinks.tomesUsed).toBe(2);
+  });
+
+  it('a Tome that crosses a level boundary surfaces the level-up message', () => {
+    const save = soloSave('juggernaut', 1);
+    save.gold = 10000;
+    const g = Game.headless(save);
+    const levelBefore = g.activeUnit()!.level;
+
+    expect(g.buyTome(0)).toBe(true);
+    expect(g.activeUnit()!.level).toBeGreaterThan(levelBefore);
+    expect(g.toasts.some((t) => /reached level/i.test(t.text))).toBe(true);
   });
 
   it('respec re-opens a non-perfected talent tier for gold, out of combat', () => {

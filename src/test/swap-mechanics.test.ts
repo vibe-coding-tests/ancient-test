@@ -237,7 +237,7 @@ describe('swap × cast-point queue (§8.3)', () => {
     expect(benched.channel, 'the channel that started on cast survives the queued swap').not.toBeNull();
   });
 
-  it('a swap queued during a cast point still flushes even if the cast is interrupted', () => {
+  it('a swap queued during a cast point is cancelled if a hard disable interrupts the cast', () => {
     const game = Game.headless(bench('drow-ranger', 'juggernaut'));
     engage(game);
     const drow = game.activeUnit()!;
@@ -256,8 +256,10 @@ describe('swap × cast-point queue (§8.3)', () => {
     game.sim.interruptActions(drow);
     expect(drow.cast).toBeNull();
 
-    advance(game, 0.2); // flushPendingSwap should now run the queued swap
-    expect(game.activeIdx, 'queued swap flushes once the cast is gone').toBe(1);
+    advance(game, 0.2); // flushPendingSwap rechecks the active hero and rejects the swap
+    expect(game.activeIdx, 'a hard-disabled active hero cannot spend the queued swap').toBe(0);
+    advance(game, 1);
+    expect(game.activeIdx, 'the rejected queued swap does not retry after the stun expires').toBe(0);
   });
 
   it('a queued swap is abandoned if the grace window lapses while still in the cast point', () => {
@@ -520,6 +522,22 @@ describe('swap floor and guards', () => {
     advance(game, (game.settings.resonance ? TUNING.resonanceSwapFloorSec : TUNING.swapFloorSec) + 0.1);
     expect(game.trySwap(2)).toBe(true);
   });
+
+  it('hard disables block active swaps, but silence does not', () => {
+    const stunned = Game.headless(bench('juggernaut', 'axe'));
+    const jug = stunned.activeUnit()!;
+    jug.addStatus({ status: 'stun', tag: 'test-stun', sourceUid: jug.uid, sourceTeam: 1, until: stunned.sim.time + 1, isDebuff: true }, true);
+
+    expect(stunned.trySwap(1)).toBe(false);
+    expect(stunned.activeIdx).toBe(0);
+
+    const silenced = Game.headless(bench('juggernaut', 'axe'));
+    const silencedJug = silenced.activeUnit()!;
+    silencedJug.addStatus({ status: 'silence', tag: 'test-silence', sourceUid: silencedJug.uid, sourceTeam: 1, until: silenced.sim.time + 1, isDebuff: true }, true);
+
+    expect(silenced.trySwap(1)).toBe(true);
+    expect(silenced.activeIdx).toBe(1);
+  });
 });
 
 // ------------------------------------------------------------
@@ -691,5 +709,64 @@ describe('swap × nasty combinations', () => {
     const benched = game.party[0].unit;
     // The toggle is not an offField channel, so the swap must not leave it ticking.
     expect(benched?.channel ?? null).toBeNull();
+  });
+});
+
+// ------------------------------------------------------------
+// 6. PRESENTATION + AUDIO CUE ROUTING
+// ------------------------------------------------------------
+// The swap "tag-in" is the headline feel-good cue. The audio layer fires
+// swapTagIn(ev.boon) off the hero-tag presentation event and a low swap-flat
+// sub-layer when a swap pays no boon. hero-tag is a *presentation* event: it is
+// queued by trySwap and only drained into game.frameEvents on the next update() —
+// it never lands in sim.events.history. (The WebGL e2e originally asserted against
+// history, which silently never matched; that is the gap these lock down headlessly.)
+describe('swap × presentation + audio cue routing', () => {
+  function tagInEvent(game: Game): Extract<SimEvent, { t: 'hero-tag' }> | undefined {
+    return game.frameEvents.find((e): e is Extract<SimEvent, { t: 'hero-tag' }> => e.t === 'hero-tag');
+  }
+
+  it('a gauge-ready combat swap emits hero-tag boon=true (the bright tag-in audio path)', () => {
+    const game = Game.headless(bench('juggernaut', 'crystal-maiden'));
+    engage(game);
+    spawnDummy(game, 120);
+    expect(game.trySwap(1)).toBe(true);
+    game.update(0); // drain queued presentation events into frameEvents
+
+    const tag = tagInEvent(game);
+    expect(tag, 'hero-tag fires on every overworld swap').toBeDefined();
+    expect(tag!.uid).toBe(game.activeUnit()!.uid);
+    expect(tag!.boon, 'a timed gauge-ready tag pays a boon → swapTagIn(true)').toBe(true);
+    // A boon tag is the bright path; the dull swap-flat sub-layer must NOT be present.
+    expect(game.frameEvents.some((e) => e.t === 'swap-flat'), 'no dull sub on a boon tag').toBe(false);
+  });
+
+  it('a gauge-down combat swap emits hero-tag boon=false alongside swap-flat (the dull arrival)', () => {
+    const game = Game.headless(bench('juggernaut', 'crystal-maiden'));
+    engage(game);
+    spawnDummy(game, 120);
+    // Force the incoming hero's gauge onto cooldown so no boon can fire.
+    game.party[1].tagGaugeReadyAt = game.sim.time + 30;
+    expect(game.trySwap(1)).toBe(true);
+    game.update(0);
+
+    const tag = tagInEvent(game);
+    expect(tag, 'hero-tag still fires even with no boon').toBeDefined();
+    expect(tag!.boon, 'gauge-down tag pays no boon → swapTagIn(false)').toBe(false);
+    // swap-flat is the low sub-layer that teaches the player the timed/untimed difference.
+    expect(game.frameEvents.some((e) => e.t === 'swap-flat'), 'dull sub-layer present on a flat swap').toBe(true);
+  });
+
+  it('hero-tag carries the incoming hero id + element color so the arrival can theme itself', () => {
+    const game = Game.headless(bench('juggernaut', 'crystal-maiden'));
+    engage(game);
+    spawnDummy(game, 120);
+    expect(game.trySwap(1)).toBe(true);
+    game.update(0);
+
+    const tag = tagInEvent(game);
+    expect(tag?.heroId, 'tag names the arriving hero').toBe('crystal-maiden');
+    expect(tag?.color, 'tag carries an element color for the VFX/audio theme').toBeTruthy();
+    expect(tag?.pos, 'tag carries the arrival position for panning/attenuation').toBeTruthy();
   });
 });

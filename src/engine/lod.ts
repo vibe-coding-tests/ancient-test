@@ -45,9 +45,11 @@ export function shouldUseCrowdImpostor(opts: {
   isNpc: boolean;
 }): boolean {
   if (!opts.alive || opts.selected || opts.isHero || opts.isNpc) return false;
-  if (opts.crowdDetail === 'full') return false;
+  // Default/auto keeps authored unit views mounted at every visible distance.
+  // LOD still throttles animation/shadows, but the unit does not swap from a
+  // cone/procedural placeholder into a fuller model as the camera approaches.
+  if (opts.crowdDetail === 'full' || opts.crowdDetail === 'auto') return false;
   if (opts.crowdDetail === 'reduced') return true;
   if (opts.tier !== 'full') return true;
-  const overflowBudget = opts.crowdDetail === 'balanced' ? 24 : 20;
-  return opts.fullAnimationBudget <= overflowBudget;
+  return opts.fullAnimationBudget <= 24;
 }

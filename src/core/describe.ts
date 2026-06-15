@@ -230,7 +230,9 @@ function describeNode(def: AbilityDef, node: EffectNode, level?: number): string
         return isSelf ? `grants invisibility${forDur}` : `turns ${tgt} invisible${forDur}`;
       }
       if (node.status === 'magic-immune') {
-        return isSelf ? `grants spell immunity${forDur}` : `makes ${tgt} spell-immune${forDur}`;
+        return isSelf
+          ? `grants spell immunity (blocks magic, not physical)${forDur}`
+          : `makes ${tgt} spell-immune (blocks magic, not physical)${forDur}`;
       }
       return `${STATUS_VERB[node.status]} ${tgt}${forDur}`;
     }

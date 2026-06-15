@@ -324,4 +324,48 @@ describe('movement and collision', () => {
     expect(sim.events.history.some((e) => e.t === 'projectile-block' && e.obstacleId === 'attack-pillar')).toBe(false);
     expect(sim.events.history.some((e) => e.t === 'attack-impact' && e.target === target.uid)).toBe(true);
   });
+
+  it('routes a move order around a large solid obstacle (A* path-follow)', () => {
+    const sim = new Sim({
+      seed: 41,
+      bounds: { w: 4000, h: 4000 },
+      obstacles: [staticCircleObstacle({ pos: { x: 2000, y: 2000 }, radius: 320, id: 'big-hut' })]
+    });
+    const unit = sim.spawnHero(REG.hero('juggernaut'), { team: 0, pos: { x: 1400, y: 2000 }, level: 1, ctrl: { kind: 'none' } });
+    // Goal sits directly behind the obstacle on the same axis — a straight line
+    // is fully blocked, so the mover must route around it.
+    const goal = { x: 2600, y: 2000 };
+    sim.order(unit.uid, { kind: 'move', point: goal });
+
+    let minClearance = Infinity;
+    for (let i = 0; i < 600; i++) {
+      sim.tick();
+      minClearance = Math.min(minClearance, dist(unit.pos, { x: 2000, y: 2000 }));
+      if (unit.order.kind === 'stop') break;
+    }
+
+    expect(unit.order.kind).toBe('stop');
+    expect(dist(unit.pos, goal)).toBeLessThan(60);     // reached the far side
+    expect(minClearance).toBeGreaterThan(320);          // never tunneled through the hut
+  });
+
+  it('gives up cleanly with a no-path event when the goal is fully walled off', () => {
+    // A ring of solid blockers seals a pocket the unit can never reach.
+    const obstacles = [];
+    for (let a = 0; a < Math.PI * 2; a += Math.PI / 12) {
+      obstacles.push(staticCircleObstacle({ pos: { x: 2000 + Math.cos(a) * 360, y: 2000 + Math.sin(a) * 360 }, radius: 90, id: `wall-${a.toFixed(2)}` }));
+    }
+    const sim = new Sim({ seed: 42, bounds: { w: 4000, h: 4000 }, obstacles });
+    sim.events.captureAll = true;
+    const unit = sim.spawnHero(REG.hero('juggernaut'), { team: 0, pos: { x: 600, y: 2000 }, level: 1, ctrl: { kind: 'none' } });
+    sim.order(unit.uid, { kind: 'move', point: { x: 2000, y: 2000 } }); // sealed pocket center
+
+    for (let i = 0; i < 400; i++) {
+      sim.tick();
+      if (unit.order.kind === 'stop') break;
+    }
+
+    expect(sim.events.history.some((e) => e.t === 'movement-blocked' && e.reason === 'no-path')).toBe(true);
+    expect(dist(unit.pos, { x: 2000, y: 2000 })).toBeGreaterThan(360); // stayed outside the wall
+  });
 });

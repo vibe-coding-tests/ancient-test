@@ -13,6 +13,9 @@ import type { SoundArchetype } from '../core/types';
 
 export const SAMPLED_AUDIO_BASE = '/assets/audio';
 const GENERATED_AUDIO_EXT = '.wav';
+// Music ships as curated CC0 / public-domain Ogg Vorbis tracks (real composed
+// music, not the old synth drones) — see public/assets/audio/music/CREDITS.md.
+const MUSIC_AUDIO_EXT = '.ogg';
 
 /** Biomes that ship a generated ambient bed (must match generate_audio.mjs). */
 export const MUSIC_BEDS = ['grass', 'forest', 'snow', 'desert', 'wasteland', 'coast'] as const;
@@ -60,7 +63,7 @@ export const CAST_SFX_BY_SOUND: Record<SoundArchetype, SfxKey> = {
 const hasFetch = typeof fetch !== 'undefined';
 
 export function musicAssetUrl(bed: MusicBed): string {
-  return `${SAMPLED_AUDIO_BASE}/music/${bed}${GENERATED_AUDIO_EXT}`;
+  return `${SAMPLED_AUDIO_BASE}/music/${bed}${MUSIC_AUDIO_EXT}`;
 }
 
 function generatedSfxUrl(key: SfxKey): string {

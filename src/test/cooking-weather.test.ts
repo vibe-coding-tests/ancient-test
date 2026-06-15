@@ -52,8 +52,13 @@ describe('cooking (GAMEPLAY_OVERHAUL §3.7)', () => {
     g.gold = 1000;
     const hero = g.activeUnit()!;
     hero.hp = 1;
+    const offField = g.party[1];
+    offField.hpPct = 0.25;
+    offField.manaPct = 0.25;
     expect(g.cookDish('hearty-stew')).toBe(true);
     expect(hero.hp).toBe(hero.stats.maxHp);
+    expect(offField.hpPct).toBe(1);
+    expect(offField.manaPct).toBe(1);
     expect(g.gold).toBe(1000 - REG.dish('hearty-stew').cost);
   });
 
@@ -66,6 +71,17 @@ describe('cooking (GAMEPLAY_OVERHAUL §3.7)', () => {
     expect(g.cookDish('travelers-rations')).toBe(true);
     expect(hero.statuses.some((s) => s.tag === 'dish:travelers-rations')).toBe(true);
     expect(hero.stats.moveSpeed).toBeGreaterThan(speedBefore);
+  });
+
+  it('a buff dish follows the party when swapping to an off-field hero', () => {
+    const g = Game.headless(partySave('tranquil-vale', ['juggernaut', 'lich']));
+    standAtShrine(g);
+    g.gold = 1000;
+    expect(g.cookDish('travelers-rations')).toBe(true);
+    expect(g.trySwap(1)).toBe(true);
+    const swapped = g.activeUnit()!;
+    expect(swapped.heroId).toBe('lich');
+    expect(swapped.statuses.some((s) => s.tag === 'dish:travelers-rations')).toBe(true);
   });
 
   it('a revive dish stands a fallen hero back up', () => {
@@ -106,6 +122,26 @@ describe('cooking (GAMEPLAY_OVERHAUL §3.7)', () => {
     g.activeUnit()!.lastDealtDamageAt = g.sim.time; // recent combat
     expect(g.canCook().ok).toBe(false);
     expect(g.cookDish('hearty-stew')).toBe(false);
+  });
+});
+
+describe('town shrine restoration', () => {
+  it('regenerates off-field party members while the active hero rests in town', () => {
+    const g = Game.headless(partySave('tranquil-vale', ['juggernaut', 'lich']));
+    standAtShrine(g);
+    const active = g.activeUnit()!;
+    active.hp = 1;
+    active.mana = 1;
+    const offField = g.party[1];
+    offField.hpPct = 0.25;
+    offField.manaPct = 0.25;
+
+    g.update(1);
+
+    expect(active.hp).toBeGreaterThan(1);
+    expect(active.mana).toBeGreaterThan(1);
+    expect(offField.hpPct).toBeGreaterThan(0.25);
+    expect(offField.manaPct).toBeGreaterThan(0.25);
   });
 });
 

@@ -7,7 +7,7 @@ import { REG } from '../core/registry';
 import { buildTerrain, type TerrainInfo } from './terrain';
 import { applyAuthoredSilhouette, applyHeroLikeness, applyItemAppearances, attachHeroWeaponModel, attachHoldoutSignatureModel, attachSignatureItemWeapon, buildUnitRig, buildSelectionRing, mountHeroModel, recolorToPalette, type UnitRig } from './models';
 import { HeroAssetLoader, heroAssetEntry, creepCreatureUrl, BESPOKE_HERO_MODELS, ENABLED_HOLDOUT_MODELS, heroBaseId, holdoutSignatureUrl, itemWeaponGlbUrl } from './assets';
-import { animateRig, applyCinematicGesture, newAnimState, type AnimState } from './animator';
+import { animateRig, applyCinematicGesture, newAnimState, startTagIn, type AnimState } from './animator';
 import { loadVfxBeamRamp, loadVfxTextureAtlas, VfxManager } from './vfx';
 import { collisionBodyBoundingRadius, resolveUnitBodies, unitPickRadius as resolvedUnitPickRadius } from '../core/collision';
 import type { CinematicView } from './cinematic';
@@ -33,6 +33,14 @@ import { loadHdr, loadModelAsset, cloneModel } from './asset-loaders';
 // renders units/terrain/vfx, drives cameras and the day/night cycle.
 // Never mutates the sim.
 // ------------------------------------------------------------------
+
+// Render-position smoothing snaps (rather than lerps) when a sim position jumps
+// farther than this in one frame. 1.5 world units (150 sim units) stays above a
+// fast dash frame, but catches room-entry offsets, blink/reposition effects, and
+// off-field swap returns so rigs never drag through terrain.
+const TELEPORT_SNAP_WORLD_DIST = 1.5;
+const TELEPORT_SNAP_DIST_SQ = TELEPORT_SNAP_WORLD_DIST * TELEPORT_SNAP_WORLD_DIST;
+const TELEPORT_SNAP_SIM_DIST_SQ = (TELEPORT_SNAP_WORLD_DIST * WORLD_SCALE) ** 2;
 
 interface UnitView {
   rig: UnitRig;
@@ -157,13 +165,15 @@ const DUSK = {
   sunI: 0.78
 };
 const NIGHT = {
-  sky: new THREE.Color('#16213b'),
-  fog: new THREE.Color('#1d2a48'),
+  sky: new THREE.Color('#1d2c4d'),
+  fog: new THREE.Color('#27375c'),
   sun: new THREE.Color('#9db8e8'),
   // Moonlit, not pitch-black: enough hemi + moon key to read terrain and units
   // (GRAPHICS_SPEC §3.2). The cool sun color + dark sky + grade keep it night.
-  hemi: 0.56,
-  sunI: 0.5
+  // Lifted again — players still read night as "WAY too dark," so the moon key
+  // and hemi fill carry far more of the scene than the old 0.56/0.5 floor.
+  hemi: 0.92,
+  sunI: 0.72
 };
 
 // Color-grade + vignette post pass (GRAPHICS_SPEC §3.1). Tint/saturation/
@@ -315,7 +325,7 @@ const BIOME_GRADE: Record<string, GradeTarget> = {
   wasteland: { tint: [1.06, 0.95, 0.9], sat: 0.86, contrast: 1.1 },
   coast: { tint: [0.98, 1.01, 1.05], sat: 1.1, contrast: 1.05 }
 };
-const NIGHT_GRADE: GradeTarget = { tint: [0.82, 0.9, 1.14], sat: 0.78, contrast: 1.06 };
+const NIGHT_GRADE: GradeTarget = { tint: [0.86, 0.93, 1.12], sat: 0.82, contrast: 1.04, brightness: 1.16, vignette: 0.9 };
 const CINEMATIC_GRADES: { re: RegExp; grade: GradeTarget; strength: number }[] = [
   { re: /lightless|black|shadow|dark|severed|void/i, grade: { tint: [0.78, 0.82, 1.08], sat: 0.82, contrast: 1.24, brightness: 0.9, vignette: 0.5 }, strength: 0.48 },
   { re: /cryo|frost|ice|snow|banshee|blue|moon|silver|night|zet|violet/i, grade: { tint: [0.78, 0.92, 1.2], sat: 0.98, contrast: 1.14, brightness: 0.95, vignette: 0.56 }, strength: 0.42 },
@@ -375,6 +385,9 @@ export class GameScene {
   private ambientCritters: AmbientCritter[] = [];
   private ambientCritterGroup: THREE.Group | null = null;
   private views = new Map<number, UnitView>();
+  // uid -> element color for a queued Genshin-style tag-in flourish, consumed by
+  // updateView once the incoming hero's view exists (it may be created the same frame).
+  private pendingTagIns = new Map<number, string>();
   private crowdImpostors = new Map<string, CrowdImpostorBatch>();
   private heroAssets = new HeroAssetLoader();
   private disposed = false;
@@ -431,6 +444,12 @@ export class GameScene {
   private lookTarget: THREE.Vector3 | null = null;
   private lookUntil = 0;
   selectedUid = -1;
+  // The hero the player is actively driving (camera follow target). Like the
+  // selected unit, it is exempt from the crowd animation budget and the
+  // offscreen frustum-skip so the unit you control always renders at full
+  // fidelity — its textured GLB, full skeletal animation — regardless of what
+  // (if anything) you have clicked to select.
+  private drivenUid = -1;
   playerTeam = 0;
   private time = 0;
   private frameParity = 0; // flips 0/1 each frame to drive reduced-LOD animation cadence
@@ -590,7 +609,7 @@ export class GameScene {
       q.shadowMapSize = Math.max(q.shadowMapSize, 2048);
     }
     q.transientVfxCap = Math.max(0, Math.round(q.transientVfxCap * this.vfxDensity));
-    if (this.crowdDetail === 'full') q.fullRigAnimationBudget = Math.max(q.fullRigAnimationBudget, 64);
+    if (this.crowdDetail === 'full' || this.crowdDetail === 'auto') q.fullRigAnimationBudget = Math.max(q.fullRigAnimationBudget, 64);
     else if (this.crowdDetail === 'balanced') q.fullRigAnimationBudget = Math.min(q.fullRigAnimationBudget, 24);
     else if (this.crowdDetail === 'reduced') q.fullRigAnimationBudget = Math.min(q.fullRigAnimationBudget, 12);
     return q;
@@ -727,7 +746,12 @@ export class GameScene {
           model.traverse((o) => {
             o.userData.sharedAsset = true; // shared cached geometry; dispose pass skips it
             const m = o as THREE.Mesh;
-            if (m.isMesh) m.castShadow = true;
+            if (!m.isMesh) return;
+            m.castShadow = true;
+            // Animated critter GLBs are skinned, so they cull against a stale bind-pose
+            // bounding sphere and can pop out of view at certain angles — same class as the
+            // hero rig fix. Disable per-mesh culling (only a couple of critters, cheap).
+            m.frustumCulled = false;
           });
           const container = new THREE.Object3D();
           container.add(model);
@@ -780,7 +804,7 @@ export class GameScene {
         c.facing = Math.atan2(dy, dx);
         c.bob += dt * 6;
       }
-      const gy = this.terrain.heightAt(c.pos.x, c.pos.y);
+      const gy = this.visualGroundHeightAt(c.pos.x, c.pos.y);
       const bob = moving ? Math.abs(Math.sin(c.bob)) * 0.05 : 0;
       c.obj.position.set(c.pos.x / WORLD_SCALE, gy + bob, c.pos.y / WORLD_SCALE);
       c.obj.rotation.y = Math.atan2(Math.cos(c.facing), Math.sin(c.facing));
@@ -1100,6 +1124,7 @@ export class GameScene {
     // Decay the WS-H micro-feedback envelopes (shake fades fast, accent slower).
     if (this.shakeTrauma > 0) this.shakeTrauma = Math.max(0, this.shakeTrauma - renderDt * 1.9);
     if (this.accentStrength > 0) this.accentStrength = Math.max(0, this.accentStrength - renderDt * 0.85);
+    this.drivenUid = followUnit?.uid ?? -1;
     this.refreshViewFrustum();
     this.syncUnits(sim, renderDt);
     this.syncGroundItems(groundItems);
@@ -1604,7 +1629,7 @@ export class GameScene {
       });
       const mesh = new THREE.Mesh(geo, material);
       mesh.rotation.x = -Math.PI / 2;
-      mesh.position.set(x / WORLD_SCALE, this.terrain.heightAt(x, y) + 0.28, y / WORLD_SCALE);
+      mesh.position.set(x / WORLD_SCALE, this.visualGroundHeightAt(x, y) + 0.28, y / WORLD_SCALE);
       mesh.renderOrder = 50;
       mesh.visible = false;
       this.scene.add(mesh);
@@ -1665,8 +1690,11 @@ export class GameScene {
         marker.y = g.y;
         this.questGivers.set(g.id, marker);
       }
-      // Ease toward the target so a patrol step reads as a walk, not a teleport.
-      const k = this.reducedMotion ? 1 : 0.12;
+      // Ease toward the target so a patrol step reads as a walk — but a real jump
+      // (first placement, a relocated giver) should snap rather than glide the
+      // marker across (and through) the terrain.
+      const jumped = (g.x - marker.x) ** 2 + (g.y - marker.y) ** 2 > TELEPORT_SNAP_SIM_DIST_SQ;
+      const k = this.reducedMotion || jumped ? 1 : 0.12;
       marker.x += (g.x - marker.x) * k;
       marker.y += (g.y - marker.y) * k;
       const gy = this.visualGroundHeightAt(marker.x, marker.y);
@@ -1699,6 +1727,13 @@ export class GameScene {
     if (ev.t === 'attack-launch') {
       const view = this.views.get(ev.uid);
       if (view) view.anim.lungeFlash = Math.max(view.anim.lungeFlash, 0.35);
+    }
+    if (ev.t === 'hero-tag') {
+      // The swapped-in unit's view may not exist yet this frame; stash the cue and
+      // let updateView fire the flourish once the rig is present.
+      const view = this.views.get(ev.uid);
+      if (view) startTagIn(view.anim, ev.color);
+      else this.pendingTagIns.set(ev.uid, ev.color);
     }
     // WS-H: marquee casts tint the frame toward their element and (for the big
     // containment/pull ults) give a small shake. Cheap, decays on its own.
@@ -1759,8 +1794,14 @@ export class GameScene {
     const seen = new Set<number>();
     let fullAnimationBudget = this.quality.fullRigAnimationBudget;
     this.beginCrowdImpostors();
-    for (const u of sim.unitsArr) {
-      if (u.kind === 'npc' && !u.alive) continue;
+    // Spend the full-rig animation budget on the NEAREST units first. The budget
+    // and crowd-impostor (cone) decision are order-dependent, so iterating in raw
+    // spawn order let far units claim the budget and starve nearby creeps into
+    // impostors — the "creeps turn into cones" bug, made obvious by night fog.
+    // Sorting by camera distance guarantees close units always get full models.
+    const ordered = sim.unitsArr.filter((u) => !(u.kind === 'npc' && !u.alive));
+    ordered.sort((a, b) => this.cameraDistanceSq(a) - this.cameraDistanceSq(b));
+    for (const u of ordered) {
       seen.add(u.uid);
       const tier = this.lodTierForUnit(u);
       if (shouldUseCrowdImpostor({
@@ -1799,11 +1840,28 @@ export class GameScene {
     }
   }
 
+  /** Units the player is focused on (selected or driven): never throttled or culled. */
+  private isPriorityUnit(uid: number): boolean {
+    return uid === this.selectedUid || uid === this.drivenUid;
+  }
+
   private lodTierForUnit(u: Unit): LodTier {
     const wx = u.pos.x / WORLD_SCALE;
     const wz = u.pos.y / WORLD_SCALE;
     const distLod = Math.hypot(wx - this.camTarget.x, wz - this.camTarget.z);
     return lodForDistance(distLod / this.drawDistanceScale);
+  }
+
+  /** Squared world-space distance from the camera focus, for nearest-first sorts. */
+  private cameraDistanceSq(u: Unit): number {
+    // Priority units (selected / driven hero) sort first so they never lose their
+    // full rig to the budget regardless of how far they roam.
+    if (this.isPriorityUnit(u.uid)) return -1;
+    const wx = u.pos.x / WORLD_SCALE;
+    const wz = u.pos.y / WORLD_SCALE;
+    const dx = wx - this.camTarget.x;
+    const dz = wz - this.camTarget.z;
+    return dx * dx + dz * dz;
   }
 
   private hideViewForCrowd(view: UnitView): void {
@@ -1838,7 +1896,7 @@ export class GameScene {
     if (batch.count >= batch.capacity) return;
     const wx = u.pos.x / WORLD_SCALE;
     const wz = u.pos.y / WORLD_SCALE;
-    const y = this.visualGroundHeightAt(u.pos.x, u.pos.y);
+    const y = this.visualGroundHeightAt(u.pos.x, u.pos.y) + (u.renderHeight ?? 0) / WORLD_SCALE;
     const s = Math.max(0.55, spec.sil.scale ?? 1);
     const rotY = Math.atan2(Math.cos(u.facing), Math.sin(u.facing));
     this.crowdPos.set(wx, y, wz);
@@ -1961,6 +2019,12 @@ export class GameScene {
           const model = cloneModel(asset.scene);
           recolorToPalette(model, palette);
           mountHeroModel(rig, model, asset.animations);
+          // Within-cohort identity: stretch the shared base to this hero's
+          // proportions and layer its innate gear over the bare body. Without
+          // this the recruited (cohort) hero mounted a generic, gearless base —
+          // the "recruited model is broken" report. The dedicated-GLB path
+          // already does this; the shared-base path must too.
+          if (!isHoldoutReplacement && !isBespokeHeroModel) applyAuthoredSilhouette(rig, renderHeroId!, palette);
           applyItemAppearances(rig, this.itemAppearancesFor(u));
           this.applySignatureWeapon(rig, u, token);
         }
@@ -2125,11 +2189,21 @@ export class GameScene {
 
     const wy = this.visualGroundHeightAt(u.pos.x, u.pos.y);
 
-    // smooth visual position (sim ticks at 30 Hz; render is faster)
+    // smooth visual position (sim ticks at 30 Hz; render is faster). A real
+    // teleport (blink, a swap that repositions an off-field hero to the tag
+    // point, a deep-water washback) jumps far past anything walking/sprinting
+    // can cover in a frame; lerping that would drag the rig *through* terrain
+    // and read as ground clipping, so snap on a big jump instead of sliding.
     const k = Math.min(1, dt * 18);
-    if (rig.root.position.lengthSq() === 0) rig.root.position.set(wx, wy, wz);
-    rig.root.position.x += (wx - rig.root.position.x) * k;
-    rig.root.position.z += (wz - rig.root.position.z) * k;
+    const dxw = wx - rig.root.position.x;
+    const dzw = wz - rig.root.position.z;
+    const teleported = dxw * dxw + dzw * dzw > TELEPORT_SNAP_DIST_SQ;
+    if (rig.root.position.lengthSq() === 0 || teleported) {
+      rig.root.position.set(wx, wy, wz);
+    } else {
+      rig.root.position.x += dxw * k;
+      rig.root.position.z += dzw * k;
+    }
     rig.root.position.y = this.visualGroundHeightAt(
       rig.root.position.x * WORLD_SCALE,
       rig.root.position.z * WORLD_SCALE
@@ -2142,6 +2216,12 @@ export class GameScene {
     while (dr < -Math.PI) dr += Math.PI * 2;
     rig.root.rotation.y += dr * Math.min(1, dt * 12);
 
+    const pendingTagColor = this.pendingTagIns.get(u.uid);
+    if (pendingTagColor !== undefined) {
+      startTagIn(view.anim, pendingTagColor);
+      this.pendingTagIns.delete(u.uid);
+    }
+
     const needsUniqueMaterials = this.needsUniqueMaterials(u, view, simTime);
     if (needsUniqueMaterials) this.ensureUniqueMaterials(view);
     else this.restoreSharedMaterials(view);
@@ -2149,8 +2229,8 @@ export class GameScene {
     // Overworld LOD (§3.16): far units freeze their pose, mid units animate at
     // a reduced cadence. The crowd budget prevents same-screen armies from all
     // paying full authored-mixer cost at once; overflow drops to reduced cadence.
-    const animationTier = tier === 'full' && u.uid !== this.selectedUid && fullAnimationBudget <= 0 ? 'reduced' : tier;
-    if (tier === 'full' && u.uid !== this.selectedUid && fullAnimationBudget > 0) fullAnimationBudget--;
+    const animationTier = tier === 'full' && !this.isPriorityUnit(u.uid) && fullAnimationBudget <= 0 ? 'reduced' : tier;
+    if (tier === 'full' && !this.isPriorityUnit(u.uid) && fullAnimationBudget > 0) fullAnimationBudget--;
     if (shouldAnimateAtLod(animationTier, this.frameParity)) {
       animateRig(rig, u, view.anim, dt, this.time, simTime);
     }
@@ -2189,7 +2269,7 @@ export class GameScene {
   }
 
   private shouldSkipOffscreenUnit(u: Unit, view: UnitView, wx: number, wz: number): boolean {
-    if (u.uid === this.selectedUid || !u.alive) return false;
+    if (this.isPriorityUnit(u.uid) || !u.alive) return false;
     const centerY = view.rig.root.position.lengthSq() > 0
       ? view.rig.root.position.y + view.rig.height * 0.55
       : this.camTarget.y + view.rig.height * 0.55;
@@ -2231,6 +2311,7 @@ export class GameScene {
       (u.summary.invisible && u.team === this.playerTeam) ||
       (u.alive && u.isEcho) ||
       view.anim.hitFlash > 0 ||
+      view.anim.tagInT > 0 ||
       u.summary.frozen ||
       u.summary.rooted ||
       !visibleToPlayer
@@ -2342,8 +2423,13 @@ export class GameScene {
       attachSignatureItemWeapon(rig, null);
       return;
     }
+    // Snapshot the equipment epoch: if another visual refresh lands while the GLB
+    // loads (e.g. two items used in the same beat), the newer refresh owns the
+    // weapon and this stale resolution must not clobber it.
+    const epoch = u.visualEpoch;
     void loadModelAsset(url).then((asset) => {
       if (!asset || !this.isLive() || token !== this.sceneToken || this.views.get(u.uid)?.rig !== rig) return;
+      if (u.visualEpoch !== epoch) return;
       // The artifact may have been unequipped while the GLB loaded.
       if (this.signatureWeaponUrlFor(u) !== url) return;
       attachSignatureItemWeapon(rig, cloneModel(asset.scene));
@@ -2435,7 +2521,7 @@ export class GameScene {
     // (day ~0.27, night ~0.13) and the photographic terrain albedo is darker than
     // the procedural floor, so the ground read near-black; lift the ambient read
     // day and night while keeping night clearly dimmer than noon (§3.2).
-    const envI = (isDay ? 0.55 + 0.45 * elev : 0.42 + 0.18 * elev) * 0.46;
+    const envI = (isDay ? 0.55 + 0.45 * elev : 0.7 + 0.2 * elev) * 0.46;
     (this.scene as unknown as { environmentIntensity: number }).environmentIntensity = envI;
 
     // Sky dome gradient: deepened zenith over a hazy horizon that matches fog.

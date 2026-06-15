@@ -8,7 +8,7 @@ import { itemReady } from './items';
 import { cannotAttack, cannotCast, cannotMove, isDisabled } from './status';
 import { unitHitRadius, unitTargetRadius } from './collision';
 import type { Unit } from './unit';
-import { faceToward, integrateForcedMoves, steerToward } from './movement';
+import { faceToward, followPath, integrateForcedMoves, steerToward } from './movement';
 import { levelArr } from './values';
 import { gestureForAbility, soundForAbility } from './gestures';
 import type { AbilityDef } from './types';
@@ -131,7 +131,7 @@ export function updateUnitActions(sim: Sim, u: Unit, dt: number): void {
     }
     case 'move': {
       u.windupUntil = -1;
-      if (steerToward(sim, u, u.order.point, dt, Math.max(12, u.radius * 0.5))) {
+      if (followPath(sim, u, u.order.point, dt, Math.max(12, u.radius * 0.5))) {
         u.order = { kind: 'stop' };
       }
       break;
@@ -139,10 +139,11 @@ export function updateUnitActions(sim: Sim, u: Unit, dt: number): void {
     case 'attack-move': {
       const enemy = nearestEnemyOnAttackMovePath(sim, u, u.order.point);
       if (enemy) {
+        u.clearNav();
         pursueAndAttack(sim, u, enemy, dt);
       } else {
         u.windupUntil = -1;
-        if (steerToward(sim, u, u.order.point, dt, Math.max(12, u.radius * 0.5))) u.order = { kind: 'stop' };
+        if (followPath(sim, u, u.order.point, dt, Math.max(12, u.radius * 0.5))) u.order = { kind: 'stop' };
       }
       break;
     }
@@ -253,6 +254,13 @@ function attackIfInRange(sim: Sim, u: Unit, target: Unit, dt: number): void {
   // begin windup
   u.windupUntil = now + u.stats.attackPoint;
   u.windupTargetUid = target.uid;
+  // Melee swing audio cue: ranged attackers get their own `attack-launch` at
+  // release, but melee had no sound at the moment of swinging. Emit the swing
+  // when the windup starts so the blade whoosh leads the contact.
+  const projSpeed = u.base.attackProjectileSpeed;
+  if (!(projSpeed && projSpeed > 0)) {
+    sim.events.emit({ t: 'attack-windup', uid: u.uid, target: target.uid });
+  }
   breakInvis(sim, u);
 }
 
@@ -473,12 +481,23 @@ function handleItemOrder(sim: Sim, u: Unit, dt: number): void {
   }
 
   const active = def.active;
-  const target = u.order.uid !== undefined ? sim.unit(u.order.uid) : undefined;
+  let target = u.order.uid !== undefined ? sim.unit(u.order.uid) : undefined;
   const point = u.order.point;
 
-  if (active.targeting === 'unit-target' && (!target || !target.alive)) {
-    u.order = { kind: 'stop' };
-    return;
+  if (active.targeting === 'unit-target') {
+    const allyOnly = active.affects === 'ally';
+    const usable = !!target && target.alive && (!allyOnly || target.team === u.team);
+    if (!usable) {
+      // Self-castable items (Healing Salve, etc.) default to the caster when no
+      // valid ally target is supplied — e.g. quick-cast with nothing (or an
+      // enemy) under the cursor.
+      if (active.affects === 'ally' || active.affects === 'any') {
+        target = u;
+      } else {
+        u.order = { kind: 'stop' };
+        return;
+      }
+    }
   }
 
   const castRange = (typeof active.castRange === 'number' ? active.castRange : 600) + u.stats.castRangeBonus;

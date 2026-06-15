@@ -476,7 +476,7 @@ export const TUNING = {
   captainCallSec: 5,
 
   // --- items ---
-  activeItemSlots: 4,         // Z/X/C/V; slots 5-6 passive-only
+  activeItemSlots: 6,         // all 6 slots are key-bound (Z/X/C/V + item-5/item-6)
   itemSlots: 6,
   sellRatio: 0.5,
 

@@ -766,12 +766,30 @@ function scoreAbility(sim: Sim, u: Unit, slot: number, focus: Unit | null, profi
     slot
   });
 
-  // toggle: switch on once enemies are close
+  // toggle: switch on once enemies are close, and — for self-draining toggles
+  // like Pudge's Rot — switch back OFF when keeping it on only hurts us. Without
+  // the off-scorer the boss left Rot running forever and slowly bled itself to
+  // the 1-HP floor while idle/leashing (it never "killed itself", but read that
+  // way). Non-draining toggles still latch on as before.
   if (t === 'toggle') {
-    if (a.toggled) return null;
-    if (enemiesNear(sim, u, u.stats.attackRange + 320) === 0) return null;
-    const order: Order = { kind: 'cast', slot };
-    return finish(0.7 * profile.weights.aggression, order);
+    const selfDraining = a.def.toggle?.selfDamagePerSec != null;
+    const enemiesClose = enemiesNear(sim, u, u.stats.attackRange + 320) > 0;
+    const hpPct = u.hp / Math.max(1, u.stats.maxHp);
+    if (a.toggled) {
+      // Only self-draining toggles are worth spending an action to cancel.
+      if (!selfDraining) return null;
+      // Turn off when there's no enemy to hurt, or we're too low to keep paying
+      // the self-damage (the drain would otherwise pin us at 1 HP).
+      if (!enemiesClose || hpPct < profile.retreatHpPct) {
+        return finish(0.95 * profile.weights.aggression, { kind: 'cast', slot });
+      }
+      return null;
+    }
+    if (!enemiesClose) return null;
+    // Don't switch a self-drainer ON while already wounded — it would just resume
+    // bleeding us down.
+    if (selfDraining && hpPct < profile.retreatHpPct) return null;
+    return finish(0.7 * profile.weights.aggression, { kind: 'cast', slot });
   }
 
   const w = profile.weights;

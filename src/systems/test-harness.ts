@@ -139,6 +139,8 @@ export interface TestPerfStats {
 export interface TestInputState {
   hoverUid: number;
   hoverGround: { x: number; y: number } | null;
+  /** The unit whose inspect card is pinned by a left-click (-1 when none). */
+  inspectUid: number;
   targeting: TargetingState;
 }
 
@@ -200,7 +202,7 @@ export interface TestApi {
 
 export interface HarnessDeps {
   getGame: () => Game | null;
-  getInput?: () => { hoverUid: number; hoverGround: { x: number; y: number } | null; targeting: TargetingState } | null;
+  getInput?: () => { hoverUid: number; hoverGround: { x: number; y: number } | null; inspectUid?: number; targeting: TargetingState } | null;
   start: (save: GameSave, opts?: { headless?: boolean; hud?: boolean }) => void;
   load: (save: GameSave) => void;
   shutdown?: () => void;
@@ -274,6 +276,8 @@ export function makeTestApi(deps: HarnessDeps): TestApi {
       const game = deps.getGame();
       if (!game) return;
       for (const rec of game.party) {
+        rec.hpPct = 1;
+        rec.manaPct = 1;
         const u = rec.unit;
         if (u && u.alive) {
           u.hp = u.stats.maxHp;
@@ -381,6 +385,7 @@ export function makeTestApi(deps: HarnessDeps): TestApi {
         ? {
             hoverUid: input.hoverUid,
             hoverGround: input.hoverGround ? { ...input.hoverGround } : null,
+            inspectUid: input.inspectUid ?? -1,
             targeting: { ...input.targeting } as TargetingState
           }
         : null;

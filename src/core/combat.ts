@@ -275,6 +275,7 @@ export function attackImpact(sim: Sim, attacker: Unit, victim: Unit): void {
     attacker.removeStatusWhere((s) => s.tag === tag);
   }
 
-  sim.events.emit({ t: 'attack-impact', uid: attacker.uid, target: victim.uid });
+  const projSpeed = attacker.base.attackProjectileSpeed;
+  sim.events.emit({ t: 'attack-impact', uid: attacker.uid, target: victim.uid, melee: !(projSpeed && projSpeed > 0) });
   sim.runTriggers(attacker, 'on-attack-land', { other: victim });
 }

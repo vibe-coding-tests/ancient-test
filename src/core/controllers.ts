@@ -81,20 +81,33 @@ function thinkCreep(sim: Sim, u: Unit): void {
   }
 
   const aggroR = u.aggroRadius ?? TUNING.creepAggroRadius;
-  const enemy = nearestEnemy(sim, u, aggroR);
+  // Aggro on proximity, or on anyone who recently damaged us (even from beyond aggro range).
+  const enemy = nearestEnemy(sim, u, aggroR) ?? recentAttacker(sim, u);
   if (enemy) {
     u.order = chooseUtilityOrder(sim, u, enemy) ?? { kind: 'attack-unit', uid: enemy.uid };
     return;
   }
 
-  // idle wander around camp
+  // Idle behaviour around camp: a calm patrol, not aimless circling. Most beats
+  // are a rest in place; occasionally the creep ambles to a nearby point biased
+  // toward home so the camp reads as settled. The move order routes via A*
+  // (movement.ts → pathfind.ts), so a pick is reached cleanly or, if walled off,
+  // resolves to a clean stop instead of orbiting a prop forever.
   if (u.order.kind === 'stop') {
     if (c.nextThinkAt === undefined || sim.time >= c.nextThinkAt) {
-      c.nextThinkAt = sim.time + 3 + (u.uid % 5);
-      const ang = sim.rng.range(0, Math.PI * 2);
-      const r = sim.rng.range(0, TUNING.creepWanderRadius);
-      c.wanderTarget = v2(home.x + Math.cos(ang) * r, home.y + Math.sin(ang) * r);
-      u.order = { kind: 'move', point: c.wanderTarget };
+      const restBeat = sim.rng.next() < 0.55;
+      if (restBeat) {
+        // Stand and idle for a spell (longer, varied pauses kill the jitter).
+        c.nextThinkAt = sim.time + sim.rng.range(2.5, 5.5);
+      } else {
+        c.nextThinkAt = sim.time + sim.rng.range(4, 9);
+        const ang = sim.rng.range(0, Math.PI * 2);
+        // sqrt avoids clustering picks at the rim; the 0.65 factor keeps the
+        // amble close to home so creeps don't drift out to the leash edge.
+        const r = Math.sqrt(sim.rng.next()) * TUNING.creepWanderRadius * 0.65;
+        c.wanderTarget = v2(home.x + Math.cos(ang) * r, home.y + Math.sin(ang) * r);
+        u.order = { kind: 'move', point: c.wanderTarget };
+      }
     }
   }
 }
@@ -105,6 +118,22 @@ function nearestEnemyOf(sim: Sim, u: Unit, around: Vec2, radius: number): Unit |
     radius,
     (o) => o.alive && o.team !== u.team && o.kind !== 'npc' && !o.summary.untargetable && o.isVisibleTo(u.team, sim.time)
   );
+}
+
+// Most recent valid enemy that has damaged this unit within the participant-window span.
+// Lets creeps retaliate against ranged attackers that hit them from outside aggro range.
+function recentAttacker(sim: Sim, u: Unit): Unit | null {
+  let best: Unit | null = null;
+  let bestAt = -Infinity;
+  for (const r of u.recentDamagers) {
+    if (sim.time - r.at >= TUNING.participantWindowSec) continue;
+    if (r.at <= bestAt) continue;
+    const o = sim.unit(r.uid);
+    if (!o || !o.alive || o.team === u.team || o.kind === 'npc' || o.summary.untargetable || !o.isVisibleTo(u.team, sim.time)) continue;
+    best = o;
+    bestAt = r.at;
+  }
+  return best;
 }
 
 function thinkBoss(sim: Sim, u: Unit): void {
@@ -170,6 +199,9 @@ export function thinkGambit(sim: Sim, u: Unit): void {
       focus = pickUtilityFocus(sim, u, (o) => withinLeash(u, o)) ?? undefined;
     }
   }
+  // Retaliate against anyone who recently damaged us, even from beyond our leash tether.
+  // The leash block above still reels the unit back home if it overextends in the chase.
+  if (!focus) focus = recentAttacker(sim, u) ?? undefined;
   c.focusUid = focus?.uid;
   if (focus) c.encounterStartAt ??= sim.time;
   else c.encounterStartAt = undefined;

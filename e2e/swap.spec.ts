@@ -196,6 +196,74 @@ test.describe('swap — overworld tag-in through the live loop', () => {
   });
 });
 
+test.describe('swap — WebGL presentation contracts', () => {
+  test('a live swap emits the tag-in cue and keeps the arriving rig planted', async ({ page }) => {
+    const errors = watchPageErrors(page);
+    await boot(page, { hero: 'juggernaut', seed: 78, webgl: true, quality: 'low' });
+    await clearCinematics(page);
+    await page.evaluate(() => (window as any).__test.fillParty({ heroIds: ['earthshaker'], level: 20 }));
+    await clearCinematics(page);
+
+    const result = await page.evaluate(() => {
+      const g = (window as any).__game;
+      const t = (window as any).__test;
+      const swapped = g.trySwap(1);
+      const samples: { bodyY: number; scale: number; rootY: number; tagInT: number; visible: boolean }[] = [];
+
+      // `hero-tag` is a presentation event: it is queued by trySwap and only drained
+      // into g.frameEvents on the next update() — it never lands in sim.events.history.
+      // Accumulate it from the live frame buffer each step, which is the exact buffer
+      // the audio layer reads to fire swapTagIn(ev.boon).
+      let heroTags = 0;
+      for (let i = 0; i < 14; i++) {
+        t.step(33);
+        heroTags += (g.frameEvents ?? []).filter((e: any) => e.t === 'hero-tag').length;
+        const active = g.activeUnit();
+        const view = g.scene?.views?.get(active?.uid);
+        if (!view) continue;
+        samples.push({
+          bodyY: view.rig.body.position.y,
+          scale: view.rig.body.scale.x,
+          rootY: view.rig.root.position.y,
+          tagInT: view.anim.tagInT,
+          visible: view.rig.root.visible
+        });
+      }
+
+      const finite = samples.every((s) =>
+        Number.isFinite(s.bodyY) && Number.isFinite(s.scale) && Number.isFinite(s.rootY) && s.visible
+      );
+      return {
+        mode: t.mode,
+        swapped,
+        heroTags,
+        sawTagInAnim: samples.some((s) => s.tagInT > 0),
+        samples,
+        finite,
+        minBodyY: Math.min(...samples.map((s) => s.bodyY)),
+        minScale: Math.min(...samples.map((s) => s.scale)),
+        maxScale: Math.max(...samples.map((s) => s.scale)),
+        finalScale: samples.at(-1)?.scale ?? 0,
+        finalTagInT: samples.at(-1)?.tagInT ?? -1
+      };
+    });
+
+    const diag = JSON.stringify(result);
+    expect(result.mode, diag).toBe('webgl');
+    expect(result.swapped, diag).toBe(true);
+    expect(result.heroTags, diag).toBeGreaterThanOrEqual(1);
+    expect(result.sawTagInAnim, diag).toBe(true); // the arrival flourish actually started on the rig
+    expect(result.samples.length, diag).toBeGreaterThan(4);
+    expect(result.finite, diag).toBe(true);
+    expect(result.minBodyY, diag).toBeGreaterThanOrEqual(0);
+    expect(result.minScale, diag).toBeGreaterThanOrEqual(0.78);
+    expect(result.maxScale, diag).toBeLessThan(1.04);
+    expect(result.finalScale, diag).toBeCloseTo(1, 5);
+    expect(result.finalTagInT, diag).toBe(0);
+    expectNoPageErrors(errors);
+  });
+});
+
 test.describe('swap — HUD + input routing', () => {
   test('number keys swap the active overworld hero and the HUD survives the swap', async ({ page }) => {
     const errors = watchPageErrors(page);

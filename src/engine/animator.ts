@@ -28,6 +28,10 @@ const POSE: CastPose = { l: 0, r: 0, bodyZ: 0, bodyY: 0, bodyX: 0 };
 const GROUND_BOX = new THREE.Box3();
 const GROUND_ROOT_POS = new THREE.Vector3();
 const DEATH_GROUND_MARGIN = 0.02;
+// Render-space ground speed (≈ hero moveSpeed units/sec) at which an authored run
+// clip plays at its native 1× cadence. Tuned below a typical jog (~300) so the
+// default gait reads as a brisk run rather than a slow walk.
+const RUN_CLIP_NOMINAL_SPEED = 220;
 
 type AttackStyle =
   | 'heavy-chop'
@@ -170,6 +174,9 @@ export interface AnimState {
   lastWindupUntil: number;
   lastCastUntil: number;
   deathClipStarted: boolean;
+  tagInT: number;        // Genshin-style tag-in arrival flourish, counts down to 0
+  tagInDur: number;
+  tagInColor: THREE.Color;
 }
 
 export function newAnimState(): AnimState {
@@ -186,8 +193,55 @@ export function newAnimState(): AnimState {
     clipLockUntil: 0,
     lastWindupUntil: 0,
     lastCastUntil: 0,
-    deathClipStarted: false
+    deathClipStarted: false,
+    tagInT: 0,
+    tagInDur: 0,
+    tagInColor: new THREE.Color('#ffffff')
   };
+}
+
+const TAG_IN_DURATION = 0.42;
+
+/** Kick off the swap-in arrival flourish (scale pop + drop-in + element glow). */
+export function startTagIn(st: AnimState, color: string, dur = TAG_IN_DURATION): void {
+  st.tagInT = dur;
+  st.tagInDur = dur;
+  st.tagInColor.set(color);
+}
+
+/** Drives the Genshin-style "tag-in" body flourish: the incoming hero drops in
+ *  from just above the ground with an overshooting scale pop and a quick element
+ *  glow that fades as they settle. Presentation-only; applied after the base pose
+ *  so it overrides body transform for the brief arrival window. */
+function applyTagIn(rig: UnitRig, st: AnimState, dt: number): void {
+  if (st.tagInT <= 0) return;
+  st.tagInT = Math.max(0, st.tagInT - dt);
+  const dur = st.tagInDur || TAG_IN_DURATION;
+  const p = Math.min(1, 1 - st.tagInT / dur); // 0 -> 1
+  // Landing drop: a short hop *above* the ground that eases down to a planted
+  // rest. Scaled to the rig height so tall and short heroes read the same, and
+  // kept modest so the arrival lands crisply instead of floating in from far up.
+  const drop = Math.pow(1 - p, 3) * rig.height * 0.3;
+  rig.body.position.y += drop;
+  // Scale pop with a slight overshoot just before settling (easeOutBack). Starts
+  // at 0.78 (not a half-size figure that reads as "sunk into the ground") so the
+  // hero only ever pops *up* to full size as they plant.
+  const c1 = 1.70158;
+  const c3 = c1 + 1;
+  const eb = 1 + c3 * Math.pow(p - 1, 3) + c1 * Math.pow(p - 1, 2);
+  rig.body.scale.setScalar(0.78 + 0.22 * eb);
+  // element glow flashes on arrival, fades as the hero settles
+  const glow = (1 - p) * 0.9;
+  if (glow > 0) {
+    for (const m of rig.materials) {
+      m.emissive.setRGB(st.tagInColor.r * glow, st.tagInColor.g * glow, st.tagInColor.b * glow);
+    }
+  }
+  if (st.tagInT <= 0) rig.body.scale.setScalar(1);
+  // Guarantee the arrival never punches feet through the floor — the scale pop
+  // and drop only ever lift the rig *up*, but authored GLB feet can sit below
+  // the body origin, so clamp the real bounds (no-op while floating in).
+  keepRigAboveGround(rig);
 }
 
 function switchAuthoredAction(rig: UnitRig, name: AuthoredActionName, fade = 0.12): void {
@@ -220,7 +274,12 @@ function playAuthoredOneShot(
   void lockUntil;
 }
 
-function keepDeathPoseAboveGround(rig: UnitRig): void {
+/** Lift the rig body just enough that its world bounding box never dips below the
+ *  ground line (root Y + a small margin). One-directional: it only ever corrects
+ *  sinking, so float-above poses (the death slump, the tag-in drop-in) are left
+ *  alone. Handles authored GLB bounds + root scale, so it works where a naive
+ *  "body.position.y >= 0" clamp (feet-at-origin only) would miss. */
+function keepRigAboveGround(rig: UnitRig): void {
   rig.root.updateMatrixWorld(true);
   GROUND_BOX.setFromObject(rig.body);
   if (GROUND_BOX.isEmpty() || !Number.isFinite(GROUND_BOX.min.y)) return;
@@ -260,7 +319,7 @@ function animateAuthoredRig(
       body.position.y = -st.deathT * 0.4;
     }
     rig.mixer?.update(dt);
-    keepDeathPoseAboveGround(rig);
+    keepRigAboveGround(rig);
     return;
   }
 
@@ -294,6 +353,17 @@ function animateAuthoredRig(
     restoreAuthoredLoop(rig, moving, !!(unit.channel || unit.captureCh));
   }
 
+  // Authored run clips are baked at one fixed cadence; left at timeScale 1 they
+  // read as a slow shuffle while the unit slides across the ground much faster.
+  // Tie the playback rate to actual render-space speed so a jog/sprint matches.
+  const runAction = rig.actions?.run;
+  if (runAction) {
+    runAction.timeScale =
+      rig.activeAction === 'run'
+        ? Math.min(2.4, Math.max(0.8, st.speedSmooth / RUN_CLIP_NOMINAL_SPEED))
+        : 1;
+  }
+
   if (st.lungeFlash > 0) {
     body.position.x += st.lungeFlash * 0.2;
     st.lungeFlash = Math.max(0, st.lungeFlash - dt * 7);
@@ -319,6 +389,7 @@ function animateAuthoredRig(
   }
 
   rig.mixer?.update(dt);
+  keepRigAboveGround(rig);
 }
 
 export function animateRig(rig: UnitRig, unit: Unit, st: AnimState, dt: number, time: number, simTime: number): void {
@@ -338,7 +409,7 @@ export function animateRig(rig: UnitRig, unit: Unit, st: AnimState, dt: number, 
     const t = st.deathT;
     body.rotation.z = (Math.PI / 2) * t;
     body.position.y = -t * 0.4;
-    keepDeathPoseAboveGround(rig);
+    keepRigAboveGround(rig);
     rig.root.traverse((o) => {
       const m = (o as { material?: { transparent?: boolean; opacity?: number } }).material;
       if (m && typeof m.opacity === 'number') {
@@ -359,6 +430,7 @@ export function animateRig(rig: UnitRig, unit: Unit, st: AnimState, dt: number, 
 
   if (rig.mixer && rig.actions && Object.keys(rig.actions).length > 0) {
     animateAuthoredRig(rig, unit, st, dt, time, simTime, moving, bob);
+    applyTagIn(rig, st, dt);
     return;
   }
 
@@ -472,6 +544,8 @@ export function animateRig(rig: UnitRig, unit: Unit, st: AnimState, dt: number, 
   if (eye && eye.name === 'ward-eye') {
     eye.rotation.y = time * 2.5;
   }
+
+  applyTagIn(rig, st, dt);
 }
 
 /** Presentation-only gesture pose for STORY cut-scene beats.
@@ -483,4 +557,5 @@ export function applyCinematicGesture(rig: UnitRig, gesture: AnimGesture, time: 
   rig.body.rotation.z = pose.bodyZ;
   rig.body.position.y += pose.bodyY;
   rig.body.position.x += pose.bodyX;
+  keepRigAboveGround(rig);
 }

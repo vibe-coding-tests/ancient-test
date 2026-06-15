@@ -20,7 +20,7 @@ import { describeRule, validateDraft } from '../core/draft';
 import { statLabel, fmtStatValue, statLines, buildAbilityCard, buildItemCard, buildNeutralItemCard, buildHeroCard, type TooltipCard } from '../core/describe';
 import { abilityIcon, itemIcon, neutralItemIcon, heroPortrait } from '../engine/icons';
 import { WORLD_SCALE } from '../engine/scale';
-import { Game } from '../systems/game';
+import { Game, type TownServiceKind } from '../systems/game';
 import { ACTION_META, INPUT_ACTIONS, canRebindAction, glyphForAction, keyEventToBinding, rebindAction, resetKeyBindings } from '../systems/keybindings';
 import type { InputController } from '../systems/input';
 import type { Unit } from '../core/unit';
@@ -34,6 +34,7 @@ import * as THREE from 'three';
 
 const GOLD_STREAK_WINDOW_MS = 1500;
 const RARITY_ORDER: ItemRarity[] = ['common', 'uncommon', 'rare', 'mythical', 'legendary', 'immortal', 'arcana'];
+type ServicesTab = TownServiceKind;
 const STATUS_LABELS: Record<StatusId, string> = {
   stun: 'Stun',
   root: 'Root',
@@ -371,12 +372,13 @@ export class Hud {
   private draftDragId: string | null = null; // heroId being dragged (drag-and-drop, §7)
   private draftHoverId: string | null = null; // heroId under the cursor for the reach readout
   private dungeonEntryId: string | null = null;
+  private servicesTab: ServicesTab = 'armory';
 
   private floaters: Floater[] = [];
   private contactFloaterAt = new Map<string, number>();
   private coinFx: CoinFx[] = [];
-  private shownToasts = 0;
-  private modalKind: 'none' | 'party' | 'shop' | 'menu' | 'talents' | 'journal' | 'codex' | 'character' | 'help' | 'gambit' | 'prefight' | 'draft' | 'elite-draft' | 'dungeon-entry' | 'services' = 'none';
+  private lastShownToastId = 0;
+  private modalKind: 'none' | 'party' | 'shop' | 'menu' | 'journal' | 'codex' | 'character' | 'help' | 'gambit' | 'prefight' | 'draft' | 'elite-draft' | 'dungeon-entry' | 'services' = 'none';
   /** When the Journal is opened by talking to a giver, spotlight its board. */
   private questGiverFocus: string | null = null;
   private captureUntil = 0;
@@ -479,6 +481,7 @@ export class Hud {
     this.game.onOpenGymPrefight = (gymId) => this.openGymPrefight(gymId);
     this.game.onOpenDungeonEntry = (dungeonId) => this.openDungeonEntry(dungeonId);
     this.game.onOpenQuestGiver = (giverId) => this.openQuestGiver(giverId);
+    this.game.onOpenTownService = (service) => this.openServicesModal(service);
     this.displayGold = this.game.gold;
     this.goldTweenFrom = this.game.gold;
     this.goldTweenTo = this.game.gold;
@@ -496,10 +499,53 @@ export class Hud {
     input.onToggleCodex = () => this.toggleModal('codex');
     input.onToggleCharacter = () => this.toggleModal('character');
     input.onToggleHelp = () => this.toggleModal('help');
-    input.onToggleServices = () => this.toggleModal('services');
     window.addEventListener('dragover', this.onItemDragOver);
     window.addEventListener('drop', this.onItemDrop);
     window.addEventListener('dragend', this.onItemDragEnd);
+    // Event delegation on stable containers: the party column and hero panel
+    // re-render their markup every frame (HP/mana/XP/tag regen), so per-element
+    // listeners would be torn off mid-click/mid-drag. Binding once on the parent
+    // keeps swap/skill/mastery/item interactions alive across re-renders.
+    this.partyCol.addEventListener('click', (e) => {
+      const swap = (e.target as HTMLElement).closest('[data-swap]') as HTMLElement | null;
+      if (swap?.dataset.swap) this.game.trySwap(Number(swap.dataset.swap));
+    });
+    this.heroPanel.addEventListener('click', (e) => {
+      const el = e.target as HTMLElement;
+      if (el.closest('#character-open')) { this.toggleModal('character'); return; }
+      if (el.closest('#mastery-respec')) { this.game.respecMasteries(this.game.activeIdx); return; }
+      const skill = el.closest('[data-skill]') as HTMLElement | null;
+      if (skill?.dataset.skill) { this.game.levelAbility(this.game.activeIdx, Number(skill.dataset.skill)); return; }
+      const mastery = el.closest('[data-mastery]') as HTMLElement | null;
+      if (mastery?.dataset.mastery) { this.game.buyMasteryNode(this.game.activeIdx, Number(mastery.dataset.mastery)); return; }
+    });
+    this.heroPanel.addEventListener('dragstart', (e) => {
+      const el = (e.target as HTMLElement).closest('[data-item-slot]') as HTMLElement | null;
+      if (!el?.dataset.itemSlot) return;
+      this.draggingItemSlot = Number(el.dataset.itemSlot);
+      el.classList.add('dragging');
+      (e as DragEvent).dataTransfer?.setData('text/plain', `item-slot:${el.dataset.itemSlot}`);
+      if ((e as DragEvent).dataTransfer) (e as DragEvent).dataTransfer!.effectAllowed = 'move';
+    });
+    this.heroPanel.addEventListener('dragover', (e) => {
+      if (this.draggingItemSlot === null) return;
+      const el = (e.target as HTMLElement).closest('[data-item-slot]') as HTMLElement | null;
+      if (!el) return;
+      e.preventDefault();
+      if ((e as DragEvent).dataTransfer) (e as DragEvent).dataTransfer!.dropEffect = 'move';
+    });
+    this.heroPanel.addEventListener('drop', (e) => {
+      if (this.draggingItemSlot === null) return;
+      const el = (e.target as HTMLElement).closest('[data-item-slot]') as HTMLElement | null;
+      if (!el?.dataset.itemSlot) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const from = this.draggingItemSlot;
+      const to = Number(el.dataset.itemSlot);
+      this.draggingItemSlot = null;
+      this.heroPanel.querySelectorAll('.item-slot.dragging').forEach((d) => d.classList.remove('dragging'));
+      if (from !== to) this.game.moveHeroItem(from, to);
+    });
     this.topBar.addEventListener('click', (e) => {
       const open = (e.target as HTMLElement).closest('[data-open]') as HTMLElement | null;
       const kind = open?.dataset.open as 'journal' | 'codex' | 'help' | undefined;
@@ -656,6 +702,9 @@ export class Hud {
       if (this.hoverKind === 'world') this.hideHoverCard();
       return;
     }
+    if (this.input.inspectUid >= 0 && this.game.scene.selectedUid !== this.input.inspectUid) {
+      this.input.inspectUid = -1;
+    }
 
     if (this.input.hoverItemUid >= 0) {
       const drop = this.game.groundItemDrops.find((item) => item.uid === this.input.hoverItemUid);
@@ -695,6 +744,24 @@ export class Hud {
       return;
     }
 
+    if (this.input.inspectUid >= 0) {
+      const u = this.game.inputSim().unit(this.input.inspectUid);
+      const screen = u && u.alive ? this.screenFromWorld(u.pos.x, u.pos.y, 2.9) : null;
+      if (!u || !u.alive || !screen) {
+        if (this.hoverKind === 'world') this.hideHoverCard();
+        return;
+      }
+      const key = `inspect-${this.worldUnitHoverKey(u)}`;
+      if (this.hoverKey !== key || this.hoverKind !== 'world') {
+        this.hoverKey = key;
+        this.hoverKind = 'world';
+        this.hoverCard.innerHTML = this.cardHtml(this.worldUnitCard(u, true), { accent: this.worldUnitAccent(u) });
+        this.hoverCard.classList.remove('hidden');
+      }
+      this.positionHoverCard(screen.x, screen.y);
+      return;
+    }
+
     if (this.hoverKind === 'world') this.hideHoverCard();
   }
 
@@ -727,7 +794,7 @@ export class Hud {
     ].join(':');
   }
 
-  private worldUnitCard(u: Unit): TooltipCard {
+  private worldUnitCard(u: Unit, inspected = false): TooltipCard {
     const mana = u.stats.maxMana > 0 ? `${Math.ceil(u.mana)}/${Math.ceil(u.stats.maxMana)}` : null;
     const stats = [
       `HP ${Math.ceil(u.hp)}/${Math.ceil(u.stats.maxHp)}`,
@@ -737,6 +804,7 @@ export class Hud {
       `MS ${Math.round(u.stats.moveSpeed)}`
     ].filter(Boolean);
     const meta = [
+      inspected ? 'Inspected' : '',
       this.worldUnitType(u),
       this.worldTeamLabel(u),
       `Lv ${u.level}`,
@@ -748,7 +816,7 @@ export class Hud {
       name: u.name,
       kind: `Lv ${u.level} ${this.worldTeamLabel(u)}`,
       blurb: this.worldUnitBlurb(u),
-      effect: this.worldUnitActions(u),
+      effect: this.worldUnitActions(u, inspected),
       stats,
       meta
     };
@@ -776,11 +844,34 @@ export class Hud {
     return '';
   }
 
-  private worldUnitActions(u: Unit): string[] {
+  /**
+   * One consistent verb for recruiting a hero NPC, keyed to how far their
+   * Find→Trial→Bind quest has progressed. Keeps the hover card, floating hint,
+   * and walk-to toast from disagreeing ("start trial" vs "recruit").
+   */
+  private recruitActionVerb(heroId: string): string {
+    const questId = REG.hero(heroId).recruitmentQuestId;
+    if (!questId) return 'recruit';
+    const stage = this.game.questProgress[questId]?.stage;
+    if (stage === 'trial-complete') return 'begin the binding duel';
+    return 'begin the trial';
+  }
+
+  private worldUnitActions(u: Unit, inspected = false): string[] {
     const g = this.game;
     if (this.input.targeting.kind !== 'none') return ['Left-click to target this unit.'];
     if (this.input.attackMoveArmed()) return [u.team === 0 ? 'Left-click to inspect this ally.' : 'Left-click to attack this unit.'];
-    if (g.npcAt(u.uid)) return ['Right-click to recruit.', 'Left-click to inspect.'];
+    if (inspected) {
+      if (g.npcAt(u.uid)) return [`Right-click to ${this.recruitActionVerb(g.npcAt(u.uid)!)}.`, 'Click ground to clear inspect.'];
+      if (!g.liveGym && !g.liveRaid && !g.liveDungeon && u.capturable && u.tier) {
+        const elig = g.captureEligible(u);
+        return [elig.ok ? 'Press T to capture.' : `Capture: ${elig.reason ?? 'not eligible'}.`, 'Click ground to clear inspect.'];
+      }
+      if (u.team === 0 && g.liveGym) return ['Selected for Captain\'s Call.', 'Click ground to clear inspect.'];
+      if (u.team !== 0 && g.controlledUnit()) return ['Right-click to attack.', 'Click ground to clear inspect.'];
+      return ['Click ground to clear inspect.'];
+    }
+    if (g.npcAt(u.uid)) return [`Right-click to ${this.recruitActionVerb(g.npcAt(u.uid)!)}.`];
     if (!g.liveGym && !g.liveRaid && !g.liveDungeon && u.capturable && u.tier) {
       const elig = g.captureEligible(u);
       return [elig.ok ? 'Press T to capture.' : `Capture: ${elig.reason ?? 'not eligible'}.`, 'Right-click to attack.'];
@@ -1132,7 +1223,7 @@ export class Hud {
     const daylight = 0.5 + 0.5 * Math.cos((t - 0.25) * Math.PI * 2);
     const nightAmt = 1 - daylight;
     if (nightAmt > 0.02) {
-      ctx.fillStyle = `rgba(20,30,68,${(nightAmt * 0.36).toFixed(3)})`;
+      ctx.fillStyle = `rgba(20,30,68,${(nightAmt * 0.24).toFixed(3)})`;
       ctx.fillRect(0, 0, s, s);
     }
     ctx.strokeStyle = 'rgba(255,255,255,0.18)';
@@ -1281,6 +1372,41 @@ export class Hud {
     return picked.slice(0, max);
   }
 
+  /**
+   * In-progress hero recruitments (Find→Trial→Bind), pulled from `questProgress`
+   * so the objective is always readable on the tracker instead of living only in
+   * 3.5s toasts and a buried Journal subsection. Most-advanced lead first; capped
+   * so the tracker stays compact.
+   */
+  private recruitmentLeads(): { id: string; hero: string; stage: string; objective: string; pct: number }[] {
+    const g = this.game;
+    const rank: Record<string, number> = { 'trial-complete': 0, found: 1, unfound: 2, bound: 3 };
+    const leads: { id: string; hero: string; stage: string; objective: string; pct: number; r: number }[] = [];
+    for (const [questId, progress] of Object.entries(g.questProgress)) {
+      if (!REG.quests.has(questId) || progress.stage === 'bound') continue;
+      // A bare rumor with no attunement yet isn't worth a tracker slot.
+      if (progress.stage === 'unfound' && progress.attunement <= 0) continue;
+      const quest = REG.quest(questId);
+      const hero = REG.hero(quest.heroId);
+      let objective: string;
+      let pct = 0;
+      if (progress.stage === 'unfound') {
+        const need = quest.findShardsNeeded ?? TUNING.findShardsNeeded;
+        const have = Math.min(progress.attunement, need);
+        objective = need > 0 ? `Attune to find ${hero.name} (${have}/${need})` : `Find ${hero.name}`;
+        pct = need > 0 ? (have / need) * 100 : 0;
+      } else if (progress.stage === 'found') {
+        objective = `Complete ${hero.name}'s trial`;
+      } else {
+        objective = `Win ${hero.name}'s binding duel`;
+      }
+      const stage = progress.stage === 'unfound' ? 'Rumor' : progress.stage === 'found' ? 'Trial' : 'Binding';
+      leads.push({ id: questId, hero: hero.name, stage, objective, pct, r: rank[progress.stage] ?? 9 });
+    }
+    leads.sort((a, b) => a.r - b.r);
+    return leads.slice(0, 2).map(({ r, ...rest }) => rest);
+  }
+
   private questMarkerFor(q: QuestBoardEntry): { x: number; y: number; label: string; claimable: boolean } | null {
     const def = REG.questDefs.get(q.id);
     if (!def) return null;
@@ -1336,14 +1462,15 @@ export class Hud {
       return;
     }
     const quests = this.trackedQuests();
-    if (quests.length === 0) {
+    const leads = this.recruitmentLeads();
+    if (quests.length === 0 && leads.length === 0) {
       this.questTracker.classList.add('hidden');
       this.questTracker.innerHTML = '';
       return;
     }
     const key = quests
       .map((q) => `${q.id}:${q.status}:${q.objectives.map((o) => `${o.have}/${o.need}`).join(',')}`)
-      .join('|');
+      .join('|') + '#' + leads.map((l) => `${l.id}:${l.stage}:${Math.round(l.pct)}`).join('|');
     const now = performance.now();
     if (!this.reducedMotion() && this.lastQuestTrackerKey && this.lastQuestTrackerKey !== key) this.questTrackerFlashUntil = now + 1400;
     this.lastQuestTrackerKey = key;
@@ -1362,9 +1489,18 @@ export class Hud {
         </button>
       </article>`;
     }).join('');
+    const recruitRows = leads.map((l) => {
+      const bar = l.pct > 0 ? `<i><em style="width:${l.pct}%"></em></i>` : '';
+      return `<article class="qt-row recruit">
+        <button class="qt-open" data-open-journal>
+          <strong>${esc(l.hero)} <span class="dim">· ${esc(l.stage)}</span></strong><em>${esc(l.objective)}</em>${bar}
+        </button>
+      </article>`;
+    }).join('');
     const html = `<div class="qt-card ${flash ? 'flash' : ''}">
       <div class="qt-head"><span>Tracked Quests</span><button class="qt-journal" data-open-journal>Journal</button></div>
       ${rows}
+      ${recruitRows}
     </div>`;
     if (this.questTracker.innerHTML !== html) {
       this.questTracker.innerHTML = html;
@@ -1450,9 +1586,6 @@ export class Hud {
     }
     if (this.partyCol.innerHTML !== html) {
       this.partyCol.innerHTML = html;
-      this.partyCol.querySelectorAll('[data-swap]').forEach((el) => {
-        el.addEventListener('click', () => g.trySwap(Number((el as HTMLElement).dataset.swap)));
-      });
     }
   }
 
@@ -1470,6 +1603,9 @@ export class Hud {
   }
 
   private renderHeroPanel(): void {
+    // Pause rebuilds while an item drag is in flight so the drag source element
+    // survives the whole gesture (HTML5 DnD cancels if its source is removed).
+    if (this.draggingItemSlot !== null) return;
     const g = this.game;
     const rec = g.party[g.activeIdx];
     const u = rec?.unit;
@@ -1524,7 +1660,7 @@ export class Hud {
       const keyed = i < TUNING.activeItemSlots;
       const hotkey = keyed ? glyphForAction(g.settings, `item-${i + 1}` as InputAction) : '·';
       if (!it) {
-        itemsHtml += `<div class="item-slot empty ${keyed ? '' : 'passive-slot'}"><span class="hotkey">${esc(hotkey)}</span></div>`;
+        itemsHtml += `<div class="item-slot empty ${keyed ? '' : 'passive-slot'}" data-item-slot="${i}"><span class="hotkey">${esc(hotkey)}</span></div>`;
         return;
       }
       const idef = REG.item(it.defId);
@@ -1558,22 +1694,26 @@ export class Hud {
     const pickedTalents = rec.talentPicks
       .map((pick, idx) => pick === null ? null : `Lv ${def.talents[idx].level}: ${def.talents[idx].options[pick].name}`)
       .filter((line): line is string => !!line);
-    const talentPips = def.talents.map((tier, idx) => {
+    const echoPips = rec.echo.talentTierUnlocks.map((unlocked, idx) => {
+      const tier = def.talents[idx];
       const pick = rec.talentPicks[idx];
-      const unlocked = rec.echo.talentTierUnlocks[idx];
-      const title = pick === null
-        ? `Lv ${tier.level}: unpicked`
-        : `Lv ${tier.level}: ${tier.options[pick].name}${unlocked ? ' + echo branch' : ''}`;
+      const branch = pick === null ? 'legacy branch' : `${tier.options[pick === 0 ? 1 : 0].name} echo branch`;
+      const title = unlocked
+        ? `Echo unlocked: ${branch}`
+        : `Echo locked: defeat this hero's echo to unlock the level ${tier.level} legacy branch`;
       return `<span class="talent-pip ${pick === null ? '' : `picked branch-${pick}`} ${unlocked ? 'echo' : ''}" title="${esc(title)}">${tier.level}</span>`;
     }).join('');
     const facetLine = facet
       ? `Facet: ${facet.name}${rec.echo.facetSwapUnlocked ? '' : ' (swap locked)'}`
       : 'Facet: none';
+    const masteryBranches = deriveMasteryTrees(def);
+    const masterySpent = rec.masteryRanks.reduce((sum, rank) => sum + (rank > 0 ? 1 : 0), 0);
     const heroExtra = [
       `Live: STR ${Math.round(u.stats.str)} · AGI ${Math.round(u.stats.agi)} · INT ${Math.round(u.stats.int)}`,
       `Regen: +${fmtRegen(regen.hp)} HP/s · +${fmtRegen(regen.mana)} MP/s`,
       facetLine,
-      `Talents: ${pickedTalents.length > 0 ? pickedTalents.join(' · ') : 'none picked'}`,
+      `Masteries: ${masterySpent}/${masteryPointsForLevel(rec.level)} nodes bought`,
+      `Legacy talents: ${pickedTalents.length > 0 ? pickedTalents.join(' · ') : 'none picked'}`,
       `Echo: ${rec.echo.kills} kill${rec.echo.kills === 1 ? '' : 's'} · ${rec.echo.talentTierUnlocks.filter(Boolean).length}/4 echo branches`
     ];
     const facetBadge = facet
@@ -1584,8 +1724,6 @@ export class Hud {
       : 'Level cap';
     const hpRegenTitle = `HP regen: base + flat ${fmtRegen(u.stats.hpRegen)}/s, max-HP ${fmtRegen((u.stats.maxHp * u.stats.hpRegenPctMax) / 100)}/s, total +${fmtRegen(regen.hp)}/s`;
     const manaRegenTitle = `Mana regen: base + flat ${fmtRegen(u.stats.manaRegen)}/s, max-mana ${fmtRegen((u.stats.maxMana * u.stats.manaRegenPctMax) / 100)}/s, total +${fmtRegen(regen.mana)}/s`;
-    const masteryBranches = deriveMasteryTrees(def);
-    const masterySpent = rec.masteryRanks.reduce((sum, rank) => sum + (rank > 0 ? 1 : 0), 0);
     const masteryHtml = `
       <div class="mastery-panel">
         <div class="mastery-head">
@@ -1628,7 +1766,7 @@ export class Hud {
         </button>
         <div class="hp-id">
           <div class="hp-name">${def.name} <em>Lv ${u.level}</em></div>
-          <div class="build-row">${facetBadge}<span class="talent-pips">${talentPips}</span></div>
+          <div class="build-row">${facetBadge}<span class="talent-pips">${echoPips}</span></div>
           <div class="bar hp big" title="${esc(hpRegenTitle)}"><div style="width:${(u.hp / u.stats.maxHp) * 100}%"></div><span>${Math.ceil(u.hp)} / ${Math.ceil(u.stats.maxHp)} · +${fmtRegen(regen.hp)}/s</span></div>
           <div class="bar mana big" title="${esc(manaRegenTitle)}"><div style="width:${u.stats.maxMana > 0 ? (u.mana / u.stats.maxMana) * 100 : 0}%"></div><span>${Math.ceil(u.mana)} / ${Math.ceil(u.stats.maxMana)} · +${fmtRegen(regen.mana)}/s</span></div>
           <div class="bar xp"><div style="width:${xp.pct * 100}%"></div><span>${xpText}</span></div>
@@ -1641,22 +1779,6 @@ export class Hud {
       <div class="ab-row">${abilitiesHtml}</div>
       <div class="item-grid">${itemsHtml}</div>
     `;
-    this.heroPanel.querySelector('#character-open')?.addEventListener('click', () => this.toggleModal('character'));
-    this.heroPanel.querySelector('#mastery-respec')?.addEventListener('click', () => g.respecMasteries(g.activeIdx));
-    this.heroPanel.querySelectorAll('[data-skill]').forEach((el) => {
-      el.addEventListener('click', () => g.levelAbility(g.activeIdx, Number((el as HTMLElement).dataset.skill)));
-    });
-    this.heroPanel.querySelectorAll('[data-mastery]').forEach((el) => {
-      el.addEventListener('click', () => g.buyMasteryNode(g.activeIdx, Number((el as HTMLElement).dataset.mastery)));
-    });
-    this.heroPanel.querySelectorAll<HTMLElement>('[data-item-slot]').forEach((el) => {
-      el.addEventListener('dragstart', (e) => {
-        this.draggingItemSlot = Number(el.dataset.itemSlot);
-        el.classList.add('dragging');
-        e.dataTransfer?.setData('text/plain', `item-slot:${el.dataset.itemSlot}`);
-        if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
-      });
-    });
   }
 
   private finishItemDrag(clientX: number, clientY: number): void {
@@ -1679,11 +1801,12 @@ export class Hud {
 
   private renderToasts(): void {
     const g = this.game;
-    while (this.shownToasts < g.toasts.length) {
-      const t = g.toasts[this.shownToasts++];
+    for (const t of g.toasts) {
+      if (t.id <= this.lastShownToastId) continue;
+      this.lastShownToastId = t.id;
       const el = document.createElement('div');
       el.className = `toast ${t.kind}`;
-      const icon = t.kind === 'good' ? '◆' : t.kind === 'bad' ? '!' : t.kind === 'bark' ? '“' : 'i';
+      const icon = t.kind === 'quest' ? '✦' : t.kind === 'good' ? '◆' : t.kind === 'bad' ? '!' : t.kind === 'bark' ? '“' : 'i';
       el.innerHTML = `<span class="toast-icon">${icon}</span><span>${esc(t.text)}</span>`;
       if (t.color) {
         el.style.borderLeft = `3px solid ${t.color}`;
@@ -1694,8 +1817,15 @@ export class Hud {
       setTimeout(() => {
         el.classList.remove('show');
         setTimeout(() => el.remove(), 400);
-      }, t.kind === 'bark' ? 6000 : 3500);
-      while (this.toastCol.children.length > 6) this.toastCol.children[0].remove();
+      }, t.kind === 'quest' ? 20000 : t.kind === 'bark' ? 6000 : 3500);
+      this.pruneToastColumn();
+    }
+  }
+
+  private pruneToastColumn(): void {
+    while (this.toastCol.children.length > 6) {
+      const removable = Array.from(this.toastCol.children).find((el) => !el.classList.contains('quest')) ?? this.toastCol.children[0];
+      removable.remove();
     }
   }
 
@@ -2014,7 +2144,7 @@ export class Hud {
       const u = g.sim.unit(this.input.hoverUid);
       if (u) {
         const heroId = g.npcAt(u.uid);
-        if (heroId) hint = REG.hero(heroId).recruitmentQuestId ? `${u.name} — right-click to start trial` : `${u.name} — right-click to recruit`;
+        if (heroId) hint = `${u.name} — right-click to ${this.recruitActionVerb(heroId)}`;
         else if (u.capturable && u.tier) {
           const elig = g.captureEligible(u);
           hint = elig.ok ? `${u.name} — press T to capture!` : `${u.name} — capture: ${elig.reason}`;
@@ -2027,6 +2157,10 @@ export class Hud {
       const def = REG.gym(gym.gymId);
       hint = `${def.name} — press G to challenge`;
     }
+    const service = g.nearbyTownService();
+    if (service && this.modalKind === 'none' && !hint) {
+      hint = `${service.name} — press G for ${service.title}`;
+    }
     const giver = g.nearbyQuestGiver();
     if (giver && this.modalKind === 'none' && !hint) {
       hint = `${giver.name} — press G for bounties`;
@@ -2036,7 +2170,7 @@ export class Hud {
       const blockReason = g.gateTravelBlockReason(gate);
       hint = blockReason ? `${gate.name} — ${blockReason}` : `${gate.name} — press G to travel`;
     }
-    if (g.canShop() && this.modalKind === 'none' && !hint) hint = `${g.region.town.name} — B to shop · Y for services`;
+    if (g.canShop() && this.modalKind === 'none' && !hint) hint = `${g.region.town.name} — B to shop · visit the townsfolk (G) for services`;
     this.hint.textContent = hint;
     this.hint.classList.toggle('hidden', hint === '');
   }
@@ -2067,7 +2201,7 @@ export class Hud {
 
   // ---------- modals ----------
 
-  toggleModal(kind: 'party' | 'shop' | 'menu' | 'talents' | 'journal' | 'codex' | 'character' | 'help' | 'services'): void {
+  toggleModal(kind: 'party' | 'shop' | 'menu' | 'journal' | 'codex' | 'character' | 'help'): void {
     if (this.modalKind === kind) {
       this.closeModal();
       return;
@@ -2080,7 +2214,6 @@ export class Hud {
     if (kind === 'party') this.renderPartyModal();
     if (kind === 'shop') this.renderShopModal();
     if (kind === 'menu') this.renderMenuModal();
-    if (kind === 'talents') this.renderTalentModal();
     if (kind === 'character') this.renderCharacterModal();
     if (kind === 'journal') {
       this.questGiverFocus = null;
@@ -2088,7 +2221,23 @@ export class Hud {
     }
     if (kind === 'codex') this.renderCodexModal();
     if (kind === 'help') this.renderHelpModal();
-    if (kind === 'services') this.renderServicesModal();
+  }
+
+  // Town services are diegetic: each is opened only by walking up to its NPC and
+  // pressing interact (G). There is no global menu — the NPC decides which single
+  // service panel opens. Pressing interact again at the same NPC closes it.
+  private openServicesModal(service: ServicesTab): void {
+    if (this.modalKind === 'services' && this.servicesTab === service) {
+      this.closeModal();
+      return;
+    }
+    this.servicesTab = service;
+    this.playUi(this.modalKind === 'none' ? 'open' : 'tab');
+    this.modalKind = 'services';
+    this.input.uiModalOpen = true;
+    this.modal.classList.remove('hidden');
+    this.game.paused = false;
+    this.renderServicesModal();
   }
 
   closeModal(): void {
@@ -2165,10 +2314,10 @@ export class Hud {
       const note = a === 'str' ? 'HP + regen' : a === 'agi' ? 'armor + attack speed' : 'mana + regen';
       return `<div class="cs-attr ${a} ${primary ? 'primary' : ''}"><b>${a.toUpperCase()}</b><span>${Math.round(s[a])}</span><em>${note}</em></div>`;
     }).join('');
-    const pickedTalents = def.talents.map((tier, idx) => {
+    const legacyTalentRows = def.talents.map((tier, idx) => {
       const pick = rec.talentPicks[idx];
       const unlocked = rec.echo.talentTierUnlocks[idx];
-      if (pick === null) return `<li><span>Lv ${tier.level}</span><em>Unpicked</em></li>`;
+      if (pick === null) return `<li><span>Lv ${tier.level}</span><em>Replaced by Masteries</em></li>`;
       const talent = tier.options[pick];
       const details = talentDetailLines(talent, def).join(' · ');
       return `<li><span>Lv ${tier.level}</span><b>${esc(talent.name)}${unlocked ? ' + echo' : ''}</b>${details ? `<em>${esc(details)}</em>` : ''}</li>`;
@@ -2220,8 +2369,8 @@ export class Hud {
             row('Swap cooldown', signed(s.swapCdReductionPct, '%')),
             row('Stamina bonus', signed(s.staminaBonus))
           ].join(''))}
-          ${section('Talents & Echo', `
-            <ul class="cs-talents">${pickedTalents}</ul>
+          ${section('Echo & Legacy Talents', `
+            <ul class="cs-talents">${legacyTalentRows}</ul>
             <div class="cs-row"><span>Echo kills</span><b>${rec.echo.kills}</b><em>${rec.echo.talentTierUnlocks.filter(Boolean).length}/4 echo branches</em></div>
           `)}
           ${section('Masteries', `
@@ -3721,16 +3870,8 @@ export class Hud {
       </div>`
     ).join('');
 
-    this.modalShell('Town Services', `
-      <div class="services">
-        <section><h3>Boss Reruns</h3>${bossHtml}</section>
-        <section><h3>Raids${aegisTag}</h3>${raidHtml}</section>
-        <section><h3>Conquest — Tower of the Ancients</h3>${eliteHtml}</section>
-        <section><h3>Festivals — Turns of the Loop</h3>${festivalHtml}</section>
-        <section><h3>Tinker's Bench <span class="gold">${Math.floor(g.gold)} g</span></h3>
-          ${stashHtml}
-          <div class="svc-sub">Neutral slots</div>${slotHtml}
-        </section>
+    const serviceSections: Record<ServicesTab, string> = {
+      armory: `
         <section><h3>Armory <span class="gold">${armory.essence} essence</span></h3>
           ${conflictHtml}
           <div class="svc-actions"><button class="btn small accent" data-arm-gear-field="1">Gear Fielded Loadouts</button></div>
@@ -3739,8 +3880,20 @@ export class Hud {
           <div class="svc-sub">Gem Fusion</div>${fuseHtml}
           <div class="svc-sub">Assembly Bench</div>${assemblyHtml}
           <div class="svc-sub">Bound items</div>${armorySlotsHtml}
-        </section>
-        <section><h3>Black Market <span class="gold">${Math.floor(g.gold)} g</span></h3>${bmHtml}</section>
+        </section>`,
+      tinker: `
+        <section><h3>Tinker's Bench <span class="gold">${Math.floor(g.gold)} g</span></h3>
+          ${stashHtml}
+          <div class="svc-sub">Neutral slots</div>${slotHtml}
+        </section>`,
+      adventure: `
+        <section><h3>Boss Reruns</h3>${bossHtml}</section>
+        <section><h3>Raids${aegisTag}</h3>${raidHtml}</section>
+        <section><h3>Conquest — Tower of the Ancients</h3>${eliteHtml}</section>
+        <section><h3>Festivals — Turns of the Loop</h3>${festivalHtml}</section>`,
+      market: `
+        <section><h3>Black Market <span class="gold">${Math.floor(g.gold)} g</span></h3>${bmHtml}</section>`,
+      recovery: `
         <section><h3>Recovery &amp; Growth</h3>
           <div class="svc-row"><div class="svc-main">Rest at the inn — full HP/mana</div>
             <div class="svc-actions">
@@ -3750,7 +3903,19 @@ export class Hud {
           </div>
           <div class="svc-sub">Field Kitchen</div>${cookHtml}
           ${sinkHtml}
-        </section>
+        </section>`
+    };
+
+    const serviceTitles: Record<ServicesTab, string> = {
+      recovery: 'Innkeeper — Recovery &amp; Growth',
+      armory: 'Town Armorer — Armory',
+      tinker: "Tinker's Bench",
+      market: 'Black-Market Broker',
+      adventure: 'War Board — Adventures'
+    };
+    this.modalShell(serviceTitles[this.servicesTab], `
+      <div class="services">
+        ${serviceSections[this.servicesTab]}
       </div>`);
 
     const rerender = () => this.renderServicesModal();
@@ -4120,6 +4285,7 @@ export class Hud {
 
   private shopTab: 'consumable' | 'component' | 'assembled' = 'assembled';
   private compendiumTab: 'lore' | 'heroes' | 'atlas' | 'cinematics' = 'lore';
+  private menuTab: 'general' | 'controls' | 'interface' | 'audio' | 'graphics' | 'cutscene' = 'general';
 
   private renderShopModal(): void {
     const g = this.game;
@@ -4314,22 +4480,34 @@ export class Hud {
       <div class="journal-summary">
         <b>${g.region.name}</b> · reputation ${repText} · recruited ${g.recruited.size}/${REG.heroes.size}
       </div>
-      <h3>Bounties &amp; Chapters</h3>
-      ${giverHeader}
-      ${questRows || '<p class="dim">No bounties or chapters open yet. They unlock as you recruit, badge up, and descend.</p>'}
-      <h3>Recruitment</h3>
-      ${rows || '<p class="dim">No open quest leads in this region yet. Find echo scars, gyms, and hero rumors to fill the journal.</p>'}
-      <h3>Conquest</h3>
-      <div class="journal-row"><div class="jr-stage">Elite</div><div class="jr-main"><p>${eliteText}</p></div></div>
-      ${raidRows}
-      <h3>Factions</h3>
-      ${factionRows}
-      <h3>Badges</h3>
-      <div class="journal-summary">${badges}</div>
-      <h3>Titles</h3>
-      ${titles.length
-        ? titles.map((t) => `<div class="journal-row"><div class="jr-stage">Title</div><div class="jr-main"><p><b>${t.name}</b> — ${t.note}</p></div></div>`).join('')
-        : '<p class="dim">Earn titles through legendary feats — like holding Roshan\'s Pit at its hardest tier.</p>'}`
+      <details class="journal-section" open>
+        <summary>Bounties &amp; Chapters</summary>
+        ${giverHeader}
+        ${questRows || '<p class="dim">No bounties or chapters open yet. They unlock as you recruit, badge up, and descend.</p>'}
+      </details>
+      <details class="journal-section" open>
+        <summary>Recruitment</summary>
+        ${rows || '<p class="dim">No open quest leads in this region yet. Find echo scars, gyms, and hero rumors to fill the journal.</p>'}
+      </details>
+      <details class="journal-section">
+        <summary>Conquest</summary>
+        <div class="journal-row"><div class="jr-stage">Elite</div><div class="jr-main"><p>${eliteText}</p></div></div>
+        ${raidRows}
+      </details>
+      <details class="journal-section">
+        <summary>Factions</summary>
+        ${factionRows}
+      </details>
+      <details class="journal-section">
+        <summary>Badges</summary>
+        <div class="journal-summary">${badges}</div>
+      </details>
+      <details class="journal-section">
+        <summary>Titles</summary>
+        ${titles.length
+          ? titles.map((t) => `<div class="journal-row"><div class="jr-stage">Title</div><div class="jr-main"><p><b>${t.name}</b> — ${t.note}</p></div></div>`).join('')
+          : '<p class="dim">Earn titles through legendary feats — like holding Roshan\'s Pit at its hardest tier.</p>'}
+      </details>`
     );
     this.modal.querySelectorAll<HTMLElement>('[data-claim-quest]').forEach((el) => {
       el.addEventListener('click', () => {
@@ -4413,7 +4591,7 @@ export class Hud {
       .join('') || '<p class="dim">Defeat Outworld Claimants to record the worlds held at the seal.</p>';
     const festivals = cx.festivals
       .map((f) => `<div class="codex-note"><b>${f.name}</b><em>${f.summary}</em><p>${f.body}</p></div>`)
-      .join('') || '<p class="dim">Invoke festivals from Town Services to remember seasonal turns of the Loop.</p>';
+      .join('') || '<p class="dim">Invoke festivals at the War Board in town to remember seasonal turns of the Loop.</p>';
     const legends = cx.legends
       .map((l) => `<div class="codex-note"><b>${l.name}</b><em>${l.summary}</em><p>${l.body}</p></div>`)
       .join('') || '<p class="dim">Recreate famous plays to wake the Legends track.</p>';
@@ -4531,53 +4709,6 @@ export class Hud {
     return `<h3>Atlas — ${atlas.items.length} items charted</h3><div class="compendium-single">${cards}</div>`;
   }
 
-  // --- talents ---
-
-  private renderTalentModal(): void {
-    const g = this.game;
-    const recIdx = g.activeIdx;
-    const rec = g.party[recIdx];
-    if (!rec) {
-      this.closeModal();
-      return;
-    }
-    const def = REG.hero(rec.heroId);
-    const tier = g.pendingTalentTier(rec);
-    if (tier < 0) {
-      this.closeModal();
-      return;
-    }
-    const t = def.talents[tier];
-    const echoUnlocked = rec.echo.talentTierUnlocks[tier];
-    const echoText = echoUnlocked
-      ? 'Echo attunement unlocked: after you choose a branch, the opposite branch applies too.'
-      : "The other branch stays echo-locked until this hero's echo is defeated.";
-    const optionHtml = (pick: 0 | 1) => {
-      const option = t.options[pick];
-      const details = talentDetailLines(option, def);
-      const detailsHtml = details.length > 0
-        ? `<em>${details.map((line) => esc(line)).join(' · ')}</em>`
-        : '<em>Kit upgrade</em>';
-      return `<button class="talent-opt" data-pick="${pick}"><b>${esc(option.name)}</b>${detailsHtml}</button>`;
-    };
-    this.modalShell(
-      `${def.name} — Level ${t.level} Talent`,
-      `
-      <div class="talent-choice">
-        ${optionHtml(0)}
-        <div class="talent-or">or</div>
-        ${optionHtml(1)}
-      </div>
-      <p class="dim">${echoText}</p>`
-    );
-    this.modal.querySelectorAll('[data-pick]').forEach((el) => {
-      el.addEventListener('click', () => {
-        g.applyTalent(recIdx, tier, Number((el as HTMLElement).dataset.pick) as 0 | 1);
-        this.closeModal();
-      });
-    });
-  }
-
   // --- menu (save/load/settings) ---
 
   private controlsSettingsHtml(): string {
@@ -4650,23 +4781,38 @@ export class Hud {
     const auto = Game_slotInfo('auto');
     const ui = this.interfaceSettings();
 
-    this.modalShell(
-      'Menu',
-      `
-      <div class="menu-grid">
-        <section>
+    const tabs = ([
+      ['general', 'General'],
+      ['controls', 'Controls'],
+      ['interface', 'Interface'],
+      ['audio', 'Audio'],
+      ['graphics', 'Graphics'],
+      ['cutscene', 'Cut-scenes']
+    ] as const)
+      .map(([id, label]) => `<button class="tab ${this.menuTab === id ? 'on' : ''}" data-mtab="${id}">${label}</button>`)
+      .join('');
+
+    const generalBody = `
           <h3>Save slots</h3>
           ${slots}
           <div class="save-slot"><div class="ss-info">${auto ? `<b>Autosave</b> — ${new Date(auto.savedAt).toLocaleTimeString()}` : '<span class="dim">No autosave yet</span>'}</div>
             ${auto ? '<button class="btn small" data-load="auto">Load</button>' : ''}
           </div>
-        </section>
-        <section>
-          <h3>Controls</h3>
+          <h3>Journal</h3>
+          <button class="btn" id="open-journal">Quest Journal</button>
+          <button class="btn" id="open-codex">Codex</button>
+          <h3>Save data</h3>
+          <button class="btn" id="export-save">Export save (JSON)</button>
+          <label class="btn" for="import-file">Import save<input type="file" id="import-file" accept=".json" hidden></label>
+          <button class="btn warn" id="quit-title">Quit to title</button>
+          <p class="dim">Playtime ${fmtTime(Math.round(g.playtime))} · ${g.canSave().ok ? 'Safe to save' : g.canSave().reason}</p>`;
+
+    const controlsBody = `
           <label class="opt-row"><input type="checkbox" id="opt-quickcast" ${g.settings.quickcast ? 'checked' : ''}> Quick-cast at cursor</label>
           <div class="keybind-panel">${this.controlsSettingsHtml()}</div>
-          <button class="btn small" id="reset-keybinds">Reset controls to defaults</button>
-          <h3>Interface</h3>
+          <button class="btn small" id="reset-keybinds">Reset controls to defaults</button>`;
+
+    const interfaceBody = `
           <label class="opt-row">UI scale <input type="range" id="opt-ui-scale" min="0.75" max="1.5" step="0.05" value="${ui.uiScale}"></label>
           <label class="opt-row">Text size <input type="range" id="opt-text-scale" min="1" max="1.3" step="0.05" value="${ui.textScale}"></label>
           <label class="opt-row">HUD opacity <input type="range" id="opt-hud-opacity" min="0.55" max="1" step="0.05" value="${ui.hudOpacity}"></label>
@@ -4680,17 +4826,26 @@ export class Hud {
               ${([1, 2, 3] as const).map((v) => `<option value="${v}"${ui.questTrackerMax === v ? ' selected' : ''}>${v}</option>`).join('')}
             </select>
           </label>
-          <h3>Options</h3>
+          <h3>Gameplay</h3>
           <label class="opt-row"><input type="checkbox" id="opt-resonance" ${g.settings.resonance ? 'checked' : ''}> Resonance mode (micro/raids)</label>
-          <label class="opt-row"><input type="checkbox" id="opt-swap-charges" ${g.settings.swapCharges ? 'checked' : ''}> Swap charges (high-skill: 2 charges, no floor)</label>
+          <label class="opt-row"><input type="checkbox" id="opt-swap-charges" ${g.settings.swapCharges ? 'checked' : ''}> Swap charges (high-skill: 2 charges, no floor)</label>`;
+
+    const audioBody = `
           <label class="opt-row"><input type="checkbox" id="opt-mute" ${g.settings.audio.muted ? 'checked' : ''}> Mute all audio</label>
           <label class="opt-row">Master volume <input type="range" id="opt-master-volume" min="0" max="1" step="0.05" value="${g.settings.audio.master}"></label>
           <label class="opt-row">SFX volume <input type="range" id="opt-sfx-volume" min="0" max="1" step="0.05" value="${g.settings.audio.sfx}"></label>
           <label class="opt-row">UI volume <input type="range" id="opt-ui-volume" min="0" max="1" step="0.05" value="${g.settings.audio.ui ?? g.settings.audio.sfx}"></label>
           <label class="opt-row">Voice volume <input type="range" id="opt-voice-volume" min="0" max="1" step="0.05" value="${g.settings.audio.voice}"></label>
           <label class="opt-row">Stinger volume <input type="range" id="opt-stinger-volume" min="0" max="1" step="0.05" value="${g.settings.audio.stinger}"></label>
-          <label class="opt-row">Music volume <input type="range" id="opt-music-volume" min="0" max="1" step="0.05" value="${g.settings.audio.music}"></label>
-          <h3>Graphics</h3>
+          <label class="opt-row">Music volume <input type="range" id="opt-music-volume" min="0" max="1" step="0.05" value="${g.settings.audio.music}"></label>`;
+
+    const crowdDetailLabels: Record<GraphicsSettings['crowdDetail'], string> = {
+      auto: 'Auto (full models)',
+      full: 'Full models',
+      balanced: 'Balanced impostors',
+      reduced: 'Reduced impostors'
+    };
+    const graphicsBody = `
           <label class="opt-row">Quality
             <select id="opt-quality">
               ${(['auto', 'low', 'medium', 'high', 'ultra'] as const)
@@ -4733,7 +4888,7 @@ export class Hud {
           </label>
           <label class="opt-row">Crowd detail
             <select id="opt-crowd-detail">
-              ${(['auto', 'full', 'balanced', 'reduced'] as const).map((v) => `<option value="${v}"${(g.settings.graphics?.crowdDetail ?? 'auto') === v ? ' selected' : ''}>${v[0].toUpperCase() + v.slice(1)}</option>`).join('')}
+              ${(['auto', 'full', 'balanced', 'reduced'] as const).map((v) => `<option value="${v}"${(g.settings.graphics?.crowdDetail ?? 'full') === v ? ' selected' : ''}>${crowdDetailLabels[v]}</option>`).join('')}
             </select>
           </label>
           <label class="opt-row">VFX density <input type="range" id="opt-vfx-density" min="0.5" max="1.5" step="0.05" value="${g.settings.graphics?.vfxDensity ?? 1}"></label>
@@ -4742,8 +4897,9 @@ export class Hud {
           <label class="opt-row">Exposure <input type="range" id="opt-exposure" min="0.5" max="1.5" step="0.02" value="${g.settings.graphics?.exposure ?? 0.92}"></label>
           <label class="opt-row">Color grade <input type="range" id="opt-grade" min="0" max="1.5" step="0.05" value="${g.settings.graphics?.grade ?? 1}"></label>
           <label class="opt-row"><input type="checkbox" id="opt-reduced-motion" ${g.settings.graphics?.reducedMotion ? 'checked' : ''}> Reduced motion (ambient FX)</label>
-          <label class="opt-row"><input type="checkbox" id="opt-colorblind" ${g.settings.graphics?.colorblind ? 'checked' : ''}> Colorblind-safe loot palette</label>
-          <h3>Cut-scenes</h3>
+          <label class="opt-row"><input type="checkbox" id="opt-colorblind" ${g.settings.graphics?.colorblind ? 'checked' : ''}> Colorblind-safe loot palette</label>`;
+
+    const cutsceneBody = `
           <label class="opt-row">Length
             <select id="opt-cutscene-length">
               ${(['full', 'short', 'off'] as const)
@@ -4760,16 +4916,32 @@ export class Hud {
           </label>
           <label class="opt-row"><input type="checkbox" id="opt-cutscene-skip" ${g.settings.cutscene?.alwaysSkip ? 'checked' : ''}> Always skip cut-scenes</label>
           <label class="opt-row"><input type="checkbox" id="opt-cutscene-photosensitive" ${g.settings.cutscene?.photosensitive ? 'checked' : ''}> Limit cinematic flashes</label>
-          <label class="opt-row"><input type="checkbox" id="opt-cutscene-tieins" ${(g.settings.cutscene?.tieIns ?? true) ? 'checked' : ''}> Seasonal and esports tie-ins</label>
-          <button class="btn" id="open-journal">Quest Journal</button>
-          <button class="btn" id="open-codex">Codex</button>
-          <button class="btn" id="export-save">Export save (JSON)</button>
-          <label class="btn" for="import-file">Import save<input type="file" id="import-file" accept=".json" hidden></label>
-          <button class="btn warn" id="quit-title">Quit to title</button>
-          <p class="dim">Playtime ${fmtTime(Math.round(g.playtime))} · ${g.canSave().ok ? 'Safe to save' : g.canSave().reason}</p>
-        </section>
+          <label class="opt-row"><input type="checkbox" id="opt-cutscene-tieins" ${(g.settings.cutscene?.tieIns ?? true) ? 'checked' : ''}> Seasonal and esports tie-ins</label>`;
+
+    const bodies: Record<typeof this.menuTab, string> = {
+      general: generalBody,
+      controls: controlsBody,
+      interface: interfaceBody,
+      audio: audioBody,
+      graphics: graphicsBody,
+      cutscene: cutsceneBody
+    };
+
+    this.modalShell(
+      'Menu',
+      `
+      <div class="shop-tabs menu-tabs">${tabs}</div>
+      <div class="menu-tab-body">
+        <section>${bodies[this.menuTab]}</section>
       </div>`
     );
+
+    this.modal.querySelectorAll('[data-mtab]').forEach((el) => {
+      el.addEventListener('click', () => {
+        this.menuTab = (el as HTMLElement).dataset.mtab as typeof this.menuTab;
+        this.renderMenuModal();
+      });
+    });
 
     this.modal.querySelectorAll('[data-save]').forEach((el) => {
       el.addEventListener('click', () => {

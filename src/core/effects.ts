@@ -1,5 +1,6 @@
 import { clamp, dist, fromAngle, norm, sub, v2 } from './math2d';
 import { applyDamage, healUnit } from './combat';
+import { nearestPointOutsideCollisionBody, obstacleBlocksMovement } from './collision';
 import { REG } from './registry';
 import { STATUS_META, statusTagAuto, type StatusInstance } from './status';
 import { dropThreat } from './threat';
@@ -32,6 +33,25 @@ export interface EffectPrimary {
 }
 
 const FALLBACK_VFX: VfxSpec = { archetype: 'ground-aoe', color: '#ffffff' };
+
+function nearestWalkableEffectPoint(sim: Sim, u: Unit, point: Vec2): Vec2 {
+  const out = { ...point };
+  for (let pass = 0; pass < 3; pass++) {
+    let moved = false;
+    for (const obstacle of sim.obstacles) {
+      if (!obstacleBlocksMovement(obstacle)) continue;
+      const next = nearestPointOutsideCollisionBody(obstacle.pos, obstacle.body, out, u.radius + 10, u.facing);
+      if (next.x === out.x && next.y === out.y) continue;
+      out.x = next.x;
+      out.y = next.y;
+      moved = true;
+    }
+    if (!moved) break;
+  }
+  out.x = clamp(out.x, u.radius, sim.bounds.w - u.radius);
+  out.y = clamp(out.y, u.radius, sim.bounds.h - u.radius);
+  return out;
+}
 
 export function execEffects(sim: Sim, caster: Unit, ctx: EffectCtx, effects: EffectNode[], primary: EffectPrimary): void {
   for (const node of effects) {
@@ -256,6 +276,7 @@ function execDisplace(
       }
       dest.x = clamp(dest.x, u.radius, sim.bounds.w - u.radius);
       dest.y = clamp(dest.y, u.radius, sim.bounds.h - u.radius);
+      dest = nearestWalkableEffectPoint(sim, u, dest);
       const from = { ...u.pos };
       u.pos = dest;
       u.prevPos = { ...dest };

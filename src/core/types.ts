@@ -1692,7 +1692,8 @@ export type SimEvent =
   | { t: 'heal'; uid: number; amount: number }
   | { t: 'death'; uid: number; killer: number }
   | { t: 'cast'; uid: number; abilityId: string; vfx: VfxSpec; target?: number; point?: Vec2; sound?: SoundArchetype; timbre?: string }
-  | { t: 'attack-impact'; uid: number; target: number }
+  | { t: 'attack-impact'; uid: number; target: number; melee?: boolean }
+  | { t: 'attack-windup'; uid: number; target: number }   // melee swing started (sword/blunt whoosh)
   | { t: 'attack-launch'; uid: number; target: number; speed: number }
   | { t: 'projectile-spawn'; pid: number; from: Vec2; vfx: VfxSpec; targetUid?: number; toPoint?: Vec2 }
   | { t: 'projectile-hit'; pid: number; pos: Vec2; targetUid?: number }
@@ -1707,6 +1708,7 @@ export type SimEvent =
   | { t: 'reaction'; uid: number; from: number; reaction: string; elements: [Exclude<ElementId, 'neutral'>, Exclude<ElementId, 'neutral'>] }
   | { t: 'tag-boon'; uid: number; heroId: string; when: 'tag-in' | 'tag-out'; archetype: TagArchetype; chain: number; ampPct: number }
   | { t: 'swap-flat'; uid: number }   // a swap that paid no boon (gauge down): the dull arrival beat (§9)
+  | { t: 'hero-tag'; uid: number; heroId: string; pos: Vec2; color: string; boon: boolean }   // presentation-only Genshin-style tag-in arrival flourish
   | { t: 'tag-chain'; uid: number; count: number; expiresAt: number; ampPct: number }
   | { t: 'off-field'; uid: number; heroId: string; until: number }
   | { t: 'immune-block'; uid: number }   // BKB visible spell rejection
@@ -1817,6 +1819,8 @@ export type InputAction =
   | 'item-2'
   | 'item-3'
   | 'item-4'
+  | 'item-5'
+  | 'item-6'
   | 'swap-1'
   | 'swap-2'
   | 'swap-3'
@@ -1825,7 +1829,6 @@ export type InputAction =
   | 'capture'
   | 'interact'
   | 'shop'
-  | 'services'
   | 'neutral'
   | 'party'
   | 'journal'

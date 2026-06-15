@@ -1,5 +1,13 @@
 # OPTIMIZATION 2.0 — "ANCIENTS"
 
+**Goal:** Keep the richer renderer, authored unit art, sampled audio, and larger
+fights within the frame and memory budget. **Success looks like:** the browser
+debug HUD and headless perf tests show bounded frame time, draw calls, asset
+cache size, and deterministic sim hashes while the default view still shows real
+unit models at readable distances. **Constraints:** the headless core stays
+deterministic, render dials cannot change macro fight outcomes, and assets remain
+optional at runtime.
+
 The next optimization pass, written for the game as it stands today: a PBR
 renderer with a full post-processing stack, authored glTF heroes and creeps,
 sampled audio, resonance, dungeons, raids, item sets, and directed cut-scenes.
@@ -224,9 +232,13 @@ build report (`PERFORMANCE_PLAN.md` §2.6).
 ### B.2 Crowd views for armies and illusions — [dial]
 
 Summoner playstyles and illusion-heavy kits are a 2.0 reality the original budget
-did not model. Give large same-type groups a cheaper view: shared skeleton, far
-copies as impostors or static-pose instances, full rigs only for the near few.
-Tie the count to a `TUNING` ceiling so a Necromancer army has a defined cost.
+did not model. The default path keeps real unit views mounted at distance and
+uses LOD to throttle animation, shadows, and off-screen work. The crowd-detail
+dial can still spend fidelity for frames: `balanced` uses impostors for far or
+overflow non-hero units, and `reduced` uses impostors aggressively. Keep `auto`
+as a legacy alias for the full-model default so old saves do not show procedural
+or cone placeholders that snap into fuller models near the camera. Tie the count
+to a `TUNING` ceiling so a Necromancer army has a defined cost.
 
 ### B.3 Stop mutating shared materials (correctness + perf) — [free]
 
@@ -424,7 +436,7 @@ solved.
 | Anti-aliasing (SMAA) | off / on | A.3 | tier | `setQuality` rebuild |
 | Shadows | off / low / high | A.4 | tier | `setQuality` rebuild |
 | Draw distance | how far units/props render before cull | A.6, E.3 | medium | scene cull radius |
-| Army / crowd detail | full rigs / near-full + far impostors / reduced | B.2 | auto | view builder |
+| Army / crowd detail | full model views / balanced far impostors / reduced impostors | B.2 | full (`auto` aliases full for old saves) | view builder |
 | VFX density | particle + transient cap scale (0.5×–1.5×) | E.5 | tier | `vfx` cap |
 | Overworld battle scale | scales the overworld summon/illusion ceiling (0.5×–1.5×); macro sims ignore it | F.2, C.4 | 1× | `sim.summonCapScale` via `applyGraphics` |
 | Colorblind loot palette | swaps the rarity palette for an Okabe–Ito colorblind-safe set | F.3 | off | `setColorblindPalette` |

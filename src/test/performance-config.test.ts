@@ -53,11 +53,14 @@ describe('performance quality presets', () => {
     expect(rarityColor('immortal')).toBe(RARITY_COLORS.immortal);
   });
 
-  it('uses crowd impostors only for cheap non-hero overflow/far units', () => {
+  it('uses crowd impostors only when the crowd detail dial opts into them', () => {
     const base = { selected: false, alive: true, isHero: false, isNpc: false };
-    expect(shouldUseCrowdImpostor({ ...base, tier: 'reduced', crowdDetail: 'auto', fullAnimationBudget: 20 })).toBe(true);
-    expect(shouldUseCrowdImpostor({ ...base, tier: 'full', crowdDetail: 'auto', fullAnimationBudget: 0 })).toBe(true);
+    expect(shouldUseCrowdImpostor({ ...base, tier: 'reduced', crowdDetail: 'auto', fullAnimationBudget: 20 })).toBe(false);
+    expect(shouldUseCrowdImpostor({ ...base, tier: 'full', crowdDetail: 'auto', fullAnimationBudget: 0 })).toBe(false);
     expect(shouldUseCrowdImpostor({ ...base, tier: 'full', crowdDetail: 'balanced', fullAnimationBudget: 12 })).toBe(true);
+    expect(shouldUseCrowdImpostor({ ...base, tier: 'reduced', crowdDetail: 'balanced', fullAnimationBudget: 40 })).toBe(true);
+    expect(shouldUseCrowdImpostor({ ...base, tier: 'full', crowdDetail: 'balanced', fullAnimationBudget: 40 })).toBe(false);
+    expect(shouldUseCrowdImpostor({ ...base, tier: 'full', crowdDetail: 'reduced', fullAnimationBudget: 40 })).toBe(true);
     expect(shouldUseCrowdImpostor({ ...base, tier: 'full', crowdDetail: 'full', fullAnimationBudget: 0 })).toBe(false);
     expect(shouldUseCrowdImpostor({ ...base, tier: 'culled', crowdDetail: 'auto', fullAnimationBudget: 20, isHero: true })).toBe(false);
     expect(shouldUseCrowdImpostor({ ...base, tier: 'culled', crowdDetail: 'auto', fullAnimationBudget: 20, selected: true })).toBe(false);

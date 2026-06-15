@@ -162,7 +162,7 @@ Press each key and assert the bound action fired. Spy on the target method or re
 | M | `scene.toggleCameraMode()`; camera mode flips |
 | Tab | party modal toggles |
 | B (in town) | shop toggles |
-| Y (in town) | services toggles |
+| G (at a service NPC) | that town service opens (diegetic; no global services key) |
 | J / K | journal / codex toggle |
 | N | `useNeutralActive` issued |
 | F5 | `saveToSlot(0)`; `ancients.save.1` written |
@@ -385,7 +385,7 @@ The live multi-room session in `src/systems/dungeon-session.ts`. The four dungeo
 ### 10.3 Exploration and town (P2, headless)
 
 - Exploration % rises as the player covers ground.
-- Entering town flips `inTown()` true and enables shop/services.
+- Entering town flips `inTown()` true and enables the shop; town services are reached by interacting with their NPCs.
 
 ---
 
@@ -614,15 +614,36 @@ watchPageErrors(page) / expectNoPageErrors(errors)
 
 ---
 
+## Suite 18 — Pressure / invariants (independent)
+
+The browser-side counterpart to the headless `src/test/pressure/*` suites, in `e2e/pressure.spec.ts`. These do not re-walk one scripted flow; they assert **properties that must hold across many states**, driven through the player-facing surface (the `?test` harness + DOM), not the internals they guard. The reusable `partyInvariants` / `expectPartyWellFormed` helpers in `e2e/helpers.ts` are the read-side state-corruption check — the browser analog of headless `checkSimInvariants`.
+
+### 18.1 Combat state-corruption sweep (P1, headless)
+
+- Across a spread of (starter, region) pairs: boot, spawn a wild pack, and step the fight in slices, asserting `expectPartyWellFormed` after **every** slice — finite, in-bounds HP/mana, sane derived stats, real positions, and alive⇒HP>0 — so a transient corruption is caught at the tick it happens.
+- No page errors across the whole sweep.
+
+### 18.2 Long soak (P3, headless)
+
+- Fast-forward several in-game minutes in checkpoints; the party stays well-formed at every checkpoint, the roster size is stable, gold stays finite and non-negative, and the console stays clean.
+
+### 18.3 Modal state machine (P2, headless HUD)
+
+- Cycle every modal opener (Tab/B/J/K/Y/Esc) three times; whatever opens must close back to `#modal-root.hidden` via `#modal-close`, and the run ends with no modal up, the sim unpaused, and the party well-formed. Catches leaked input grabs, double-opens, and stuck-pause teardown bugs. (Note: `Esc` has modal-specific semantics — on some panels it reopens the menu rather than just closing — so the universal close affordance is the stable lever.)
+
+### 18.4 Save-gating truthfulness (P1, headless)
+
+- `canSave()` is allowed when idle, blocked in combat (with a combat reason), and blocked when the active hero is down (with a distinct down reason) — driven by real spawn/attack/kill, not by poking the flags.
+
+---
+
 ## Coverage gaps worth adding first
 
-The current specs cover boot, heroes, items, mechanics, dungeons, story, and visual smoke. The highest-value additions, roughly in order:
+The current specs cover boot, heroes, items, mechanics, dungeons, story, visual smoke, the input layer (controls-ui), save/load round-trip, and the Suite 18 pressure invariants. The highest-value remaining additions, roughly in order:
 
-1. Controls through real DOM events, not direct `__game` calls (Suite 3) — currently zero coverage of the input layer, where mapping/gating bugs ship silently.
-2. Save/load round-trip across a page reload (Suite 11).
-3. Per-region no-error sweep with the real renderer (Suite 17.1).
-4. Shop buy/sell economy beyond the existing boots case (Suite 6).
-5. Settings toggles actually changing behavior (Suite 12).
-6. Gym prefight and live/auto fight (Suite 9.1).
-7. Modal open/close keyboard coverage for all modals (Suite 2.5).
-8. Recruitment and capture full chains (Suites 7, 10.2).
+1. Per-region no-error sweep with the **real renderer** (Suite 17.1) — Suite 18.1 covers the headless sweep, but WebGL boot per region is still uncovered beyond the single boot smoke.
+2. Shop buy/sell economy beyond the existing boots case (Suite 6) — gated stock, insufficient-gold failure, sell refunds.
+3. Settings toggles actually changing behavior beyond quickcast/resonance (Suite 12) — reduced motion, photosensitive, audio.
+4. Gym prefight and live/auto fight depth (Suite 9.1) — Captain Calls, best-of-3 reporting.
+5. Recruitment and capture full chains (Suites 7, 10.2) — Find → Trial → Bind, merge-to-starred.
+6. Controls still uncovered in Suite 3: pointer-dependent casts (3.2/3.3) and modifier/queue behavior (3.4), which need WebGL or seeded hover.

@@ -118,6 +118,10 @@ export class ProceduralAudio {
   private damageSoundTimes: number[] = [];
   // Same idea for projectile arrival ticks (piercing / multi-hit shots).
   private projHitTimes: number[] = [];
+  // Throttle for melee swing whooshes and blade-contact rings so a scrum of
+  // fast attackers reads as a rhythm, not a buzz.
+  private swingTimes: number[] = [];
+  private meleeHitTimes: number[] = [];
   // And for crowd-control landings, summon materializes, and AoE whoomps so a
   // mass-stun, a wave of summons, or a multi-zone ult reads as one event.
   private statusSoundTimes: number[] = [];
@@ -206,6 +210,8 @@ export class ProceduralAudio {
     this.voiceEnds.length = 0;
     this.damageSoundTimes.length = 0;
     this.projHitTimes.length = 0;
+    this.swingTimes.length = 0;
+    this.meleeHitTimes.length = 0;
     this.statusSoundTimes.length = 0;
     this.summonSoundTimes.length = 0;
     this.burstSoundTimes.length = 0;
@@ -304,11 +310,16 @@ export class ProceduralAudio {
       case 'bark':
         this.barkBlip(ev.uid);
         break;
+      case 'attack-windup':
+        // Melee swing: a blade whoosh leads the contact so sword heroes are
+        // audible the instant they swing (ranged uses `attack-launch` instead).
+        this.attackSwing();
+        break;
       case 'attack-impact':
         // Landed basic attacks need their own audible contact cue. Damage events
         // can be throttled during crowded creep fights; crits bypass that path,
         // so keep the ordinary auto-attack sound here instead of relying on them.
-        this.attackTick();
+        this.attackTick(ev.melee ?? false);
         break;
       case 'attack-launch':
         // Ranged basic attack release (bow twang / gun crack / thrown whoosh).
@@ -350,9 +361,14 @@ export class ProceduralAudio {
         if (ev.chain > 1) this.tone(740 + ev.chain * 120, 0.08, 'sine', 0.06, 'sfx');
         break;
       case 'swap-flat':
-        // §9: a swap that paid no boon (gauge down) — a dull, low thud so the
-        // player feels the difference from a bright timed tag-in.
-        this.tone(190, 0.1, 'sine', 0.05, 'sfx');
+        // §9: a swap that paid no boon (gauge down) — a low sub under the
+        // hero-tag arrival so a gauge-down reposition feels a touch heavier and
+        // duller than a bright timed tag-in (which adds the boon shimmer).
+        this.tone(150, 0.13, 'sine', 0.05, 'sfx');
+        break;
+      case 'hero-tag':
+        // The signature swap "tag-in" — the dopamine beat fired on every swap.
+        this.swapTagIn(ev.boon);
         break;
       case 'tag-chain':
         if (ev.count > 1) this.tone(880 + ev.count * 140, 0.045, 'sine', 0.045, 'ui');
@@ -467,6 +483,7 @@ export class ProceduralAudio {
     switch (ev.t) {
       case 'damage':
       case 'attack-impact':
+      case 'attack-windup':
       case 'attack-launch':
       case 'projectile-spawn':
       case 'projectile-hit':
@@ -1065,14 +1082,78 @@ export class ProceduralAudio {
     delay.connect(out);
   }
 
+  /** The swap "tag-in" signature — the headline feel-good cue of the game. It is
+   *  built as a tiny three-beat: a fast riser whooshes the hero in, a sub-thump
+   *  lands the drop-in (synced to the rig's ~0.42s arrival flourish), then a
+   *  bright ascending triad rings out with a sparkly delay tail. A well-timed
+   *  tag (`boon`) is taller, brighter, and gets an extra octave shimmer; a
+   *  gauge-down swap is shorter and softer so the difference is felt. */
+  private swapTagIn(boon: boolean): void {
+    const ctx = this.ensure();
+    if (!ctx) return;
+    const v = boon ? 1 : 0.72;
+
+    // 1) Arrival riser — a quick upward swoop that pulls into the landing. The
+    //    sampled whoosh carries the air; the synth sweeps survive on low tier.
+    this.playSample('whoosh', 0.1 * v);
+    this.sweep(220, 1320, 0.18, 'sawtooth', 0.045 * v, 'sfx', 0.12);
+    this.sweep(440, 1760, 0.16, 'triangle', 0.04 * v, 'sfx');
+
+    // 2) Landing impact — the drop-in hits the ground a beat after the riser.
+    setTimeout(() => {
+      this.thump(0.13, 0.16 * v, 260);
+      this.tone(190, 0.11, 'sine', 0.06 * v, 'sfx');
+      this.noise(0.045, 0.045 * v);
+    }, 85);
+
+    // 3) Reward chime — a bright ascending triad (root, major third, fifth, and
+    //    an octave on a timed tag). coinRing's delay/feedback gives the sparkle.
+    const base = boon ? 1175 : 932;
+    this.coinRing(base, 0.12 * v, 0.11);
+    this.coinRing(base * 1.26, 0.1 * v, 0.165);
+    this.coinRing(base * 1.5, 0.1 * v, 0.22);
+    if (boon) this.coinRing(base * 2, 0.085, 0.3);
+
+    // 4) Shimmer tail — a high sine rings out as the hero settles into place.
+    setTimeout(
+      () => this.tone(boon ? 2637 : 1976, 0.4, 'sine', 0.05 * v, 'sfx', 0.22),
+      boon ? 270 : 210
+    );
+  }
+
   // ---------- per-hit impacts (every hit on a unit is audible) ----------
 
+  /** Melee swing whoosh, fired at windup start so the blade leads the contact.
+   *  Throttled so a flurry of fast attackers reads as a rhythm, not a buzz. */
+  private attackSwing(): void {
+    const t = this.now();
+    this.swingTimes = this.swingTimes.filter((at) => t - at < 0.09);
+    if (this.swingTimes.length >= 4) return;
+    this.swingTimes.push(t);
+    const j = 0.9 + Math.random() * 0.2;
+    // `whoosh` ships the Kenney blade-whoosh variants; layer a synth air-cut so
+    // the swing still reads when samples are off (low quality / headless).
+    this.playSample('whoosh', 0.07);
+    this.sweep(940 * j, 360 * j, 0.07, 'sawtooth', 0.05);
+  }
+
   /** Weapon-contact cue for a landed basic attack, audible even when damage SFX are throttled. */
-  private attackTick(): void {
+  private attackTick(melee: boolean): void {
     const j = 0.9 + Math.random() * 0.2;
     this.tone(620 * j, 0.035, 'square', 0.08);
     this.thump(0.035, 0.055, 460 * j);
     this.noise(0.024, 0.055);
+    if (melee) {
+      // Metallic blade-on-flesh ring for sword/melee hits. `blade-draw` was in
+      // the catalog but never dispatched; this is its contact home. Throttled
+      // so crowded melee scrums don't machine-gun the sample.
+      const t = this.now();
+      this.meleeHitTimes = this.meleeHitTimes.filter((at) => t - at < 0.1);
+      if (this.meleeHitTimes.length < 4) {
+        this.meleeHitTimes.push(t);
+        this.playSample('blade-draw', 0.07);
+      }
+    }
   }
 
   /** Ranged release: a quick down-pluck + airy whoosh so every ranged attack is

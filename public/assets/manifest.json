@@ -1,13 +1,13 @@
 {
   "version": 1,
-  "hash": "04461c64db94",
-  "generatedAt": "2026-06-14T20:09:01.037Z",
+  "hash": "61acfe533e3a",
+  "generatedAt": "2026-06-15T03:44:44.010Z",
   "assetRoot": "/assets/",
-  "totalBytes": 119341650,
+  "totalBytes": 139142410,
   "groups": {
     "audio": {
-      "count": 54,
-      "bytes": 14634052
+      "count": 55,
+      "bytes": 34434812
     },
     "creep": {
       "count": 32,
@@ -48,64 +48,74 @@
   },
   "files": [
     {
-      "path": "audio/music/coast.wav",
-      "url": "/assets/audio/music/coast.wav",
-      "bytes": 2116844,
-      "type": "audio",
+      "path": "audio/music/CREDITS.md",
+      "url": "/assets/audio/music/CREDITS.md",
+      "bytes": 1041,
+      "type": "md",
       "group": "audio",
       "preloadGroup": "audio",
       "sourceSpec": null,
-      "source": "generated in-repo: generate_audio.mjs"
+      "source": "curated CC0 / public-domain music — see public/assets/audio/music/CREDITS.md"
     },
     {
-      "path": "audio/music/desert.wav",
-      "url": "/assets/audio/music/desert.wav",
-      "bytes": 2116844,
+      "path": "audio/music/coast.ogg",
+      "url": "/assets/audio/music/coast.ogg",
+      "bytes": 3455657,
       "type": "audio",
       "group": "audio",
       "preloadGroup": "audio",
       "sourceSpec": null,
-      "source": "generated in-repo: generate_audio.mjs"
+      "source": "curated CC0 / public-domain music — see public/assets/audio/music/CREDITS.md"
     },
     {
-      "path": "audio/music/forest.wav",
-      "url": "/assets/audio/music/forest.wav",
-      "bytes": 2116844,
+      "path": "audio/music/desert.ogg",
+      "url": "/assets/audio/music/desert.ogg",
+      "bytes": 6895723,
       "type": "audio",
       "group": "audio",
       "preloadGroup": "audio",
       "sourceSpec": null,
-      "source": "generated in-repo: generate_audio.mjs"
+      "source": "curated CC0 / public-domain music — see public/assets/audio/music/CREDITS.md"
     },
     {
-      "path": "audio/music/grass.wav",
-      "url": "/assets/audio/music/grass.wav",
-      "bytes": 2116844,
+      "path": "audio/music/forest.ogg",
+      "url": "/assets/audio/music/forest.ogg",
+      "bytes": 5488710,
       "type": "audio",
       "group": "audio",
       "preloadGroup": "audio",
       "sourceSpec": null,
-      "source": "generated in-repo: generate_audio.mjs"
+      "source": "curated CC0 / public-domain music — see public/assets/audio/music/CREDITS.md"
     },
     {
-      "path": "audio/music/snow.wav",
-      "url": "/assets/audio/music/snow.wav",
-      "bytes": 2116844,
+      "path": "audio/music/grass.ogg",
+      "url": "/assets/audio/music/grass.ogg",
+      "bytes": 4404353,
       "type": "audio",
       "group": "audio",
       "preloadGroup": "audio",
       "sourceSpec": null,
-      "source": "generated in-repo: generate_audio.mjs"
+      "source": "curated CC0 / public-domain music — see public/assets/audio/music/CREDITS.md"
     },
     {
-      "path": "audio/music/wasteland.wav",
-      "url": "/assets/audio/music/wasteland.wav",
-      "bytes": 2116844,
+      "path": "audio/music/snow.ogg",
+      "url": "/assets/audio/music/snow.ogg",
+      "bytes": 7445695,
       "type": "audio",
       "group": "audio",
       "preloadGroup": "audio",
       "sourceSpec": null,
-      "source": "generated in-repo: generate_audio.mjs"
+      "source": "curated CC0 / public-domain music — see public/assets/audio/music/CREDITS.md"
+    },
+    {
+      "path": "audio/music/wasteland.ogg",
+      "url": "/assets/audio/music/wasteland.ogg",
+      "bytes": 4810645,
+      "type": "audio",
+      "group": "audio",
+      "preloadGroup": "audio",
+      "sourceSpec": null,
+      "source": "curated CC0 / public-domain music — see public/assets/audio/music/CREDITS.md"
     },
     {
       "path": "audio/sfx/blade-draw.wav",

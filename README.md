@@ -40,8 +40,9 @@ This is a full game, playable start to finish right now. A fresh save runs all t
 **Systems**
 
 - A deterministic combat core running at a fixed 30 Hz, fully walled off from the renderer. The same core drives both combat layers, so a complete 5v5 battle resolves inside a unit test in milliseconds.
-- **Micro combat**: real-time action out in the world. One hero in your hands, a party of five behind you, instant swaps on `1-5`, and the Diablo rhythm of farm, boss run, drop, repeat.
-- **Macro combat**: 5v5 gym and Elite battles that resolve on the core. You write each hero a **gambit** rule list before the fight, then spend **Captain Calls** to seize direct control for a few seconds when it counts.
+- **Micro combat**: real-time action out in the world. One hero in your hands, a party of five behind you, swaps on `1-5`, and the Diablo rhythm of farm, boss run, drop, repeat. Units route around buildings and each other with grid pathfinding and a real collision footprint, so they squeeze through gaps and stop at walls instead of sliding through them.
+- **The swap is a verb**: tapping `1-5` tags a hero in with an arrival beat keyed to that hero and their gear, a heal, a burst, a team buff, a cleanse, or a shield. With Resonance on it plays as a Genshin-style tag-in: the outgoing hero's summons keep fighting from the bench and their channeled spells keep ticking, and chaining swaps inside a short window stacks an amp meter. An optional charge meter lets you double-swap fast and then wait for the refill.
+- **Macro combat**: 5v5 gym and Elite battles that resolve on the core. You write each hero a **gambit** rule list before the fight, then spend **Captain Calls** to seize direct control for a few seconds when it counts. One shared brain drives every fight: it reads each item into an archetype, hands each role a short playbook, and plans a step ahead, so a disabler's lockdown sets up the nuker's burst and the team holds a Blink or a Black King Bar until the moment it pays off.
 - **Capture and merge**: weaken a creep, channel a Binding Totem, and add it to your collection. Three copies merge into a star upgrade, and you can field up to three caught creeps as an AI entourage. Summoner heroes like Chen and Nature's Prophet turn the overworld into a walk-the-map-with-an-army playstyle.
 - **Recruitment**: every hero follows a three-beat chain of Find, Trial, and Bind, with 15 trial kinds (honor duels, stealth hunts, combo exams, faction choices, reputation gates, and more). Losing a Bind relocates the hero rather than failing the quest.
 - **Quests and bounties**: a quest board that runs alongside recruitment, with recurring per-region bounties, multi-step story chapters, timed contracts, and branching choice-quests that pay distinct titles. The board floats your current region to the top as you travel.
@@ -53,15 +54,16 @@ This is a full game, playable start to finish right now. A fresh save runs all t
 **Presentation**
 
 - A Three.js overworld with two camera modes: a tilted map view for travel and an angled follow camera for combat and towns. Press `M` to toggle.
-- A PBR rendering path with bloom, ambient occlusion, color grading, and tonemapping, plus a day/night cycle, animated water, and per-biome skies. Quality scales across tiers and can be tuned live in settings.
+- A PBR rendering path with bloom, ambient occlusion, color grading, and tonemapping, plus a day/night cycle, animated water, and per-biome skies. Quality scales across tiers and can be tuned live in settings. Distant crowds drop to impostors and far units shed animation work to keep a busy field smooth, and a battle-scale dial trades overworld army size for frames.
 - Hero-specific likeness overlays, item appearance geometry that wears on the model, and attack-animation overrides that read an item's identity on sight.
-- A procedural audio layer that synthesizes per-hero attack, cast, and ability sounds keyed off each ability's sound archetype, with stingers for capture, level-up, merges, and badges.
+- Every unit, building, prop, and ambient critter is sized from one real-world meter scale, so a courier reads small, a hero reads human, and Roshan reads like a mountain.
+- A procedural audio layer that synthesizes per-hero attack, cast, and ability sounds keyed off each ability's sound archetype, with stingers for capture, level-up, merges, and badges. Each biome carries its own music bed under exploration, on a separate music volume slider.
 - A minimap, quest journal, an encounter-gated codex that fills in as you meet heroes, regions, items, creeps, and raids, and a Cinematics gallery that replays seen cut-scenes.
 - A combat-readability overlay (cast bars, boss threat and taunt, shared-focus and ult-ready cues) and a colorblind-safe rarity palette, both optional in settings.
 
-The combat core stays headless: it never imports Three.js or touches the DOM. Over 1,600 headless tests cover data linting, combat determinism, capture and merge, saves and migrations, gym and raid simulation, resonance, quests, dungeon generation, loot quality, traversal, and a full critical-path playthrough, backed by a Playwright browser smoke suite.
+The combat core stays headless: it never imports Three.js or touches the DOM. Over 1,600 headless tests cover data linting, combat determinism, pathfinding and collision, capture and merge, saves and migrations, gym and raid simulation, the combo-planning AI, tag-in swaps, resonance, quests, dungeon generation, loot quality, traversal, and a full critical-path playthrough, backed by a Playwright browser smoke suite.
 
-Design targets live in `SPEC.md`, current acceptance status in `PROGRESS.md`, and implementation calls in `DECISIONS.md`. The overhaul and design docs (`docs/design/LOOT_OVERHAUL.md`, `docs/design/DUNGEON_OVERHAUL.md`, `docs/design/GRAPHICS_SPEC.md`, and others) track the work past the original phase plan.
+Design targets live in `SPEC.md`, current acceptance status in `PROGRESS.md`, and implementation calls in `DECISIONS.md`. The overhaul and design docs (`docs/design/GAMBIT_AI_OVERHAUL.md`, `docs/design/SWAP_COMBAT_OVERHAUL.md`, `docs/design/LOOT_OVERHAUL.md`, `docs/design/DUNGEON_OVERHAUL.md`, `docs/design/GRAPHICS_SPEC.md`, and others) track the work past the original phase plan.
 
 ## Requirements
 

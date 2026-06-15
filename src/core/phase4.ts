@@ -21,7 +21,7 @@ export function defaultGraphicsSettings(): GraphicsSettings {
     antiAliasing: 'tier',
     shadows: 'tier',
     drawDistance: 'medium',
-    crowdDetail: 'auto',
+    crowdDetail: 'full',
     vfxDensity: 1,
     battleScale: 1,
     screenShake: 1,
